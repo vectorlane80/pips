@@ -144,10 +144,12 @@ undesigned. Resolved here, since the user said not to stop and ask:
    this app is not aiming for — it's a private family-game site).
 2. **Scoring across hands / target score** — RUMMY.md: "the prototype ends
    at 'went out'; multi-hand scoring and a target score aren't designed."
-   Resolution: deadwood-based scoring (`sum(min(rank,10))` over a losing
-   player's unmelded cards, matching the design doc's own formula exactly),
-   accumulated across rounds; **first to 100 points wins the match** and
-   moves to the existing `Results` screen. 100 is picked as a reasonable
+   Resolution: deadwood-based scoring (`sum(min(rank,10))` over the LOSING
+   player's unmelded cards, matching the design doc's own formula exactly).
+   The round WINNER is awarded that amount, added to the winner's own
+   running match score; **first player whose match score reaches 100 wins
+   the match** and moves to the existing `Results` screen. 100 is picked as
+   a reasonable
    target for a quick multi-hand session (a single hand's deadwood swing is
    typically 20-60 points, so 100 means roughly 2-4 hands per match) —
    explicit judgment call, not derived from a specific rule set.

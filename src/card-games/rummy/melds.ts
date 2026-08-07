@@ -43,3 +43,24 @@ export function classifyMeld(cards: Card[]): MeldClassification {
 
   return { valid: false }
 }
+
+// True iff some 3+ subset of `cards` that includes `requiredId` forms a valid meld
+// (set or run) per classifyMeld. Used to validate a discard-pile reach-in: the
+// obligated card must actually be usable, or the player would be stuck forever.
+export function hasMeldIncluding(cards: Card[], requiredId: string): boolean {
+  const required = cards.find((c) => c.id === requiredId)
+  if (!required) return false
+  const others = cards.filter((c) => c.id !== requiredId)
+  // try every subset of `others` of size 2..others.length, combined with `required`
+  const n = others.length
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const subset: Card[] = [required]
+    for (let i = 0; i < n; i++) {
+      if (mask & (1 << i)) subset.push(others[i])
+    }
+    if (subset.length >= 3 && classifyMeld(subset).valid) {
+      return true
+    }
+  }
+  return false
+}
