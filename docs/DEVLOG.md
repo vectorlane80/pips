@@ -174,3 +174,56 @@ sub-agent (user's explicit routing override for this run).
   integration harness) is the last substantial piece; spec locked in
   scratch. This is the milestone that actually proves the whole stack
   composes into something game-shaped. Dispatching next.
+
+## Cycle 6 — 2026-08-07
+- **Shipped:** M5 — `src/card-games/rummy/` (state.ts, rules.ts, rummy.test.ts):
+  a minimal but real 2-player Rummy harness proving the whole card-engine
+  stack composes end to end (commit `5be1100`).
+- **Design decision made mid-cycle:** the generic `HostSession<TPublic,
+  TPrivate>` only has "visible to all" and "visible to exactly one player"
+  slots — no slot for "visible to nobody," which Rummy's stock pile needs.
+  Solved by keeping the stock entirely outside `HostSession` in a small
+  `RummySession` wrapper, with a validator-closure pattern
+  (`applyRummyAction`/`runRummyBotTurn`) bridging it back into the generic
+  `applyAction`/`runBotTurn` pipeline. This is documented as a real
+  architectural decision Rummy (and future hidden-stock games) needs to
+  know about, not just an implementation detail — see M6.
+- **Verification:** full ladder myself; read `rules.ts` (the closure pattern)
+  and `state.ts` in full against spec — exact match.
+- **Review:** Opus fuzzed the two headline claims hard — 2000 randomized
+  actions across 5 seeds (conservation + rejection-purity held throughout,
+  including organically hitting stock/discard exhaustion the canned test
+  never reached), 74 consecutive bot turns (stock threading correct across
+  37 full bot-vs-bot turns), and explicit closure-staleness probes (no
+  shared-mutable-cell bug across parallel/branching calls). Found no bug in
+  either claim. Did find a real latent ordering hazard: the validator
+  closure reported its candidate stock as soon as it decided an action was
+  locally valid, before `sync.ts`'s own completeness gate got a chance to
+  reject the outcome — so a hypothetical future handler bug could have a
+  rejected action still silently lose a card from the stock. Not reachable
+  through today's 3 real handlers (independently confirmed), but structurally
+  unsafe. Also found `publicState.stockCount` — the only information any
+  client gets about the hidden stock — was asserted nowhere.
+- I reproduced the ordering hazard myself with a deliberately malformed
+  validator before locking the fix (38→37 cards on a rejected action), and
+  reproduced the fix afterward (38→38, correctly unchanged). Fixed by
+  committing the candidate stock only when the outer call's `outcome.ok` is
+  true, which makes the bug class structurally impossible rather than just
+  papering over today's instance of it.
+- Also gave Opus's review an explicit prompt for an overall assessment of
+  whether the abstraction proved itself sufficient for Rummy — its answer
+  (captured fully in M6): yes for the core deck/hand/turn/host-authority
+  composition, with an honest caveat that the two-visibility model in
+  `sync.ts` doesn't have a first-class answer for "hidden from everyone"
+  state, so every future game with that need (stock piles, face-down draw
+  piles) will have to re-derive the same closure pattern rather than getting
+  it once from the engine. Recorded as a known limitation, not fixed now —
+  changing `sync.ts`'s type signature at this point would be a bigger,
+  riskier change than this charter's scope justifies, and the workaround is
+  proven to work.
+- **Continue?** Yes, one milestone left. M0-M5 all solid and committed (165
+  tests, 5 fully independent game-engine modules plus one proof-of-concept
+  game). Only M6 (documentation) remains — writing it now from what was
+  actually built, not from the original specs, since several real
+  architectural decisions (the stock-closure pattern chief among them) only
+  crystallized during implementation and review.
