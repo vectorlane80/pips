@@ -446,3 +446,30 @@ be kept pending for the duration of this run per explicit user request
 - **Continue?** Yes — M0b and M1 both landed clean. M2 (generalize
   `src/net/peer.ts`'s transport to be payload-generic) is next — the
   last piece of plumbing before the visual/UI milestones (M3/M4).
+
+## Rummy cycle 4 — 2026-08-07
+- **Shipped:** M2 — `src/net/peer.ts`'s `createHost`/`joinHost` and their
+  `Host/GuestHandle`/`Callbacks` types generalized to `<TState, TAction>`
+  type parameters instead of hardcoded `Action`/`RoomState` imports;
+  `App.tsx`'s 4 call sites updated with explicit `<RoomState, Action>`
+  type arguments (commit `be1816d`).
+- **Scoped down from the full delegation loop deliberately:** this is a
+  pure type-level mechanical change with zero runtime behavior
+  difference — dispatched to `deepseek-v4-flash` per the narrow-slice
+  routing guidance, and skipped the adversarial-review step entirely.
+  A generic-type refactor with no new logic has no interesting attack
+  surface for a reviewer to find; the real risk is "did this silently
+  change behavior," which `tsc` (a botched generic shows up as a type
+  error) plus an unchanged test count plus a browser smoke test cover
+  completely. Spending an Opus review cycle on this would have been
+  theater, not diligence.
+- **Verification:** read the full diff (small, matched spec exactly) —
+  `tsc -b --noEmit` clean, test count unchanged at 244 (proving nothing
+  outside `peer.ts`/`App.tsx` was touched), build clean. Then, per
+  `CHARTER.md`'s M2 requirement, an actual browser smoke test: started
+  a Farkle room as host, added a house player, started the game, rolled
+  dice — the host→broadcast→re-render loop worked end to end through
+  the now-generic `HostHandle<RoomState>`, zero console errors.
+- **Continue?** Yes — the last piece of plumbing is done. M3 (`PlayingCard`
+  visual component matching the design handoff) and M4 (`RummyTable`
+  screen + live wiring) are the remaining visual/UI milestones; M3 next.

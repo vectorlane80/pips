@@ -5,12 +5,10 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M2 — generalize `src/net/peer.ts` transport to be payload-generic;
-   regression-verify the 4 existing games unaffected.
-2. M3 — `PlayingCard` visual component matching the design handoff spec.
-3. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
+1. M3 — `PlayingCard` visual component matching the design handoff spec.
+2. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
    Results integration). Browser smoke test.
-4. M5 — documentation (`docs/rummy.md`).
+3. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
 - [cycle 1] M0a — pure meld classification, rank values, deadwood scoring —
@@ -25,6 +23,9 @@ for the current charter (real Rummy) — see `CHARTER.md`.
   defects (livelock, crash-on-empty-hand, greedy-meld stranding a
   guaranteed win) + 3 test-quality gaps found by review and fixed —
   commit 4fc3752
+- [cycle 4] M2 — generalized `src/net/peer.ts` to `<TState, TAction>`;
+  pure type-level change, no review needed (mechanical, verified by
+  typecheck + a browser smoke test of Farkle) — commit be1816d
 
 ## Done (prior charter — card-engine foundation, see docs/DEVLOG.md for detail)
 - M0-M6 — card-engine (cards/deck/rng/zones/turn-engine/sync/bot) + minimal
