@@ -279,3 +279,14 @@ session into the live app (screen routing, PeerJS transport). See
 what doesn't.
 
 **Continue?** No — charter's definition of done is met. Wrapping up.
+
+---
+
+# Charter 2: Real Rummy — 2026-08-07
+
+New charter started (see CHARTER.md, rewritten for this scope; ROADMAP.md
+reset). Task: real Rummy rules + bot + UI + live wiring on top of the
+card-engine foundation from charter 1. Pre-approved, unattended — same
+DeepSeek/Opus delegation split. Scheduled safety-net wakeup armed and will
+be kept pending for the duration of this run per explicit user request
+(usage-limit recovery), not just a one-time arm.
