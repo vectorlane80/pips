@@ -32,8 +32,8 @@ export default function App() {
   const [rulesOpen, setRulesOpen] = useState(false)
 
   const roomRef = useRef<RoomState | null>(null)
-  const hostRef = useRef<HostHandle | null>(null)
-  const guestRef = useRef<GuestHandle | null>(null)
+  const hostRef = useRef<HostHandle<RoomState> | null>(null)
+  const guestRef = useRef<GuestHandle<Action> | null>(null)
   const botBusyRef = useRef(false)
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function App() {
     setRole('host')
     setLocalSeatId(hostId)
     setError(null)
-    hostRef.current = createHost(code, {
+    hostRef.current = createHost<RoomState, Action>(code, {
       onJoin(guestId, guestName) {
         const next = addSeat(roomRef.current!, guestId, guestName, false)
         roomRef.current = next
@@ -100,7 +100,7 @@ export default function App() {
   function startGuest(code: string) {
     if (!code) return
     setError(null)
-    const handle = joinHost(code, name.trim(), {
+    const handle = joinHost<RoomState, Action>(code, name.trim(), {
       onState(state) {
         roomRef.current = state
         setRoom(state)

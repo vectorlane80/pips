@@ -1,26 +1,25 @@
 import Peer, { type DataConnection } from 'peerjs'
-import type { Action, RoomState } from '../types'
 
-type GuestToHost = { kind: 'join'; name: string } | { kind: 'action'; action: Action }
-type HostToGuest = { kind: 'state'; state: RoomState }
+type GuestToHost<TAction> = { kind: 'join'; name: string } | { kind: 'action'; action: TAction }
+type HostToGuest<TState> = { kind: 'state'; state: TState }
 
 export function peerIdForCode(code: string): string {
   return `pips-${code.toLowerCase().replace(/[^a-z0-9-]/g, '')}`
 }
 
-export interface HostCallbacks {
+export interface HostCallbacks<_TState, TAction> {
   onJoin: (guestId: string, name: string) => void
-  onAction: (guestId: string, action: Action) => void
+  onAction: (guestId: string, action: TAction) => void
   onLeave: (guestId: string) => void
   onError?: (message: string) => void
 }
 
-export interface HostHandle {
-  broadcast: (state: RoomState) => void
+export interface HostHandle<TState> {
+  broadcast: (state: TState) => void
   destroy: () => void
 }
 
-export function createHost(code: string, callbacks: HostCallbacks): HostHandle {
+export function createHost<TState, TAction>(code: string, callbacks: HostCallbacks<TState, TAction>): HostHandle<TState> {
   const peer = new Peer(peerIdForCode(code))
   const conns = new Map<string, DataConnection>()
 
@@ -29,7 +28,7 @@ export function createHost(code: string, callbacks: HostCallbacks): HostHandle {
   peer.on('connection', (conn) => {
     conns.set(conn.peer, conn)
     conn.on('data', (raw) => {
-      const msg = raw as GuestToHost
+      const msg = raw as GuestToHost<TAction>
       if (msg.kind === 'join') callbacks.onJoin(conn.peer, msg.name)
       else if (msg.kind === 'action') callbacks.onAction(conn.peer, msg.action)
     })
@@ -41,7 +40,7 @@ export function createHost(code: string, callbacks: HostCallbacks): HostHandle {
 
   return {
     broadcast(state) {
-      const msg: HostToGuest = { kind: 'state', state }
+      const msg: HostToGuest<TState> = { kind: 'state', state }
       conns.forEach((conn) => {
         if (conn.open) conn.send(msg)
       })
@@ -53,20 +52,20 @@ export function createHost(code: string, callbacks: HostCallbacks): HostHandle {
   }
 }
 
-export interface GuestCallbacks {
-  onState: (state: RoomState) => void
+export interface GuestCallbacks<TState> {
+  onState: (state: TState) => void
   onConnected?: () => void
   onDisconnected?: () => void
   onError?: (message: string) => void
 }
 
-export interface GuestHandle {
+export interface GuestHandle<TAction> {
   peerId: Promise<string>
-  sendAction: (action: Action) => void
+  sendAction: (action: TAction) => void
   destroy: () => void
 }
 
-export function joinHost(code: string, name: string, callbacks: GuestCallbacks): GuestHandle {
+export function joinHost<TState, TAction>(code: string, name: string, callbacks: GuestCallbacks<TState>): GuestHandle<TAction> {
   const peer = new Peer()
   let conn: DataConnection | null = null
 
@@ -74,11 +73,11 @@ export function joinHost(code: string, name: string, callbacks: GuestCallbacks):
     peer.on('open', (id) => {
       conn = peer.connect(peerIdForCode(code), { reliable: true })
       conn.on('open', () => {
-        conn!.send({ kind: 'join', name } satisfies GuestToHost)
+        conn!.send({ kind: 'join', name } satisfies GuestToHost<TAction>)
         callbacks.onConnected?.()
       })
       conn.on('data', (raw) => {
-        const msg = raw as HostToGuest
+        const msg = raw as HostToGuest<TState>
         if (msg.kind === 'state') callbacks.onState(msg.state)
       })
       conn.on('close', () => callbacks.onDisconnected?.())
@@ -93,7 +92,7 @@ export function joinHost(code: string, name: string, callbacks: GuestCallbacks):
   return {
     peerId,
     sendAction(action) {
-      if (conn?.open) conn.send({ kind: 'action', action } satisfies GuestToHost)
+      if (conn?.open) conn.send({ kind: 'action', action } satisfies GuestToHost<TAction>)
     },
     destroy() {
       conn?.close()
