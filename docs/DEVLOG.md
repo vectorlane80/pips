@@ -41,3 +41,33 @@ sub-agent (user's explicit routing override for this run).
   audit for "did the last task actually leave this clean" than a tracked one.
 - **Continue?** Yes — on track, M0 solid, M1 spec already drafted and locked
   in scratch, ready to dispatch next cycle.
+
+## Cycle 2 — 2026-08-07
+- **Shipped:** M1 — `src/card-engine/zones.ts` (generic `Zone` shape underlying
+  Hand/DiscardPile/PlayerZone/PublicZone + move/recycle ops) + tests
+  (commit `95d9b04`). Committed *immediately* after independent verification,
+  before dispatching the fix round — applying cycle 1's lesson.
+- **Verification:** re-ran the full ladder myself; read the real implementation
+  line by line against the spec.
+- **Review:** Opus found a genuine conservation-breaking bug — `removeCardsById`
+  reconstructed its `removed` array by re-mapping over the caller's raw
+  `cardIds`, so a duplicated id in the request (e.g. `moveCards(hand, discard,
+  ['c1','c1'])`) minted a second reference to the same card, breaking the "no
+  card duplicated or lost" invariant this whole layer exists to guarantee.
+  Also flagged three test-coverage gaps (a shared-array-reference leak in
+  `setZoneVisibility`, an untested `recyclePile` boundary, an unverified
+  shuffle-callback-argument claim) — none were live bugs, but none had a test
+  that would catch a regression either.
+- I reproduced the duplication bug myself before writing the fix spec (own
+  `npx tsx` repro, not just trusting the review's pasted output), locked a
+  one-line fix (dedupe the id list) plus 5 regression tests, dispatched, then
+  independently re-ran my own original repro command again post-fix to
+  confirm — went from 2 phantom cards to 1 correct card.
+- **Lesson carried forward:** every future zones/sync milestone that accepts a
+  caller-supplied list of card ids (which, per the charter, will include lists
+  assembled by another peer over the network once Rummy is wired up) needs a
+  duplicate-id test as standard practice, not just a "happy path" test — this
+  is exactly the kind of input a remote peer can trivially send, malicious or
+  not (e.g. a double-click bug in some future UI).
+- **Continue?** Yes — M0 and M1 both solid and committed. M2 (turn-engine) and
+  M3 (sync) specs are already locked in scratch; dispatching M2 next.

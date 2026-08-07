@@ -1,17 +1,16 @@
 # Roadmap
 
 ## Next up
-1. M1 — `card-engine/zones`: Hand, DiscardPile, PlayerZone, PublicZone, move
-   card between zones, reveal/hide, recycle. Spec locked, ready to dispatch.
-2. M2 — `card-engine/turn-engine`: generic turn state machine.
-3. M3 — `card-engine/sync`: action envelope, public/private split, revision
-   numbers, snapshot request/response, host-authoritative pipeline.
-4. M4 — house-player seam: generic bot interface + trivial stub.
-5. M5 — Rummy integration harness (test-only, not full Rummy, not UI).
-6. M6 — `docs/card-engine.md`.
+1. M2 — `card-engine/turn-engine`: generic turn state machine. Spec locked.
+2. M3 — `card-engine/sync`: action envelope, public/private split, revision
+   numbers, snapshot request/response, host-authoritative pipeline. Spec locked.
+3. M4 — house-player seam: generic bot interface + trivial stub.
+4. M5 — Rummy integration harness (test-only, not full Rummy, not UI).
+5. M6 — `docs/card-engine.md`.
 
 ## Done
 - [cycle 1] M0 — card-engine cards+deck+rng+vitest — commit 0447171
+- [cycle 2] M1 — card-engine zones — commit 95d9b04
 
 ## Cut / deferred
 - Full Rummy rules (melds, scoring, multiple rounds, UI) — explicitly out of
