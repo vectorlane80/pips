@@ -5,10 +5,9 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M3 — `PlayingCard` visual component matching the design handoff spec.
-2. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
+1. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
    Results integration). Browser smoke test.
-3. M5 — documentation (`docs/rummy.md`).
+2. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
 - [cycle 1] M0a — pure meld classification, rank values, deadwood scoring —
@@ -26,6 +25,10 @@ for the current charter (real Rummy) — see `CHARTER.md`.
 - [cycle 4] M2 — generalized `src/net/peer.ts` to `<TState, TAction>`;
   pure type-level change, no review needed (mechanical, verified by
   typecheck + a browser smoke test of Farkle) — commit be1816d
+- [cycle 5] M3 — `PlayingCard`/`CardBack` visual components (hand/meld/
+  discard, opponent-fan/stock), own stylesheet, not wired into a screen
+  yet; verified by a temporary demo render in-browser, no adversarial
+  review (no game logic to attack) — commit 742c876
 
 ## Done (prior charter — card-engine foundation, see docs/DEVLOG.md for detail)
 - M0-M6 — card-engine (cards/deck/rng/zones/turn-engine/sync/bot) + minimal

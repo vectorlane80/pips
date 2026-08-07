@@ -473,3 +473,36 @@ be kept pending for the duration of this run per explicit user request
 - **Continue?** Yes — the last piece of plumbing is done. M3 (`PlayingCard`
   visual component matching the design handoff) and M4 (`RummyTable`
   screen + live wiring) are the remaining visual/UI milestones; M3 next.
+
+## Rummy cycle 5 — 2026-08-07
+- **Shipped:** M3 — `src/components/PlayingCard.tsx`/`PlayingCard.css`:
+  `PlayingCard` (hand/meld/discard size variants) and `CardBack`
+  (opponent-fan/stock size variants), matching RUMMY.md's exact
+  measurements, radii, borders, shadows, and suit coloring. Pure
+  presentational — no game logic, not wired into any screen (commit
+  `742c876`).
+  - Judgment calls, both flagged since RUMMY.md didn't fully specify
+    them: the discard card's border/shadow weight (scaled
+    proportionally from the hand card's treatment), and the stock
+    card-back's decorative mark corner radius.
+- **Deliberately skipped the adversarial-review step**, same reasoning
+  as M2's skip: a visual component with zero game logic and zero
+  trust-boundary surface has nothing for an adversarial reviewer to
+  usefully attack — the actual risk here is "does this match the
+  design," not "can this be broken." Verified instead by reading the
+  diff against the spec's exact measurements, confirming typecheck/
+  build clean, and — since this is the one thing static review
+  genuinely can't confirm — temporarily mounting a demo grid of every
+  size/state variant (selected hand card, custom-colored meld card,
+  overlapping discard strip, both card-back sizes) in the actual
+  running app via a throwaway query-param branch in `App.tsx`,
+  screenshotting it, and reverting that change before committing. This
+  is the same "if it's observable in the browser, prove it in the
+  browser" discipline as any other UI change, adapted for a milestone
+  that has no screen of its own yet to observe it in.
+- **Continue?** Yes — all the building blocks (rules engine, bot,
+  generic transport, card visuals) are done. M4 (`RummyTable` screen +
+  live wiring into `App.tsx`/`Landing.tsx`) is the last substantial
+  milestone — it's the one that makes Rummy actually playable through
+  the UI, and warrants the heaviest browser verification of any
+  milestone so far.
