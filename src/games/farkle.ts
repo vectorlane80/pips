@@ -1,4 +1,4 @@
-import type { Die } from '../types'
+import type { BotDifficulty, Die } from '../types'
 
 export function rollDie(id: number): Die {
   return { id, val: 1 + Math.floor(Math.random() * 6), sel: false, rot: Math.random() * 10 - 5 }
@@ -70,6 +70,26 @@ export interface FarkleBotMove {
   bank: boolean
 }
 
+// Bank once total/diceLeft clears any one of these bars. Easy stops pushing early and leaves
+// points on the table; hard pushes its luck much further before playing it safe.
+const BANK_BARS: Record<BotDifficulty, Array<{ total: number; maxDiceLeft: number }>> = {
+  easy: [
+    { total: 150, maxDiceLeft: 6 },
+    { total: 300, maxDiceLeft: 3 },
+  ],
+  medium: [
+    { total: 250, maxDiceLeft: 1 },
+    { total: 350, maxDiceLeft: 2 },
+    { total: 550, maxDiceLeft: 6 },
+  ],
+  hard: [
+    { total: 200, maxDiceLeft: 1 },
+    { total: 350, maxDiceLeft: 2 },
+    { total: 500, maxDiceLeft: 3 },
+    { total: 800, maxDiceLeft: 6 },
+  ],
+}
+
 /** Decide what to keep from the current roll, and whether to bank afterward. */
 export function decideFarkleBot(
   rollVals: number[],
@@ -77,6 +97,7 @@ export function decideFarkleBot(
   seatBanked: number,
   openingScore: number,
   winningScore: number,
+  difficulty: BotDifficulty = 'medium',
 ): FarkleBotMove {
   const { indices, score } = bestSubset(rollVals)
   const total = turnScoreSoFar + score
@@ -85,9 +106,7 @@ export function decideFarkleBot(
   let bank = false
   if (canBank) {
     if (seatBanked + total >= winningScore) bank = true
-    else if (total >= 550) bank = true
-    else if (total >= 350 && diceLeft <= 2) bank = true
-    else if (total >= 250 && diceLeft <= 1) bank = true
+    else if (BANK_BARS[difficulty].some((bar) => total >= bar.total && diceLeft <= bar.maxDiceLeft)) bank = true
   }
   return { keepIndices: indices, bank }
 }

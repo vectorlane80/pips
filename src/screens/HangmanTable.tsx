@@ -56,35 +56,45 @@ export function HangmanTable({
                   {iAmSetter ? `Give ${guesser?.name} a word to guess.` : `${setter?.name} is picking a word…`}
                 </div>
                 {iAmSetter && (
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <input
-                      className="input input-code"
-                      style={{ maxWidth: 260 }}
-                      value={wordInput}
-                      onChange={(e) => setWordInput(e.target.value)}
-                      placeholder="PANCAKE"
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-coral"
-                      disabled={wordInput.trim().length < 3}
-                      onClick={() => { onSetWord(wordInput); setWordInput('') }}
-                    >
-                      Send it over
-                    </button>
-                  </div>
+                  <>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <input
+                        className="input input-code"
+                        style={{ maxWidth: 260 }}
+                        value={wordInput}
+                        onChange={(e) => setWordInput(e.target.value)}
+                        placeholder="PEANUT BUTTER"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-coral"
+                        disabled={wordInput.replace(/[^a-zA-Z]/g, '').length < 3}
+                        onClick={() => { onSetWord(wordInput); setWordInput('') }}
+                      >
+                        Send it over
+                      </button>
+                    </div>
+                    <p style={{ fontSize: 13, color: 'var(--faint-text)', marginTop: 8 }}>Letters and spaces only.</p>
+                  </>
                 )}
               </>
             ) : (
               <>
-                <div style={{ fontSize: 'clamp(22px,3.2vw,30px)', fontWeight: 700, marginBottom: 16 }}>
-                  {iAmGuesser ? "Guess the word." : `Watching ${guesser?.name} guess.`}
+                <div style={{
+                  fontSize: 'clamp(22px,3.2vw,30px)', fontWeight: 700, marginBottom: 16,
+                  color: h.phase === 'roundOver' ? (h.wrong.length >= 6 ? 'var(--coral)' : 'var(--green-text)') : 'var(--ink)',
+                }}
+                >
+                  {h.phase === 'roundOver' ? h.status : iAmGuesser ? 'Guess the word.' : `Watching ${guesser?.name} guess.`}
                 </div>
                 <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Gallows wrong={h.wrong.length} />
                   <div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 400 }}>
                       {h.word.split('').map((letter, i) => {
+                        if (letter === ' ') {
+                          return <div key={i} style={{ width: 18, flex: 'none' }} />
+                        }
                         const revealed = h.guessed.includes(letter) || h.over
                         return (
                           <div key={i} style={{ width: 34, textAlign: 'center' }}>

@@ -17,9 +17,16 @@ export const GAME_LABEL: Record<Game, string> = {
 
 export const GAME_BLURB: Record<Game, string> = {
   farkle: 'Push your luck with six dice',
-  yahtzee: 'Thirteen boxes, five dice, three rolls',
-  ttt: 'Three in a row, first to three games',
+  yahtzee: 'Thirteen boxes, three rolls a turn',
+  ttt: 'Three in a row, best of five',
   hangman: 'Set a word, guess a word',
+}
+
+export const GAME_PLAYER_RANGE: Record<Game, string> = {
+  farkle: '2–8 players',
+  yahtzee: '2–8 players',
+  ttt: '2 players',
+  hangman: '2 players',
 }
 
 // Farkle and Yahtzee scale to a party; Tic Tac Toe and Hangman are inherently two-player.
@@ -39,6 +46,8 @@ export const GAME_MIN_SEATS: Record<Game, number> = {
 
 // Seat 0's color is always violet (host-shelf convention); after that we cycle the palette.
 export const SEAT_PALETTE = ['#6c4cff', '#ff9f1c', '#0fb5a0', '#ff5d73', '#3ddc97', '#8a5cf6', '#f45b8a', '#20a4d6']
+
+export type BotDifficulty = 'easy' | 'medium' | 'hard'
 
 export interface Seat {
   id: string
@@ -100,11 +109,13 @@ export interface TttState {
   starter: number
   winLine: number[]
   over: boolean
+  roundOver: boolean
+  pendingWinnerId: string | null
   status: string
   wins: Record<string, number>
 }
 
-export type HangmanPhase = 'setting' | 'guessing' | 'watching'
+export type HangmanPhase = 'setting' | 'guessing' | 'roundOver'
 
 export interface HangmanState {
   word: string
@@ -113,6 +124,7 @@ export interface HangmanState {
   phase: HangmanPhase
   guesserIdx: number
   over: boolean
+  pendingWinnerId: string | null
   status: string
   wins: Record<string, number>
 }
@@ -124,6 +136,7 @@ export interface RoomState {
   seats: Seat[]
   turnIdx: number
   botPace: number
+  botDifficulty: BotDifficulty
   showLog: boolean
   farkle: FarkleState
   yahtzee: YahtzeeState
@@ -135,6 +148,7 @@ export interface RoomState {
 export type Action =
   | { type: 'pickGame'; game: Game }
   | { type: 'addBot' }
+  | { type: 'setBotDifficulty'; difficulty: BotDifficulty }
   | { type: 'startGame' }
   | { type: 'rematch' }
   | { type: 'farkleRoll' }
@@ -145,5 +159,7 @@ export type Action =
   | { type: 'yahtzeeToggleHold'; dieId: number }
   | { type: 'yahtzeeScore'; category: YCategory }
   | { type: 'tttPlay'; cell: number }
+  | { type: 'tttAdvanceRound' }
   | { type: 'hangmanSetWord'; word: string }
   | { type: 'hangmanGuess'; letter: string }
+  | { type: 'hangmanAdvanceRound' }

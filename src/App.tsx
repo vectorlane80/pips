@@ -15,7 +15,8 @@ import { decideYahtzeeCategory, decideYahtzeeHold } from './games/yahtzee'
 import { decideTttMove } from './games/ttt'
 import { decideHangmanLetter } from './games/hangman'
 
-const BASE_MS = 900
+const BASE_MS = 1100
+const ROUND_PAUSE_MS = 2400
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -165,7 +166,7 @@ export default function App() {
       const seat = rolled.seats.find((s) => s.id === seatId)!
       const move = decideFarkleBot(
         rolled.farkle.dice.map((d) => d.val), rolled.farkle.turnScore, seat.score,
-        rolled.farkle.openingScore, rolled.farkle.winningScore,
+        rolled.farkle.openingScore, rolled.farkle.winningScore, rolled.botDifficulty,
       )
       await wait(BASE_MS * pace * 0.6)
       if (stale(key)) return
@@ -194,7 +195,7 @@ export default function App() {
     while (state.yahtzee.rollsLeft > 0 && !stale(key)) {
       await wait(BASE_MS * pace * 0.6)
       if (stale(key)) return
-      const holdIds = decideYahtzeeHold(state.yahtzee.dice)
+      const holdIds = decideYahtzeeHold(state.yahtzee.dice, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
       let cur = state
       for (const dieId of holdIds) {
         const next = hostApply({ type: 'yahtzeeToggleHold', dieId }, seatId)
@@ -212,7 +213,7 @@ export default function App() {
     await wait(BASE_MS * pace * 0.5)
     if (stale(key)) return
     const vals = state.yahtzee.dice.map((d) => d.val)
-    const category = decideYahtzeeCategory(vals, state.yahtzee.cards[seatId] ?? {})
+    const category = decideYahtzeeCategory(vals, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
     hostApply({ type: 'yahtzeeScore', category }, seatId)
   }
 
@@ -230,7 +231,7 @@ export default function App() {
   async function runHangmanBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
-      await wait(BASE_MS * pace * 0.8)
+      await wait(BASE_MS * pace)
       if (stale(key)) return
       const state = roomRef.current!
       if (state.screen !== 'hangman' || state.hangman.phase !== 'guessing' || state.hangman.over) return
@@ -266,6 +267,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, room?.screen, room?.turnIdx, room?.hangman.phase, room?.hangman.guesserIdx])
 
+  // Pause on a finished round (winning line / solved-or-lost word still visible) before moving
+  // on, whether the round ended on a bot's move or a human's — otherwise it flashes past.
+  useEffect(() => {
+    if (role !== 'host' || !room) return
+    if (room.screen === 'ttt' && room.ttt.roundOver) {
+      const t = setTimeout(() => dispatch({ type: 'tttAdvanceRound' }), ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    if (room.screen === 'hangman' && room.hangman.phase === 'roundOver') {
+      const t = setTimeout(() => dispatch({ type: 'hangmanAdvanceRound' }), ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, room?.screen, room?.ttt.roundOver, room?.hangman.phase])
+
   if (!room) {
     return (
       <Landing
@@ -290,6 +306,7 @@ export default function App() {
           isHost={isHost}
           onPickGame={(g) => dispatch({ type: 'pickGame', game: g })}
           onAddBot={() => dispatch({ type: 'addBot' })}
+          onSetDifficulty={(d) => dispatch({ type: 'setBotDifficulty', difficulty: d })}
           onStart={() => dispatch({ type: 'startGame' })}
           onLeave={resetToEntry}
           onOpenRules={() => setRulesOpen(true)}

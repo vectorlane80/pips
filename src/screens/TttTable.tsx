@@ -14,6 +14,12 @@ export function TttTable({
   const t = room.ttt
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const roundWinner = t.roundOver && t.winLine.length > 0 ? room.seats[t.board[t.winLine[0]]!] : null
+  const roundStatus = t.roundOver
+    ? roundWinner
+      ? roundWinner.id === localSeatId ? 'You win this one!' : `${roundWinner.name} wins this one!`
+      : "It's a draw — playing again."
+    : null
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -22,11 +28,15 @@ export function TttTable({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 420px' }}>
           <div className="card card-resting">
-            <span className="chip" style={{ background: activeSeat?.color }}>
-              {isMyTurn ? 'Your move' : `${activeSeat?.name}'s move`}
+            <span className="chip" style={{ background: (roundWinner ?? activeSeat)?.color }}>
+              {roundStatus ? 'Round over' : isMyTurn ? 'Your move' : `${activeSeat?.name}'s move`}
             </span>
-            <div style={{ fontSize: 'clamp(22px,3.2vw,30px)', fontWeight: 700, margin: '10px 0 20px' }}>
-              {isMyTurn ? 'Pick a square.' : `${activeSeat?.name} is thinking…`}
+            <div style={{
+              fontSize: 'clamp(22px,3.2vw,30px)', fontWeight: 700, margin: '10px 0 20px',
+              color: roundStatus ? (roundWinner ? roundWinner.color : 'var(--muted-text)') : 'var(--ink)',
+            }}
+            >
+              {roundStatus ?? (isMyTurn ? 'Pick a square.' : `${activeSeat?.name} is thinking…`)}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'clamp(10px,1.4vw,16px)', maxWidth: 400 }}>
               {t.board.map((cell, i) => {

@@ -1,4 +1,4 @@
-import { GAME_BLURB, GAME_COLOR, GAME_LABEL, type Game } from '../types'
+import { GAME_BLURB, GAME_COLOR, GAME_LABEL, GAME_PLAYER_RANGE, type Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
@@ -26,14 +26,14 @@ export function Landing({
         margin: '20px 0 0', fontWeight: 700, maxWidth: '18ch',
       }}
       >
-        Little games for <span style={{ color: 'var(--violet)' }}>two people</span> and one code.
+        Small games. <span style={{ color: 'var(--violet)' }}>One code.</span> Whoever's around.
       </h1>
       <p style={{
-        fontSize: 'clamp(16px,1.9vw,18px)', lineHeight: 1.5, maxWidth: '44ch',
+        fontSize: 'clamp(16px,1.9vw,18px)', lineHeight: 1.5, maxWidth: '46ch',
         marginTop: 12, color: 'var(--body-text)',
       }}
       >
-        Dice, cards, pencil and paper. Pick one, send the code across the room, play. No account, nothing to install.
+        Dice, cards, pencil and paper — on your own or with a table full. Pick a game, share the code, play. No account, nothing to install.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(24px,5vw,64px)', marginTop: 'clamp(22px,3vw,34px)', alignItems: 'flex-start' }}>
@@ -68,32 +68,38 @@ export function Landing({
           {error && <p style={{ fontSize: 14, color: 'var(--coral)', margin: 0, fontWeight: 600 }}>{error}</p>}
         </div>
 
-        <div style={{ flex: '1 1 320px', maxWidth: 460, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
-          {GAMES.map((g) => (
-            <button
-              key={g}
-              type="button"
-              disabled={!ready}
-              onClick={() => onPickGame(g)}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '18px 20px', borderRadius: 22, border: `4px solid ${ready ? 'var(--ink)' : 'var(--grey-border)'}`,
-                boxShadow: ready ? '0 7px 0 var(--ink)' : '0 7px 0 var(--grey-border-4)',
-                background: ready ? GAME_COLOR[g] : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-                cursor: ready ? 'pointer' : 'not-allowed', textAlign: 'left', font: 'inherit',
-              }}
-            >
-              <span>
-                <span style={{ display: 'block', fontSize: 26, fontWeight: 700 }}>{GAME_LABEL[g]}</span>
-                <span style={{ display: 'block', fontSize: 14, opacity: 0.85, marginTop: 2 }}>{GAME_BLURB[g]}</span>
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                {ready ? 'Start →' : 'Name yourself first'}
-              </span>
-            </button>
-          ))}
+        <div style={{ flex: '1 1 340px', maxWidth: 560 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+            <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
+              {ready ? `${GAMES.length} games` : 'type a name to start one'}
+            </span>
+          </div>
+          <div className="shelf-grid">
+            {GAMES.map((g) => (
+              <button
+                key={g}
+                type="button"
+                className="shelf-tile"
+                disabled={!ready}
+                onClick={() => onPickGame(g)}
+                style={{
+                  ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                  ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                  background: ready ? GAME_COLOR[g] : 'var(--grey-fill)',
+                  color: ready ? '#fff' : 'var(--disabled-text)',
+                }}
+              >
+                <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>{GAME_LABEL[g]}</span>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                  {GAME_BLURB[g]}
+                </span>
+                <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                  {GAME_PLAYER_RANGE[g]}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

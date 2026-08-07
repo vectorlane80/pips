@@ -1,17 +1,20 @@
 import { useState } from 'react'
-import type { Game, RoomState } from '../types'
+import type { BotDifficulty, Game, RoomState } from '../types'
 import { GAME_COLOR, GAME_LABEL, GAME_MAX_SEATS } from '../types'
 import { SeatAvatar } from '../components/SeatAvatar'
 
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
+const DIFFICULTIES: BotDifficulty[] = ['easy', 'medium', 'hard']
+const DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
 export function Room({
-  room, isHost, onPickGame, onAddBot, onStart, onLeave, onOpenRules,
+  room, isHost, onPickGame, onAddBot, onSetDifficulty, onStart, onLeave, onOpenRules,
 }: {
   room: RoomState
   isHost: boolean
   onPickGame: (g: Game) => void
   onAddBot: () => void
+  onSetDifficulty: (d: BotDifficulty) => void
   onStart: () => void
   onLeave: () => void
   onOpenRules: () => void
@@ -83,6 +86,26 @@ export function Room({
               <button type="button" className="btn" disabled={room.seats.length >= max} onClick={onAddBot}>
                 Add a house player
               </button>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--muted-text)', marginBottom: 6 }}>House player skill</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {DIFFICULTIES.map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => onSetDifficulty(d)}
+                      className="btn pill-small"
+                      style={{
+                        flex: 1,
+                        background: room.botDifficulty === d ? 'var(--ink)' : '#fff',
+                        color: room.botDifficulty === d ? '#fff' : 'var(--ink)',
+                      }}
+                    >
+                      {DIFFICULTY_LABEL[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
         </div>

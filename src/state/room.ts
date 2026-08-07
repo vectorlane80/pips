@@ -51,28 +51,28 @@ function initYahtzee(seats: Seat[]): YahtzeeState {
 function initTtt(seats: Seat[]): TttState {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
-  return { board: Array(9).fill(null), starter: 0, winLine: [], over: false, status: '', wins }
+  return { board: Array(9).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins }
 }
 
 function initHangman(seats: Seat[]): HangmanState {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
-  return startHangmanRound({ word: '', guessed: [], wrong: [], phase: 'setting', guesserIdx: 1, over: false, status: '', wins }, seats)
+  return startHangmanRound({ word: '', guessed: [], wrong: [], phase: 'setting', guesserIdx: 1, over: false, pendingWinnerId: null, status: '', wins }, seats)
 }
 
 function startHangmanRound(base: HangmanState, seats: Seat[]): HangmanState {
   const setterIdx = base.guesserIdx === 0 ? 1 : 0
   const setter = seats[setterIdx]
   if (!setter || setter.bot) {
-    return { ...base, word: randomWord(), guessed: [], wrong: [], phase: 'guessing', over: false, status: `Guess ${seats[base.guesserIdx]?.name ?? "the"}'s word.` }
+    return { ...base, word: randomWord(), guessed: [], wrong: [], phase: 'guessing', over: false, pendingWinnerId: null, status: `Guess ${seats[base.guesserIdx]?.name ?? "the"}'s word.` }
   }
-  return { ...base, word: '', guessed: [], wrong: [], phase: 'setting', over: false, status: `Give ${seats[base.guesserIdx]?.name ?? 'them'} a word to guess.` }
+  return { ...base, word: '', guessed: [], wrong: [], phase: 'setting', over: false, pendingWinnerId: null, status: `Give ${seats[base.guesserIdx]?.name ?? 'them'} a word to guess.` }
 }
 
 export function makeRoom(code: string, game: Game, hostName: string, hostId: string): RoomState {
   const seats = [makeSeat(hostId, hostName, false, true, 0)]
   return {
-    screen: 'room', game, code, seats, turnIdx: 0, botPace: 1, showLog: true,
+    screen: 'room', game, code, seats, turnIdx: 0, botPace: 1, botDifficulty: 'medium', showLog: true,
     farkle: initFarkle(), yahtzee: initYahtzee(seats), ttt: initTtt(seats), hangman: initHangman(seats),
     winnerId: null,
   }
@@ -127,6 +127,8 @@ export function applyAction(state: RoomState, action: Action, by: string): RoomS
       if (state.seats.length >= GAME_MAX_SEATS[state.game]) return state
       return addSeat(state, `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, nextBotName(state.seats), true)
     }
+    case 'setBotDifficulty':
+      return { ...state, botDifficulty: action.difficulty }
     case 'startGame':
       return startGame(state)
     case 'rematch':
@@ -147,10 +149,14 @@ export function applyAction(state: RoomState, action: Action, by: string): RoomS
       return yahtzeeScore(state, by, action.category)
     case 'tttPlay':
       return tttPlay(state, by, action.cell)
+    case 'tttAdvanceRound':
+      return tttAdvanceRound(state)
     case 'hangmanSetWord':
       return hangmanSetWord(state, by, action.word)
     case 'hangmanGuess':
       return hangmanGuess(state, by, action.letter)
+    case 'hangmanAdvanceRound':
+      return hangmanAdvanceRound(state)
     default:
       return state
   }
@@ -294,7 +300,7 @@ function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomSt
 function tttPlay(state: RoomState, by: string, cell: number): RoomState {
   if (state.screen !== 'ttt') return state
   const t = state.ttt
-  if (t.over || t.board[cell] !== null) return state
+  if (t.roundOver || t.board[cell] !== null) return state
   const seatIdx = state.seats.findIndex((s) => s.id === by)
   if (seatIdx !== state.turnIdx) return state
   const board = [...t.board]
@@ -306,18 +312,28 @@ function tttPlay(state: RoomState, by: string, cell: number): RoomState {
     if (winLine) wins[by] = (wins[by] ?? 0) + 1
     const seats = state.seats.map((s) => ({ ...s, score: wins[s.id] ?? 0 }))
     const matchOver = Object.values(wins).some((w) => w >= 3)
-    if (matchOver) {
-      const winnerId = Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0]
-      return { ...state, seats, screen: 'results', winnerId, ttt: { ...t, board, winLine: winLine ?? [], over: true, wins } }
-    }
-    const nextStarter = (t.starter + 1) % state.seats.length
+    const pendingWinnerId = matchOver ? Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0] : null
     return {
-      ...state, seats, turnIdx: nextStarter,
-      ttt: { ...t, board: Array(9).fill(null), winLine: [], over: false, wins, starter: nextStarter, status: '' },
+      ...state, seats,
+      ttt: { ...t, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins },
     }
   }
   const turnIdx = (state.turnIdx + 1) % state.seats.length
   return { ...state, ttt: { ...t, board }, turnIdx }
+}
+
+function tttAdvanceRound(state: RoomState): RoomState {
+  if (state.screen !== 'ttt') return state
+  const t = state.ttt
+  if (!t.roundOver) return state
+  if (t.pendingWinnerId) {
+    return { ...state, screen: 'results', winnerId: t.pendingWinnerId }
+  }
+  const nextStarter = (t.starter + 1) % state.seats.length
+  return {
+    ...state, turnIdx: nextStarter,
+    ttt: { ...t, board: Array(9).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '' },
+  }
 }
 
 // ---------- Hangman ----------
@@ -327,8 +343,8 @@ function hangmanSetWord(state: RoomState, by: string, word: string): RoomState {
   const h = state.hangman
   const setterIdx = h.guesserIdx === 0 ? 1 : 0
   if (state.seats[setterIdx]?.id !== by) return state
-  const clean = word.trim().toUpperCase().replace(/[^A-Z]/g, '')
-  if (clean.length < 3) return state
+  const clean = word.trim().toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim()
+  if (clean.replace(/ /g, '').length < 3) return state
   return { ...state, hangman: { ...h, word: clean, phase: 'guessing', guessed: [], wrong: [], status: `Guess ${state.seats[h.guesserIdx]?.name}'s word.` } }
 }
 
@@ -349,14 +365,25 @@ function hangmanGuess(state: RoomState, by: string, letter: string): RoomState {
     if (solved && guesser) wins[guesser.id] = (wins[guesser.id] ?? 0) + 1
     const seats = state.seats.map((s) => ({ ...s, score: wins[s.id] ?? 0 }))
     const matchOver = Object.values(wins).some((w) => w >= 2)
-    if (matchOver) {
-      const winnerId = Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0]
-      return { ...state, seats, screen: 'results', winnerId, hangman: { ...h, guessed, wrong, over: true, wins } }
+    const pendingWinnerId = matchOver ? Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0] : null
+    const status = solved ? `${guesser?.name ?? 'They'} solved it!` : `Out of guesses — it was "${h.word}".`
+    return {
+      ...state, seats,
+      hangman: { ...h, guessed, wrong, over: true, phase: 'roundOver', pendingWinnerId, status, wins },
     }
-    const nextGuesser = h.guesserIdx === 0 ? 1 : 0
-    return { ...state, seats, hangman: startHangmanRound({ ...h, guessed, wrong, wins, guesserIdx: nextGuesser }, state.seats) }
   }
   return { ...state, hangman: { ...h, guessed, wrong } }
+}
+
+function hangmanAdvanceRound(state: RoomState): RoomState {
+  if (state.screen !== 'hangman') return state
+  const h = state.hangman
+  if (h.phase !== 'roundOver') return state
+  if (h.pendingWinnerId) {
+    return { ...state, screen: 'results', winnerId: h.pendingWinnerId }
+  }
+  const nextGuesser = h.guesserIdx === 0 ? 1 : 0
+  return { ...state, hangman: startHangmanRound({ ...h, guesserIdx: nextGuesser }, state.seats) }
 }
 
 export function seatUpperBonusText(cards: YahtzeeState['cards'], seatId: string): string {

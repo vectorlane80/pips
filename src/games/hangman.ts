@@ -3,6 +3,7 @@ export const HANGMAN_WORDS = [
   'LANTERN', 'VELVET', 'TROPHY', 'GARDEN', 'PENCIL', 'RIBBON', 'FOREST', 'CASTLE',
   'BUBBLE', 'ROCKET', 'SILVER', 'DESERT', 'BICYCLE', 'MEADOW', 'PIRATE', 'COTTON',
   'JOURNEY', 'WIZARD', 'BLANKET', 'CRYSTAL', 'ISLAND', 'THUNDER',
+  'PEANUT BUTTER', 'FULL MOON', 'RAIN COAT', 'TIC TAC TOE', 'BOARD GAME', 'SEA SHELL',
 ]
 
 export const BOT_LETTER_ORDER = 'EAORISNTLUCDPMHGBYFWKVXZJQ'.split('')
@@ -20,5 +21,5 @@ export function decideHangmanLetter(guessed: string[]): string {
 }
 
 export function isWordSolved(word: string, guessed: string[]): boolean {
-  return word.split('').every((l) => guessed.includes(l))
+  return word.split('').every((l) => l === ' ' || guessed.includes(l))
 }

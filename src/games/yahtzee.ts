@@ -1,4 +1,4 @@
-import type { Die, YCategory } from '../types'
+import type { BotDifficulty, Die, YCategory } from '../types'
 import { rollDie } from './farkle'
 
 export const Y_CATEGORIES: YCategory[] = [
@@ -79,47 +79,83 @@ const BURN_ORDER: YCategory[] = [
   'twos', 'threes', 'fours', 'fives', 'sixes', 'threeKind', 'chance',
 ]
 
-export function decideYahtzeeHold(dice: Die[]): Set<number> {
+export function decideYahtzeeHold(
+  dice: Die[],
+  card: Partial<Record<YCategory, number>> = {},
+  difficulty: BotDifficulty = 'medium',
+): Set<number> {
   const vals = dice.map((d) => d.val)
   const counts = countByFace(vals)
-  const distinct = Object.keys(counts).length
-  const hold = new Set<number>()
+  const entries = Object.entries(counts).map(([face, count]) => ({ face: Number(face), count }))
+  const distinct = entries.length
+
+  // Four distinct faces on five dice: one reroll away from a straight.
   if (distinct === 4) {
-    const seen = new Set<number>()
-    dice.forEach((d) => {
-      if (!seen.has(d.val)) {
-        hold.add(d.id)
-        seen.add(d.val)
-      }
-    })
-    return hold
-  }
-  let modeFace = vals[0]
-  let modeCount = 0
-  for (const [face, count] of Object.entries(counts)) {
-    if (count > modeCount || (count === modeCount && Number(face) > modeFace)) {
-      modeFace = Number(face)
-      modeCount = count
+    const bothStraightsFilled = card.smallStraight !== undefined && card.largeStraight !== undefined
+    if (difficulty !== 'hard' || !bothStraightsFilled) {
+      const hold = new Set<number>()
+      const seen = new Set<number>()
+      dice.forEach((d) => {
+        if (!seen.has(d.val)) {
+          hold.add(d.id)
+          seen.add(d.val)
+        }
+      })
+      return hold
     }
   }
+
+  // Two pairs (or a pair + triple) on the board: hold both, chase the full house.
+  if (difficulty !== 'easy') {
+    const pairGroups = entries.filter((e) => e.count >= 2).sort((a, b) => b.count - a.count || b.face - a.face)
+    if (pairGroups.length >= 2) {
+      const facesToHold = new Set(pairGroups.slice(0, 2).map((g) => g.face))
+      const hold = new Set<number>()
+      dice.forEach((d) => {
+        if (facesToHold.has(d.val)) hold.add(d.id)
+      })
+      return hold
+    }
+  }
+
+  // Otherwise hold whichever face shows up most (ties favor the higher face) — chases
+  // three/four/five-of-a-kind naturally.
+  let modeFace = vals[0]
+  let modeCount = 0
+  for (const e of entries) {
+    if (e.count > modeCount || (e.count === modeCount && e.face > modeFace)) {
+      modeFace = e.face
+      modeCount = e.count
+    }
+  }
+  const hold = new Set<number>()
   dice.forEach((d) => {
     if (d.val === modeFace) hold.add(d.id)
   })
   return hold
 }
 
-export function decideYahtzeeCategory(vals: number[], card: Partial<Record<YCategory, number>>): YCategory {
+// Categories that are hard to fill later on — hard mode locks these in over dumping into a
+// bigger-looking but easy-to-reach upper box.
+const HARD_TO_FILL: YCategory[] = ['yahtzee', 'largeStraight', 'smallStraight', 'fullHouse']
+
+export function decideYahtzeeCategory(
+  vals: number[],
+  card: Partial<Record<YCategory, number>>,
+  difficulty: BotDifficulty = 'medium',
+): YCategory {
   const open = Y_CATEGORIES.filter((c) => !(c in card))
   let best: YCategory | null = null
-  let bestScore = -1
+  let bestWeight = -1
   for (const c of open) {
     const s = scoreCategory(vals, c)
-    if (s > bestScore) {
-      bestScore = s
+    const weight = difficulty === 'hard' && s > 0 && HARD_TO_FILL.includes(c) ? s + 20 : s
+    if (weight > bestWeight) {
+      bestWeight = weight
       best = c
     }
   }
-  if (best && bestScore > 0) return best
+  if (best && bestWeight > 0) return best
   for (const c of BURN_ORDER) {
     if (open.includes(c)) return c
   }

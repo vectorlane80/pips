@@ -208,6 +208,39 @@
   padding: clamp(22px, 3vw, 32px);
 }
 
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 10px;
+}
+.shelf-tile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 3px solid var(--tile-border, var(--ink));
+  box-shadow: 0 5px 0 var(--tile-shadow, var(--ink));
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: filter 0.1s ease, transform 0.1s ease, box-shadow 0.1s ease;
+}
+.shelf-tile:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+.shelf-tile:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--tile-shadow, var(--ink));
+}
+.shelf-tile:disabled {
+  cursor: not-allowed;
+}
+.shelf-tile-note {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
 .header-row {
   display: flex;
   align-items: center;
