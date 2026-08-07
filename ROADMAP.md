@@ -5,19 +5,21 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M4b — wiring: `'rummy'` shelf tile on `Landing.tsx` (its own tile,
-   not merged into the `Game`/`Action`/`RoomState` union per CHARTER.md
-   resolution #7), a Rummy host/guest/bot session in `App.tsx` using
-   M2's generalized transport, connecting `RummyTable` to the real
-   `RummySession`/`applyRummyAction`/`runRummyBotTurn`. Also needs a
-   small `state.ts`/`rules.ts` addition: a `handCounts` field on
-   `RummyPublicState` so a client can show the opponent's card count
-   without seeing their hand — a genuine trust-boundary-relevant change
-   to review carefully, unlike the rest of M4b. Browser smoke test of a
-   real full turn including the reach-in interaction, host-vs-bot.
-2. M5 — documentation (`docs/rummy.md`).
+1. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
+- [cycle 7] M4b — `handCounts` on `RummyPublicState` (Part A, commit
+  841696e); Rummy shelf tile + full host/guest/bot session in App.tsx
+  using M2's generalized transport (Part B, commit 495c283). Verified
+  with two real browser tabs, not mocks — live host-guest sync
+  confirmed end to end, dice-game regression re-checked (Farkle).
+  3 real defects found and fixed via direct code review and live
+  testing: a stale-closure bug that broke the entire host-vs-human
+  flow (host's PeerJS callbacks read React state instead of refs, so
+  they permanently saw player ids as null), a missing join-routing
+  path (no way to actually reach the Rummy guest flow from the shared
+  "join with a code" field), and the guest never learning the host's
+  display name (never part of the wire protocol).
 - [cycle 6] M4a — `RummyTable`/`RummyResults` screen components, pure
   presentational, verified via a live browser mock-state check (reach-in
   hover, card selection, round/match-over panels all confirmed working)

@@ -506,3 +506,92 @@ be kept pending for the duration of this run per explicit user request
   milestone — it's the one that makes Rummy actually playable through
   the UI, and warrants the heaviest browser verification of any
   milestone so far.
+
+## Rummy cycle 6 — 2026-08-07
+- **Shipped:** M4a — `src/screens/RummyTable.tsx`/`.css` and
+  `RummyResults.tsx`: the three-band table (their side / centre / your
+  side), the discard reach-in hover/select interaction with its
+  status-line copy pattern, hand sort toggle, lay-down/discard actions
+  gated on meld validity, and a match-end panel mirroring `Results.tsx`.
+  Pure presentational, props/callbacks only — no PeerJS, not wired into
+  `App.tsx` yet (commit `9f3bfac`).
+- **Deliberately skipped adversarial review** (same reasoning as M2/M3):
+  no trust boundary or game logic of its own here, it only consumes
+  already-reviewed types and calls. Verified instead with a live
+  browser check: mounted the component against hand-built mock states
+  (idle, mid-reach-in-hover, a selected meld candidate, round-over
+  banner, match-over panel) via a throwaway query-param branch,
+  confirmed the reach-in hover lift/ring and "Take N cards" copy work
+  exactly as designed, checked console for errors, reverted the
+  throwaway branch before committing.
+- **Continue?** Yes — M4b (wiring into the live app) is next and is the
+  riskiest remaining milestone; split further into Part A/B internally
+  given its size.
+
+## Rummy cycle 7 — 2026-08-07
+- **Shipped:** M4b, in two parts.
+  - **Part A** (commit `841696e`): `handCounts` on `RummyPublicState` —
+    lets a client show its opponent's card count without their hand
+    ever being sent. Derived fresh from the resulting hand at every
+    handler rather than manually tracked, to avoid drift bugs. Reviewed
+    by hand rather than a full adversarial pass (narrow, mechanical,
+    all 8 required tests non-vacuous — checked by reading them).
+  - **Part B** (commit `495c283`): the Rummy shelf tile on `Landing.tsx`
+    and the full host/guest/bot session in `App.tsx`, using M2's
+    generalized transport as a separate parallel branch alongside the
+    dice-game flow, per `CHARTER.md`'s resolution #7.
+- **This is the milestone where I stopped trusting the delegation loop
+  by default and it paid off immediately.** Rather than accept Part B's
+  report (typecheck/build clean, well-structured — it even added a
+  `useMemo` to sidestep an async-ordering issue I'd flagged in the
+  spec), I read the actual 660-line diff myself and traced the PeerJS
+  callback closures by hand. Found a **severity-critical bug before
+  ever opening a browser**: `startRummyHost()`'s `onJoin`/`onAction`
+  callbacks are created once and stored in a ref, never recreated —
+  but they read `rummyLocalPlayerId`/`rummyOpponentId` as plain React
+  state (not refs), so every future invocation would see them frozen
+  at `null` forever, no matter how many times the corresponding
+  `setState` calls fired. This would have broken the ENTIRE
+  host-vs-human flow (the host's own view and every broadcast to a
+  guest) silently — exactly the class of bug the existing dice-game
+  code already works around with `roomRef`, which the spec explicitly
+  pointed at as the pattern to mirror, but wasn't consistently applied
+  in the Rummy code. Also found `startRummyGuest` was dead code — no
+  UI path ever called it, confirmed by a genuine `never read` TS error
+  I would have otherwise had to explain away rather than just accept.
+  Wrote both fixes myself (precise root-cause diagnosis, ref-based fix
+  mirroring the existing pattern; a `RM-` code-prefix + join-routing
+  fix) as a targeted fix spec, dispatched, re-verified.
+- **Then verified with two real browser tabs, not a mock** — the
+  first time this whole two-charter effort has driven an actual
+  PeerJS handshake between two independent tabs rather than a single
+  local session or a mocked prop harness. Host ("Alice") created a
+  room, guest ("Bob") joined with the real `RM-...` code, a host draw
+  action propagated live to the guest's screen (hand count, stock
+  count, phase — all correct), zero console errors on either tab.
+  This caught a THIRD real bug the fix's own verification missed:
+  the guest's header/turn-chip showed a blank name, because the
+  host's display name is never part of the wire protocol at all (only
+  the guest's name travels, via the initial `{kind:'join', name}`
+  message) — a gap neither my original spec nor the stale-closure fix
+  spec had specified, only found because I actually looked at two
+  live tabs side by side instead of trusting typecheck/build alone.
+  Fixed by adding `opponentName` to the broadcast `RummyView` payload,
+  re-verified with the same two-tab test until both sides showed the
+  correct name.
+- Also re-ran the Farkle dice-game flow end to end in-browser (host a
+  room, verify a plain non-`RM-` code, add a house player) to confirm
+  zero regression, per `CHARTER.md`'s DoD requirement.
+- **Lesson carried forward, stated plainly:** this cycle is the
+  strongest evidence yet for why "typecheck and build are clean" is
+  necessary but nowhere near sufficient for stateful, closure-heavy,
+  networked UI code — all 3 defects here were invisible to `tsc`/
+  `vitest`/`vite build`, and two of the three were only found by
+  reading actual closures by hand or driving two real browser tabs.
+  Neither substitutes for the other: the stale-closure bug was found
+  by code reading BEFORE ever opening a browser; the missing-name bug
+  was found by the browser test AFTER the code read turned up clean.
+  Both passes earned their keep independently.
+- **Continue?** Yes — Rummy is now genuinely playable end to end in the
+  real app, host-vs-human and host-vs-bot, matching the design handoff.
+  Only M5 (documentation) remains.
