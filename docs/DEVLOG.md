@@ -71,3 +71,35 @@ sub-agent (user's explicit routing override for this run).
   not (e.g. a double-click bug in some future UI).
 - **Continue?** Yes — M0 and M1 both solid and committed. M2 (turn-engine) and
   M3 (sync) specs are already locked in scratch; dispatching M2 next.
+
+## Cycle 3 — 2026-08-07
+- **Shipped:** M2 — `src/card-engine/turn-engine.ts` (generic turn-order state
+  machine) + tests (commit `b3f58b9`).
+- **Verification:** full ladder re-run myself; read the implementation line by
+  line against spec (exact match — the modulo wrap formula, the `turnNumber`
+  bookkeeping rules, all 7 functions).
+- **Review:** Opus fuzzed the arithmetic extremely hard (an independent
+  rotating-array reference model compared against the real module across 4000
+  operations at 8 different player counts, a 5000-op turnNumber-drift fuzz, 25
+  mutation tests) and could not find an implementation bug. What it did find:
+  `skipNext`'s test assertions only checked 3 of the 5 returned fields, so a
+  mutant that silently flipped the returned `direction` field passed all 93
+  tests untouched — I reproduced this myself before locking the fix. Also
+  found every length-sensitive test used the same player count (3), leaving a
+  blind spot for other lengths.
+- Fixed with full-object assertions on `skipNext`'s result plus new coverage
+  at 1, 2, and 5 players. DeepSeek's fix task completed cleanly this time
+  (no tool-round cap issue like cycle 2) — mutation-tested its own fix,
+  reverted, re-verified — and I independently re-ran the whole ladder plus
+  read the restored file by eye before committing, same discipline regardless
+  of how clean the report looked.
+- **Lesson carried forward:** "assert only the fields the test happens to care
+  about" is a recurring test-weakness pattern across all three milestones so
+  far (M0's shuffle tests, M1's array-reference checks, now M2's per-field
+  assertions) — worth calling out explicitly in future fix specs: prefer a
+  full `toEqual` against the whole expected object over cherry-picked field
+  assertions, unless there's a specific reason not to (e.g. deliberately
+  ignoring a field that's expected to vary).
+- **Continue?** Yes — M0, M1, M2 all solid and committed (99 tests). M3
+  (sync), M4 (bot seam), and M5 (Rummy harness) are all already spec'd and
+  locked in scratch. Dispatching M3 next.
