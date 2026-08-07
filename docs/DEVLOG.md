@@ -153,3 +153,24 @@ sub-agent (user's explicit routing override for this run).
 - **Continue?** Yes — M0-M3 all solid and committed (148 tests). M4 (bot
   seam) and M5 (Rummy harness) specs are locked in scratch. Dispatching M4
   next.
+
+## Cycle 5 — 2026-08-07
+- **Shipped:** M4 — `src/card-engine/bot.ts` (house-player seam, 19 lines) +
+  tests (commit `7281cbe`).
+- **Verification:** full ladder myself; read the implementation (small enough
+  to review in full in seconds) — exact match to spec.
+- **Review:** scoped proportionally to the module's size (Opus's own framing
+  — "doesn't need M3-scale effort"). Found the implementation correct but a
+  real test-coverage gap: every validator in the original test file ignored
+  its `playerId` argument, so nothing actually proved `runBotTurn` submits
+  under the BOT'S OWN seat rather than some other player's — a plausible
+  copy-paste bug (passing the wrong variable to `applyAction`) would have
+  shipped invisibly. Independently reproduced (152/152 green with a
+  hardcoded wrong player id spliced into the call). Small enough fix that I
+  wrote the one regression test myself rather than round-tripping another
+  DeepSeek dispatch for a single `it()` block — confirmed it catches the
+  mutation, reverted, re-verified the full ladder.
+- **Continue?** Yes — M0-M4 all solid and committed (153 tests). M5 (Rummy
+  integration harness) is the last substantial piece; spec locked in
+  scratch. This is the milestone that actually proves the whole stack
+  composes into something game-shaped. Dispatching next.
