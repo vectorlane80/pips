@@ -290,3 +290,25 @@ card-engine foundation from charter 1. Pre-approved, unattended — same
 DeepSeek/Opus delegation split. Scheduled safety-net wakeup armed and will
 be kept pending for the duration of this run per explicit user request
 (usage-limit recovery), not just a one-time arm.
+
+## Rummy cycle 1 — 2026-08-07
+- **Shipped:** M0a — `src/card-games/rummy/{rank,melds,scoring}.ts` + tests
+  (commit `b0c5595`). Pure meld classification and deadwood scoring, zero
+  game-engine wiring.
+- **Verification:** full ladder myself; read every source file against spec
+  (exact match).
+- **Review:** Opus differentially fuzzed `classifyMeld` against an
+  independently-written second implementation — 20,000 random selections
+  plus an EXHAUSTIVE sweep of all 22,100 three-card subsets of a real deck,
+  zero mismatches either way (this is what actually proves the Ace-low/
+  no-wrap boundary, not eyeballing the code). 8 of 9 deliberate mutations
+  caught. The survivor was real: no test used a run crossing the 9→10 rank
+  boundary, so `Array.prototype.sort()`'s default lexicographic comparison
+  (a well-known JS footgun) could have silently misclassified `8-9-10` as
+  invalid. Independently reproduced, added the one missing test myself
+  (small enough not to round-trip another dispatch), confirmed it catches
+  the mutation, reverted.
+- **Continue?** Yes — on track. M0b (the rules-engine integration: melds
+  wired into actions, reach-in obligation, going-out, stock recycling,
+  multi-round scoring) is the next, larger slice — spec already fully
+  designed, dispatching next.
