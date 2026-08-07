@@ -1,0 +1,253 @@
+/* ===================================================================
+   PlayingCard & CardBack — Rummy card-visual components
+   =================================================================== */
+
+/* ---- Local custom properties (scoped to .playing-card, not shared) ---- */
+
+.playing-card {
+  --_selected-shadow: #e0a800;
+  --_meld-shadow-default: #b7e6d1;
+}
+
+/* ===================================================================
+   PlayingCard — base
+   =================================================================== */
+
+.playing-card {
+  position: relative;
+  background: var(--surface);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0;
+  margin: 0;
+  display: block;
+  flex: none;
+  border-style: solid;
+  /* Wipe browser <button> defaults */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.playing-card:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   PlayingCard — hand (74 × 104)
+   =================================================================== */
+
+.playing-card--hand {
+  width: 74px;
+  height: 104px;
+  border-radius: 14px;
+  border-width: 4px;
+  border-color: var(--ink);
+  box-shadow: 0 6px 0 var(--grey-border);
+}
+
+/* Hover: lift 9 px (only visible when not selected — selected rules below win on specificity) */
+.playing-card--hand:hover:not(:disabled) {
+  transform: translateY(-9px);
+}
+
+/* Selected: yellow border, darker shadow, higher lift.
+   The :hover combinator ensures the selected transform wins over the plain hover above. */
+.playing-card--hand.playing-card--selected,
+.playing-card--hand.playing-card--selected:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 6px 0 var(--_selected-shadow);
+  transform: translateY(-18px);
+}
+
+/* ===================================================================
+   PlayingCard — meld (38 × 54)
+   =================================================================== */
+
+.playing-card--meld {
+  width: 38px;
+  height: 54px;
+  border-radius: 9px;
+  border-width: 3px;
+  border-color: var(--card-owner-color, var(--green-text));
+  box-shadow: 0 3px 0 var(--card-owner-shadow, var(--_meld-shadow-default));
+}
+
+/* ===================================================================
+   PlayingCard — discard (50 × 70)
+   =================================================================== */
+
+/*
+   Judgment call — RUMMY.md does not specify the discard card’s border / shadow.
+   Using the same visual weight as the hand card, scaled proportionally:
+     hand   4px border + 6px shadow → 74×104
+     discard 3px border + 4px shadow → 50×70  ✓
+*/
+.playing-card--discard {
+  width: 50px;
+  height: 70px;
+  border-radius: 10px;
+  border-width: 3px;
+  border-color: var(--ink);
+  box-shadow: 0 4px 0 var(--grey-border);
+}
+
+/* ===================================================================
+   Content — corner (hand top-left + discard top-left)
+   =================================================================== */
+
+.playing-card__corner {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+  gap: 1px;
+}
+
+/* Hand — small rank + suit side-by-side in the corner */
+.playing-card--hand .playing-card__rank {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.playing-card--hand .playing-card__suit {
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* Discard — rank OVER suit, stacked (two lines, top-left only) */
+.playing-card__corner--stacked {
+  flex-direction: column;
+  gap: 0;
+  top: 4px;
+  left: 5px;
+}
+
+.playing-card--discard .playing-card__rank {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.playing-card--discard .playing-card__suit {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+/* ===================================================================
+   Content — bottom-large suit glyph (hand only, per RUMMY.md)
+   =================================================================== */
+
+.playing-card__bottom-suit {
+  position: absolute;
+  bottom: 6px;
+  left: 7px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* ===================================================================
+   Content — centred single-line (meld only)
+   =================================================================== */
+
+.playing-card__center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+}
+
+.playing-card--meld .playing-card__rank {
+  font-size: 11px;
+}
+
+.playing-card--meld .playing-card__suit {
+  font-size: 11px;
+}
+
+/* ===================================================================
+   CardBack — base
+   =================================================================== */
+
+.card-back {
+  position: relative;
+  background-color: var(--violet);
+  background-image: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.5) 1.4px,
+    transparent 1.6px
+  );
+  background-size: 7px 7px;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+  padding: 0;
+  margin: 0;
+  display: block;
+  flex: none;
+  border-style: solid;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.card-back:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   CardBack — fan (30 × 44) — opponent’s hidden hand
+   =================================================================== */
+
+.card-back--fan {
+  width: 30px;
+  height: 44px;
+  border-radius: 7px;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+
+/* ===================================================================
+   CardBack — stock (56 × 78) — the draw pile
+   =================================================================== */
+
+.card-back--stock {
+  width: 56px;
+  height: 78px;
+  border-radius: 11px;
+  border-width: 3px;
+  border-color: var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+/* Turn-highlight: border turns yellow */
+.card-back--stock.card-back--can-draw {
+  border-color: var(--yellow);
+}
+
+/* Hover lift (stock only) */
+.card-back--stock:hover:not(:disabled) {
+  transform: translateY(-6px);
+}
+
+/* ===================================================================
+   CardBack — decorative mark (stock only) — 19 px yellow rounded square
+   =================================================================== */
+
+.card-back__mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 19px;
+  height: 19px;
+  border-radius: 4px;
+  background: var(--yellow);
+}
