@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Action, Game, RoomState } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
 import { createHost, joinHost, peerIdForCode, type GuestHandle, type HostHandle } from './net/peer'
@@ -14,6 +14,17 @@ import { decideFarkleBot } from './games/farkle'
 import { decideYahtzeeCategory, decideYahtzeeHold } from './games/yahtzee'
 import { decideTttMove } from './games/ttt'
 import { decideHangmanLetter } from './games/hangman'
+
+// ---- Rummy (separate parallel session, per CHARTER.md resolution #7) ----
+import { createRummyGame, type RummySession, type RummyPublicState, type RummyPrivateState, type RummyAction } from './card-games/rummy/state'
+import { applyRummyAction, runRummyBotTurn } from './card-games/rummy/rules'
+import { rummyBotStrategy } from './card-games/rummy/bot'
+import { deriveSnapshot } from './card-engine/sync'
+import { currentPlayer } from './card-engine/turn-engine'
+import { RummyTable } from './screens/RummyTable'
+import { RummyResults } from './screens/RummyResults'
+
+type RummyView = { publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 
 const BASE_MS = 1100
 const ROUND_PAUSE_MS = 2400
@@ -31,10 +42,27 @@ export default function App() {
   const [localSeatId, setLocalSeatId] = useState<string | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
 
+  // ---- Rummy ----
+  const [rummyRole, setRummyRole] = useState<'host' | 'guest' | null>(null)
+  const [rummyCode, setRummyCode] = useState('')
+  const [rummyLocalPlayerId, setRummyLocalPlayerId] = useState<string | null>(null)
+  const [rummyOpponentId, setRummyOpponentId] = useState<string | null>(null)
+  const [rummyOpponentName, setRummyOpponentName] = useState('')
+  const [rummyView, setRummyView] = useState<RummyView | null>(null)
+  const [rummyConnection, setRummyConnection] = useState<'connected' | 'reconnecting'>('connected')
+  const [rummyWaiting, setRummyWaiting] = useState(false)
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
   const botBusyRef = useRef(false)
+  const rummySessionRef = useRef<RummySession | null>(null)
+  const rummyHostRef = useRef<HostHandle<RummyView> | null>(null)
+  const rummyGuestRef = useRef<GuestHandle<RummyAction> | null>(null)
+  const rummyBotBusyRef = useRef(false)
+  const rummyLocalPlayerIdRef = useRef<string | null>(null)
+  const rummyOpponentIdRef = useRef<string | null>(null)
+  const rummyOpponentNameRef = useRef('')
 
   useEffect(() => {
     roomRef.current = room
@@ -43,6 +71,8 @@ export default function App() {
   useEffect(() => () => {
     hostRef.current?.destroy()
     guestRef.current?.destroy()
+    rummyHostRef.current?.destroy()
+    rummyGuestRef.current?.destroy()
   }, [])
 
   useEffect(() => {
@@ -127,6 +157,23 @@ export default function App() {
     setRole(null)
     setLocalSeatId(null)
     setRulesOpen(false)
+    // Rummy
+    rummyHostRef.current?.destroy()
+    rummyHostRef.current = null
+    rummyGuestRef.current?.destroy()
+    rummyGuestRef.current = null
+    rummySessionRef.current = null
+    setRummyRole(null)
+    setRummyCode('')
+    setRummyLocalPlayerId(null)
+    rummyLocalPlayerIdRef.current = null
+    setRummyOpponentId(null)
+    rummyOpponentIdRef.current = null
+    setRummyOpponentName('')
+    rummyOpponentNameRef.current = ''
+    setRummyView(null)
+    setRummyConnection('connected')
+    setRummyWaiting(false)
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -149,6 +196,156 @@ export default function App() {
   function stale(key: string) {
     return !roomRef.current || actorKey(roomRef.current) !== key
   }
+
+  // ---- Rummy helpers ----
+
+  function rummyActorKey(session: RummySession): string {
+    const ps = session.session.publicState
+    return `${ps.roundNumber}:${ps.turn.turnNumber}`
+  }
+
+  function rummyStale(key: string) {
+    return !rummySessionRef.current || rummyActorKey(rummySessionRef.current) !== key
+  }
+
+  function rummyUpdateViews() {
+    const session = rummySessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, rummyLocalPlayerIdRef.current!)
+    setRummyView({ publicState: hostSnap.publicState, privateState: hostSnap.privateState, opponentName: rummyOpponentNameRef.current })
+    const opponentId = rummyOpponentIdRef.current
+    if (opponentId && opponentId !== 'bot') {
+      const guestSnap = deriveSnapshot(session.session, opponentId)
+      rummyHostRef.current?.broadcast({ publicState: guestSnap.publicState, privateState: guestSnap.privateState, opponentName: name })
+    }
+  }
+
+  function startRummyHost() {
+    const code = `RM-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setRummyRole('host')
+    setRummyCode(code)
+    setRummyLocalPlayerId(hostId)
+    rummyLocalPlayerIdRef.current = hostId
+    setRummyWaiting(true)
+    setError(null)
+    rummyHostRef.current = createHost<RummyView, RummyAction>(code, {
+      onJoin(guestId, guestName) {
+        if (rummySessionRef.current) return // already have an opponent
+        const seed = Math.floor(Math.random() * 2147483647)
+        rummySessionRef.current = createRummyGame([hostId, guestId], seed)
+        setRummyOpponentId(guestId)
+        rummyOpponentIdRef.current = guestId
+        setRummyOpponentName(guestName)
+        rummyOpponentNameRef.current = guestName
+        setRummyWaiting(false)
+        rummyUpdateViews()
+      },
+      onAction(guestId, action) {
+        const result = applyRummyAction(rummySessionRef.current!, guestId, action)
+        if (!result.outcome.ok) return
+        rummySessionRef.current = result.rummy
+        rummyUpdateViews()
+      },
+      onLeave(_guestId) {
+        // Guest left mid-hand: match cannot continue with only 1 player.
+        setError('Opponent left the room.')
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addRummyHouseBot() {
+    if (rummyRole !== 'host' || !rummyLocalPlayerId || !rummyWaiting) return
+    const botId = 'bot'
+    const seed = Math.floor(Math.random() * 2147483647)
+    rummySessionRef.current = createRummyGame([rummyLocalPlayerId, botId], seed)
+    setRummyOpponentId(botId)
+    rummyOpponentIdRef.current = botId
+    setRummyOpponentName('House')
+    rummyOpponentNameRef.current = 'House'
+    setRummyWaiting(false)
+    rummyUpdateViews()
+  }
+
+  async function runRummyBot(botId: string, key: string) {
+    while (!rummyStale(key)) {
+      await wait(BASE_MS)
+      if (rummyStale(key)) return
+      const session = rummySessionRef.current!
+      const ps = session.session.publicState
+      if (ps.roundOver || currentPlayer(ps.turn) !== botId) return
+      const result = runRummyBotTurn(session, botId, rummyBotStrategy)
+      if (!result.outcome.ok) return
+      rummySessionRef.current = result.rummy
+      const snap = deriveSnapshot(result.rummy.session, rummyLocalPlayerId!)
+      setRummyView({ publicState: snap.publicState, privateState: snap.privateState, opponentName: rummyOpponentNameRef.current })
+    }
+  }
+
+  async function runRummyBotsIfNeeded() {
+    if (rummyBotBusyRef.current) return
+    const session = rummySessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.roundOver || ps.matchWinnerId) return
+    if (rummyOpponentId !== 'bot') return
+    if (currentPlayer(ps.turn) !== 'bot') return
+    rummyBotBusyRef.current = true
+    const key = rummyActorKey(session)
+    try {
+      await runRummyBot('bot', key)
+    } finally {
+      rummyBotBusyRef.current = false
+      setTimeout(() => runRummyBotsIfNeeded(), 50)
+    }
+  }
+
+  function startRummyGuest(code: string) {
+    if (!code) return
+    setError(null)
+    const handle = joinHost<RummyView, RummyAction>(code, name.trim(), {
+      onState(view) {
+        setRummyView(view)
+        setRummyOpponentName(view.opponentName)
+      },
+      onError() {
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onConnected() {
+        setRummyConnection('connected')
+      },
+      onDisconnected() {
+        setRummyConnection('reconnecting')
+      },
+    })
+    rummyGuestRef.current = handle
+    setRummyRole('guest')
+    setRummyCode(code)
+    handle.peerId.then((id) => { setRummyLocalPlayerId(id); rummyLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function rummyDispatch(action: RummyAction) {
+    if (rummyRole === 'host' && rummyLocalPlayerId) {
+      const result = applyRummyAction(rummySessionRef.current!, rummyLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      rummySessionRef.current = result.rummy
+      rummyUpdateViews()
+    } else if (rummyRole === 'guest') {
+      rummyGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function rummyRematch() {
+    if (rummyRole !== 'host' || !rummySessionRef.current || !rummyLocalPlayerId) return
+    const playerIds = rummySessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    rummySessionRef.current = createRummyGame(playerIds, seed)
+    rummyUpdateViews()
+  }
+
+  // ---- End Rummy helpers ----
 
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
@@ -282,88 +479,200 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, room?.screen, room?.ttt.roundOver, room?.hangman.phase])
 
-  if (!room) {
+  // ---- Rummy effects (host-only) ----
+
+  // Bot turn trigger
+  useEffect(() => {
+    if (rummyRole !== 'host' || !rummyView) return
+    runRummyBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rummyRole, rummyView])
+
+  // Round transition (pause then start next round)
+  useEffect(() => {
+    if (rummyRole !== 'host' || !rummyView) return
+    if (rummyView.publicState.roundOver && !rummyView.publicState.matchWinnerId) {
+      const t = setTimeout(() => {
+        const result = applyRummyAction(rummySessionRef.current!, rummyLocalPlayerId!, { type: 'START_NEXT_ROUND' })
+        if (result.outcome.ok) {
+          rummySessionRef.current = result.rummy
+          rummyUpdateViews()
+        }
+      }, ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rummyRole, rummyView?.publicState.roundOver])
+
+  // ---- Derived opponentId for guest (avoid async ordering bug) ----
+  const resolvedRummyOpponentId = useMemo(() => {
+    if (!rummyView || !rummyLocalPlayerId) return null
+    return rummyView.publicState.turn.playerOrder.find((id) => id !== rummyLocalPlayerId) ?? null
+  }, [rummyView, rummyLocalPlayerId])
+
+  // ---- Render ----
+
+  // Landing: dice games OR rummy is not yet in a session
+  if (!room && !rummyRole) {
     return (
       <Landing
         name={name}
         onNameChange={setName}
         joinCode={joinCodeInput}
         onJoinCodeChange={setJoinCodeInput}
-        onJoin={() => startGuest(joinCodeInput.trim())}
+        onJoin={() => {
+          const code = joinCodeInput.trim()
+          if (code.startsWith('RM-')) startRummyGuest(code)
+          else startGuest(code)
+        }}
         onPickGame={(g) => startHost(g)}
+        onPickRummy={startRummyHost}
         error={error}
       />
     )
   }
 
-  const isHost = role === 'host'
+  // Dice-game session active
+  if (room) {
+    const isHost = role === 'host'
 
-  return (
-    <>
-      {room.screen === 'room' && (
-        <Room
-          room={room}
-          isHost={isHost}
-          onPickGame={(g) => dispatch({ type: 'pickGame', game: g })}
-          onAddBot={() => dispatch({ type: 'addBot' })}
-          onSetDifficulty={(d) => dispatch({ type: 'setBotDifficulty', difficulty: d })}
-          onStart={() => dispatch({ type: 'startGame' })}
-          onLeave={resetToEntry}
-          onOpenRules={() => setRulesOpen(true)}
-        />
-      )}
-      {room.screen === 'farkle' && (
-        <FarkleTable
-          room={room}
-          localSeatId={localSeatId}
-          onRoll={() => dispatch({ type: 'farkleRoll' })}
-          onToggle={(dieId) => dispatch({ type: 'farkleToggle', dieId })}
-          onBank={() => dispatch({ type: 'farkleBank' })}
-          onEndTurn={() => dispatch({ type: 'farkleEndTurn' })}
-          onOpenRules={() => setRulesOpen(true)}
-          onLeave={resetToEntry}
-        />
-      )}
-      {room.screen === 'yahtzee' && (
-        <YahtzeeTable
-          room={room}
-          localSeatId={localSeatId}
-          onRoll={() => dispatch({ type: 'yahtzeeRoll' })}
-          onToggleHold={(dieId) => dispatch({ type: 'yahtzeeToggleHold', dieId })}
-          onScore={(category) => dispatch({ type: 'yahtzeeScore', category })}
-          onOpenRules={() => setRulesOpen(true)}
-          onLeave={resetToEntry}
-        />
-      )}
-      {room.screen === 'ttt' && (
-        <TttTable
-          room={room}
-          localSeatId={localSeatId}
-          onPlay={(cell) => dispatch({ type: 'tttPlay', cell })}
-          onOpenRules={() => setRulesOpen(true)}
-          onLeave={resetToEntry}
-        />
-      )}
-      {room.screen === 'hangman' && (
-        <HangmanTable
-          room={room}
-          localSeatId={localSeatId}
-          onSetWord={(word) => dispatch({ type: 'hangmanSetWord', word })}
-          onGuess={(letter) => dispatch({ type: 'hangmanGuess', letter })}
-          onOpenRules={() => setRulesOpen(true)}
-          onLeave={resetToEntry}
-        />
-      )}
-      {room.screen === 'results' && (
-        <Results
-          room={room}
-          localSeatId={localSeatId}
-          isHost={isHost}
-          onRematch={() => dispatch({ type: 'rematch' })}
-          onBackToShelf={resetToEntry}
-        />
-      )}
-      {rulesOpen && <RulesOverlay game={room.game} onClose={() => setRulesOpen(false)} />}
-    </>
-  )
+    return (
+      <>
+        {room.screen === 'room' && (
+          <Room
+            room={room}
+            isHost={isHost}
+            onPickGame={(g) => dispatch({ type: 'pickGame', game: g })}
+            onAddBot={() => dispatch({ type: 'addBot' })}
+            onSetDifficulty={(d) => dispatch({ type: 'setBotDifficulty', difficulty: d })}
+            onStart={() => dispatch({ type: 'startGame' })}
+            onLeave={resetToEntry}
+            onOpenRules={() => setRulesOpen(true)}
+          />
+        )}
+        {room.screen === 'farkle' && (
+          <FarkleTable
+            room={room}
+            localSeatId={localSeatId}
+            onRoll={() => dispatch({ type: 'farkleRoll' })}
+            onToggle={(dieId) => dispatch({ type: 'farkleToggle', dieId })}
+            onBank={() => dispatch({ type: 'farkleBank' })}
+            onEndTurn={() => dispatch({ type: 'farkleEndTurn' })}
+            onOpenRules={() => setRulesOpen(true)}
+            onLeave={resetToEntry}
+          />
+        )}
+        {room.screen === 'yahtzee' && (
+          <YahtzeeTable
+            room={room}
+            localSeatId={localSeatId}
+            onRoll={() => dispatch({ type: 'yahtzeeRoll' })}
+            onToggleHold={(dieId) => dispatch({ type: 'yahtzeeToggleHold', dieId })}
+            onScore={(category) => dispatch({ type: 'yahtzeeScore', category })}
+            onOpenRules={() => setRulesOpen(true)}
+            onLeave={resetToEntry}
+          />
+        )}
+        {room.screen === 'ttt' && (
+          <TttTable
+            room={room}
+            localSeatId={localSeatId}
+            onPlay={(cell) => dispatch({ type: 'tttPlay', cell })}
+            onOpenRules={() => setRulesOpen(true)}
+            onLeave={resetToEntry}
+          />
+        )}
+        {room.screen === 'hangman' && (
+          <HangmanTable
+            room={room}
+            localSeatId={localSeatId}
+            onSetWord={(word) => dispatch({ type: 'hangmanSetWord', word })}
+            onGuess={(letter) => dispatch({ type: 'hangmanGuess', letter })}
+            onOpenRules={() => setRulesOpen(true)}
+            onLeave={resetToEntry}
+          />
+        )}
+        {room.screen === 'results' && (
+          <Results
+            room={room}
+            localSeatId={localSeatId}
+            isHost={isHost}
+            onRematch={() => dispatch({ type: 'rematch' })}
+            onBackToShelf={resetToEntry}
+          />
+        )}
+        {rulesOpen && <RulesOverlay game={room.game} onClose={() => setRulesOpen(false)} />}
+      </>
+    )
+  }
+
+  // ---- Rummy session active ----
+  // Rummy waiting screen (host waiting for opponent)
+  if (rummyRole === 'host' && rummyWaiting) {
+    return (
+      <div style={{ maxWidth: 600, margin: '0 auto', padding: 'clamp(28px,6vw,72px) clamp(18px,5vw,48px) 72px', textAlign: 'center' }}>
+        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Rummy · {rummyCode}</span>
+        <h1 style={{ fontSize: 'clamp(34px,5vw,48px)', fontWeight: 700, margin: '20px 0 8px' }}>Rummy Room</h1>
+        <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 20 }}>
+          Share the code or add a house player to get started.
+        </p>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-coral btn-lg" onClick={addRummyHouseBot}>
+            Add a house player
+          </button>
+          <button type="button" className="btn btn-lg" onClick={resetToEntry}>
+            Leave
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Rummy match results
+  if (rummyView?.publicState.matchWinnerId) {
+    const opponentName = resolvedRummyOpponentId === 'bot' ? 'House' : rummyOpponentName
+    const opponentId = resolvedRummyOpponentId ?? ''
+    return (
+      <RummyResults
+        localPlayerId={rummyLocalPlayerId ?? ''}
+        localName={name}
+        opponentName={opponentId === 'bot' ? 'House' : opponentName}
+        publicState={rummyView.publicState}
+        isHost={rummyRole === 'host'}
+        onRematch={rummyRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Rummy table (active game)
+  if (rummyView && rummyLocalPlayerId) {
+    const opponentName = resolvedRummyOpponentId === 'bot' ? 'House' : rummyOpponentName
+    const opponentHandCount = resolvedRummyOpponentId
+      ? (rummyView.publicState.handCounts[resolvedRummyOpponentId] ?? 0)
+      : 0
+
+    return (
+      <RummyTable
+        code={rummyCode}
+        localPlayerId={rummyLocalPlayerId}
+        localName={name}
+        opponentName={opponentName}
+        opponentColor="var(--violet)"
+        opponentHandCount={opponentHandCount}
+        connection={rummyConnection}
+        publicState={rummyView.publicState}
+        hand={rummyView.privateState.hand.cards}
+        onDrawStock={() => rummyDispatch({ type: 'DRAW_FROM_STOCK' })}
+        onDrawDiscard={(index) => rummyDispatch({ type: 'DRAW_FROM_DISCARD', index })}
+        onLayDownMeld={(cardIds) => rummyDispatch({ type: 'LAY_DOWN_MELD', cardIds })}
+        onDiscard={(cardId) => rummyDispatch({ type: 'DISCARD_CARD', cardId })}
+        onOpenRules={() => {}}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Fallback (shouldn't normally be reached)
+  return null
 }
