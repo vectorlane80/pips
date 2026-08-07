@@ -5,9 +5,12 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M5 — documentation (`docs/rummy.md`).
+(none — charter complete)
 
 ## Done (this charter)
+- [cycle 8] M5 — `docs/rummy.md`: final documentation of rules, trust-
+  boundary architecture, bot strategy, transport generalization, UI,
+  and the closure-staleness pitfall found in App.tsx — commit c616192
 - [cycle 7] M4b — `handCounts` on `RummyPublicState` (Part A, commit
   841696e); Rummy shelf tile + full host/guest/bot session in App.tsx
   using M2's generalized transport (Part B, commit 495c283). Verified

@@ -595,3 +595,78 @@ be kept pending for the duration of this run per explicit user request
 - **Continue?** Yes — Rummy is now genuinely playable end to end in the
   real app, host-vs-human and host-vs-bot, matching the design handoff.
   Only M5 (documentation) remains.
+
+## Rummy cycle 8 — 2026-08-07
+- **Shipped:** M5 — `docs/rummy.md` (commit `c616192`). Written directly
+  rather than delegated, same as the prior charter's M6 — a synthesis
+  task, not an implementation one. Covers the rules as implemented, the
+  trust-boundary architecture (the stock-closure pattern, `handCounts`),
+  the bot strategy, the transport generalization and `RM-` code-prefix
+  join routing, the UI, the closure-staleness pitfall found in `App.tsx`
+  (documented explicitly as a pattern for future sessions to recognize,
+  not just a fixed bug), and a file map.
+- **Continue?** No — this is the last milestone. Wrapping up.
+
+## Wrap-up — 2026-08-07 (Charter 2: Real Rummy)
+
+Charter complete. All 6 milestones (M0-M5) shipped across 9 cycles
+(counting the M0/M4 internal splits), fully unattended per the user's
+instruction. Final state: 252 tests, `npx tsc -b --noEmit` and
+`npm run build` clean, Rummy playable end to end in the running app —
+host-vs-human over a real two-tab PeerJS connection and host-vs-house-bot,
+verified live, not just by typecheck.
+
+**Review/verification discipline caught a real defect in nearly every
+milestone that had actual logic to get wrong** — the pattern from the
+prior charter held:
+- M0a: a run crossing the 9→10 rank boundary could misclassify under
+  default lexicographic sort — a test gap, not an implementation bug.
+- M0b (reviewed as hard as the prior charter's `sync.ts`): a permanent-
+  deadlock bug, two host-crashing malformed inputs, a non-participant
+  `START_NEXT_ROUND` acceptance, two test-quality gaps.
+- M1: a livelock, a crash-on-empty-hand, and a greedy meld choice that
+  threw away a guaranteed round win.
+- M2, M3: deliberately scoped down (no review dispatched) since neither
+  had game logic or a trust boundary to attack — verified by typecheck/
+  build/regression + browser checks instead, and correctly so; no
+  defects would have been findable by adversarial review that weren't
+  already caught by that lighter verification.
+- M4a: same deliberate scoping-down as M2/M3, for the same reason.
+- M4b: the milestone that broke the pattern in an instructive way —
+  no review agent was dispatched (judged, in hindsight, incorrectly,
+  as "just wiring"), and reading the diff myself caught a severity-
+  critical stale-closure bug that would have silently broken the
+  entire host-vs-human flow, plus a dead-code join-routing gap. A
+  THIRD bug (guest never learning the host's name) was only caught by
+  actually driving two live browser tabs — proving that for stateful
+  networked UI code, neither code review nor typecheck/build alone is
+  sufficient; both passes earned their keep independently here.
+
+**Delegation split honored throughout, per the user's original
+instruction carried over from the prior charter:** DeepSeek CLI
+(`deepseek-v4-pro` for substantial slices, `deepseek-v4-flash` for
+narrow fixes) wrote 100% of the product code and tests; Opus
+sub-agents ran every dispatched adversarial review; this session
+(Sonnet) made every design/architecture decision, wrote every spec,
+and independently re-verified every claim — including, this charter,
+sometimes finding what a dispatched reviewer would have found, by
+reading the code directly instead of dispatching a review at all,
+when the milestone's risk profile called for that judgment instead.
+
+Three DeepSeek dispatches hit the 25-tool-round session cap mid-task
+across this charter (M0b, M1's fix round, M4a) — in each case caught
+by re-verifying the actual tree state rather than trusting a
+completion notification, and recovered either by writing the missing
+small pieces (tests) by hand or by confirming the completed portion
+was already correct and committable. No work was lost.
+
+**What's next** (a future charter, not started here): the design
+handoff's own deferred items — laying off onto existing melds, host
+migration/reconnection, more Rummy variants — plus the original
+card-engine charter's stated next targets (Golf, Crazy Eights, Hearts,
+Spades, Phase 10), all of which the card-engine foundation was built
+to support without re-deriving decks/hands/turn-order/sync from
+scratch again.
+
+**Continue?** No — charter's definition of done is met (see
+`CHARTER.md`). Wrapping up. Scheduled safety-net wakeup canceled.
