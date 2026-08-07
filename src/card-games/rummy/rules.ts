@@ -36,6 +36,7 @@ function finishRoundByGoingOut(
       matchWinnerId,
       roundOver: true,
       roundWinnerId: playerId,
+      handCounts: { ...publicState.handCounts, [playerId]: 0 },
     },
     privateStates,
   }
@@ -72,6 +73,7 @@ function makeValidator(
           roundNumber: publicState.roundNumber + 1,
           roundOver: false,
           roundWinnerId: null,
+          handCounts: { [nextOrder[0]]: cardCount(p0Hand), [nextOrder[1]]: cardCount(p1Hand) },
         },
         privateStates: { [nextOrder[0]]: { hand: p0Hand }, [nextOrder[1]]: { hand: p1Hand } },
       }
@@ -91,7 +93,12 @@ function makeValidator(
         onStockChange(newStock)
         return {
           ok: true,
-          publicState: { ...publicState, turn: setPhase(publicState.turn, 'discard'), stockCount: cardCount(newStock) },
+          publicState: {
+            ...publicState,
+            turn: setPhase(publicState.turn, 'discard'),
+            stockCount: cardCount(newStock),
+            handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
+          },
           privateStates: { ...privateStates, [playerId]: { hand: newHand } },
         }
       }
@@ -112,6 +119,7 @@ function makeValidator(
             turn: setPhase(publicState.turn, 'discard'),
             discardPile: newDiscard,
             stockCount: cardCount(newStock),
+            handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
           },
           privateStates: { ...privateStates, [playerId]: { hand: newHand } },
         }
@@ -152,6 +160,7 @@ function makeValidator(
           turn: setPhase(publicState.turn, 'discard'),
           discardPile: newDiscard,
           obligatedCardId: obligated,
+          handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
         },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
@@ -176,7 +185,7 @@ function makeValidator(
       }
       return {
         ok: true,
-        publicState: { ...publicState, melds: { ...publicState.melds, [playerId]: newMeldsForPlayer }, obligatedCardId: newObligated },
+        publicState: { ...publicState, melds: { ...publicState.melds, [playerId]: newMeldsForPlayer }, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
     }
@@ -195,7 +204,7 @@ function makeValidator(
       }
       return {
         ok: true,
-        publicState: { ...publicState, turn: advanceTurn(publicState.turn, 'draw'), discardPile: newDiscard },
+        publicState: { ...publicState, turn: advanceTurn(publicState.turn, 'draw'), discardPile: newDiscard, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
     }

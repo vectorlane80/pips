@@ -74,6 +74,7 @@ function buildSession(config: {
   matchWinnerId?: string | null
   obligatedCardId?: string | null
   melds?: Record<string, Zone[]>
+  handCounts?: Record<string, number>
 }): RummySession {
   const deck = createStandardDeck()
   const cardMap = new Map(deck.map((c) => [c.id, c]))
@@ -106,6 +107,7 @@ function buildSession(config: {
     roundOver: config.roundOver ?? false,
     roundWinnerId: config.roundWinnerId ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
+    handCounts: config.handCounts ?? { p1: config.p1HandCardIds.length, p2: config.p2HandCardIds.length },
   }
 
   const privateStates: Record<string, RummyPrivateState> = {
@@ -130,6 +132,7 @@ describe('Rummy integration harness', () => {
     expect(cardCount(rummy.session.publicState.discardPile)).toBe(1)
     expect(currentPlayer(rummy.session.publicState.turn)).toBe('p1')
     expect(rummy.session.publicState.turn.phase).toBe('draw')
+    expect(rummy.session.publicState.handCounts).toEqual({ p1: 10, p2: 10 })
     expect(totalCards(rummy)).toBe(52)
   })
 
@@ -1066,5 +1069,150 @@ describe('Rummy integration harness', () => {
     expect(result.outcome.ok).toBe(false)
     expect(result.outcome.reason).toContain('not a player')
     expect(result.rummy.session.publicState.roundNumber).toBe(afterRound.session.publicState.roundNumber)
+  })
+
+  // ── handCounts tests ────────────────────────────────────────
+
+  it('handCounts: DRAW_FROM_STOCK increments acting player by 1, opponent unchanged', () => {
+    const rummy = createRummyGame(['p1', 'p2'], 42)
+    expect(rummy.session.publicState.handCounts).toEqual({ p1: 10, p2: 10 })
+
+    const { rummy: r1 } = applyRummyAction(rummy, 'p1', { type: 'DRAW_FROM_STOCK' })
+    expect(r1.session.publicState.handCounts).toEqual({ p1: 11, p2: 10 })
+  })
+
+  it('handCounts: DRAW_FROM_DISCARD single card increments acting player by 1', () => {
+    const rummy = createRummyGame(['p1', 'p2'], 42)
+    const { rummy: r1 } = applyRummyAction(rummy, 'p1', { type: 'DRAW_FROM_STOCK' })
+    const p1h = r1.session.privateStates['p1'].hand
+    const { rummy: r2 } = applyRummyAction(r1, 'p1', { type: 'DISCARD_CARD', cardId: p1h.cards[0].id })
+
+    // p2 draws top of discard (single card, index = last)
+    const pileLength = r2.session.publicState.discardPile.cards.length
+    const { rummy: r3 } = applyRummyAction(r2, 'p2', { type: 'DRAW_FROM_DISCARD', index: pileLength - 1 })
+    expect(r3.session.publicState.handCounts).toEqual({ p1: 10, p2: 11 })
+  })
+
+  it('handCounts: DRAW_FROM_DISCARD reach-in increments acting player by taken count', () => {
+    // p2 hand: A♣,2♣,4♣,5♣,6♣,7♣,8♣,9♣,10♣,J♣ (clubs run, missing 3♣)
+    // Discard: [K♠, 3♣, Q♣, K♣] — reach for index 1 takes 3 cards
+    const p2Cards = ['c0', 'c1', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10']
+    const discardCards = ['c51', 'c2', 'c11', 'c12']
+    const p1Cards = ['c20', 'c21', 'c22', 'c23', 'c24', 'c25', 'c26', 'c27', 'c28', 'c29']
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+    })
+
+    expect(rummy.session.publicState.handCounts).toEqual({ p1: 10, p2: 10 })
+
+    const { rummy: after } = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 1 })
+    // Takes indices 1,2,3 — 3 cards — hand goes from 10→13
+    expect(after.session.publicState.handCounts).toEqual({ p1: 10, p2: 13 })
+  })
+
+  it('handCounts: LAY_DOWN_MELD (non-going-out) decrements acting player by meld size', () => {
+    // p1 has 5 cards, meld 3 of them
+    const p2Cards = ['c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10', 'c11', 'c12']
+    const remaining = createStandardDeck().map(c => c.id).filter(id =>
+      id !== 'c0' && id !== 'c1' && id !== 'c2' && !p2Cards.includes(id)
+    )
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c0', 'c1', 'c2', 'c50', 'c49'],
+      p2HandCardIds: p2Cards,
+      discardCardIds: [remaining[0]],
+      stockCardIds: remaining.slice(1),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      handCounts: { p1: 5, p2: 10 },
+    })
+
+    const { rummy: after } = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(after.session.publicState.handCounts).toEqual({ p1: 2, p2: 10 })
+  })
+
+  it('handCounts: DISCARD_CARD (non-going-out) decrements acting player by 1', () => {
+    const rummy = createRummyGame(['p1', 'p2'], 42)
+    const { rummy: r1 } = applyRummyAction(rummy, 'p1', { type: 'DRAW_FROM_STOCK' })
+    // handCounts now p1:11, p2:10
+    expect(r1.session.publicState.handCounts).toEqual({ p1: 11, p2: 10 })
+
+    const p1h = r1.session.privateStates['p1'].hand
+    const { rummy: r2 } = applyRummyAction(r1, 'p1', { type: 'DISCARD_CARD', cardId: p1h.cards[0].id })
+    expect(r2.session.publicState.handCounts).toEqual({ p1: 10, p2: 10 })
+  })
+
+  it('handCounts: going out via LAY_DOWN_MELD sets winner handCount to 0', () => {
+    // p1 has 3 cards forming a meld, melding all → hand empty → goes out
+    const p2Cards = ['c4', 'c5', 'c6', 'c7', 'c8']
+    const remaining = createStandardDeck().map(c => c.id).filter(id =>
+      id !== 'c0' && id !== 'c1' && id !== 'c2' && id !== 'c3' && !p2Cards.includes(id)
+    )
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c0', 'c1', 'c2'],
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['c3'],
+      stockCardIds: remaining,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+    })
+
+    const { rummy: after } = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(after.session.publicState.handCounts['p1']).toBe(0)
+    // opponent hand unchanged
+    expect(after.session.publicState.handCounts['p2']).toBe(p2Cards.length)
+  })
+
+  it('handCounts: going out via DISCARD_CARD sets winner handCount to 0', () => {
+    // p1 has 1 card, discarding it → hand empty → goes out
+    const p2Cards = ['c1', 'c2', 'c3']
+    const remaining = createStandardDeck().map(c => c.id).filter(id =>
+      id !== 'c0' && !p2Cards.includes(id)
+    )
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c0'],
+      p2HandCardIds: p2Cards,
+      discardCardIds: [remaining[0]],
+      stockCardIds: remaining.slice(1),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+    })
+
+    const { rummy: after } = applyRummyAction(rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c0' })
+    expect(after.session.publicState.handCounts['p1']).toBe(0)
+    expect(after.session.publicState.handCounts['p2']).toBe(p2Cards.length)
+  })
+
+  it('handCounts: START_NEXT_ROUND resets both players to 10', () => {
+    const p1Cards = ['c0', 'c1', 'c2']
+    const p2Cards = ['c4', 'c5', 'c6', 'c7', 'c8']
+    const remaining = createStandardDeck().map(c => c.id).filter(id =>
+      id !== 'c3' && !p1Cards.includes(id) && !p2Cards.includes(id)
+    )
+
+    const afterRound = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['c3'],
+      stockCardIds: remaining,
+      phase: 'draw',
+      currentPlayerIndex: 0,
+      scores: { p1: 35, p2: 0 },
+      roundOver: true,
+      roundWinnerId: 'p1',
+    })
+
+    const { rummy: after } = applyRummyAction(afterRound, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(after.session.publicState.handCounts).toEqual({ p2: 10, p1: 10 })
   })
 })

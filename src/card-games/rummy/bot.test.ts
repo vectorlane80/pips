@@ -44,6 +44,7 @@ function buildSession(config: {
   matchWinnerId?: string | null
   obligatedCardId?: string | null
   melds?: Record<string, Zone[]>
+  handCounts?: Record<string, number>
 }): RummySession {
   const deck = createStandardDeck()
   const cardMap = new Map(deck.map((c) => [c.id, c]))
@@ -75,6 +76,7 @@ function buildSession(config: {
     roundOver: config.roundOver ?? false,
     roundWinnerId: config.roundWinnerId ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
+    handCounts: config.handCounts ?? { p1: config.p1HandCardIds.length, p2: config.p2HandCardIds.length },
   }
 
   const privateStates: Record<string, RummyPrivateState> = {

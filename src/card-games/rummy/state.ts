@@ -22,6 +22,8 @@ export interface RummyPublicState {
   roundOver: boolean
   roundWinnerId: string | null             // player who went out this round, or null if the round ended blocked
   matchWinnerId: string | null
+  handCounts: Record<string, number>      // number of cards in each player's hand — let clients show
+                                            // opponent hand size without leaking card identity
 }
 
 export interface RummyPrivateState {
@@ -82,6 +84,7 @@ export function createRummyGame(playerIds: [string, string], seed: number): Rumm
     roundOver: false,
     roundWinnerId: null,
     matchWinnerId: null,
+    handCounts: { [playerIds[0]]: 10, [playerIds[1]]: 10 },
   }
 
   const privateStates: Record<string, RummyPrivateState> = {
