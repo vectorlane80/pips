@@ -1,0 +1,374 @@
+/* ===================================================================
+   RummyTable — three-band table layout + discard reach-in
+   =================================================================== */
+
+/* ---- Outer container ---- */
+
+.rummy-table {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.rummy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.rummy-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rummy-brand {
+  font-weight: 700;
+  font-size: 22px;
+}
+
+.rummy-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--green-text);
+}
+
+.rummy-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.rummy-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rummy-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.rummy-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Main table card ---- */
+
+.rummy-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Their side (top band) ---- */
+
+.rummy-their-side {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: clamp(12px, 2vw, 20px);
+}
+
+.rummy-their-side-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rummy-their-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.rummy-their-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.rummy-their-fan {
+  display: flex;
+  margin-top: 6px;
+}
+
+/* ---- Their melds ---- */
+
+.rummy-their-melds {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---- Centre band ---- */
+
+.rummy-centre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(16px, 2.4vw, 28px);
+  border-top: 3px solid var(--grey-fill);
+  border-bottom: 3px solid var(--grey-fill);
+  padding: clamp(14px, 2vw, 22px) 0;
+  position: relative;
+}
+
+.rummy-centre-left {
+  flex: 1 1 380px;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 2vw, 20px);
+}
+
+.rummy-centre-right {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* ---- Stock ---- */
+
+.rummy-stock-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.rummy-stock-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+/* ---- Discard ---- */
+
+.rummy-discard-group {
+  min-width: 0;
+}
+
+.rummy-discard-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  /* Reserve space for the hover lift */
+  padding-top: 14px;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rummy-discard-card-wrapper {
+  position: relative;
+  flex: none;
+}
+
+.rummy-discard-empty {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  padding: 8px 0;
+}
+
+/* ---- Reach-in hover ring (applied to the PlayingCard button inside the wrapper) ---- */
+
+.playing-card--reach-hover {
+  transform: translateY(-12px);
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+/* ---- Round-over banner ---- */
+
+.rummy-round-banner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ---- Turn chip ---- */
+
+.rummy-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+
+/* ---- Status line ---- */
+
+.rummy-status {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.2;
+}
+
+/* ---- Meld cluster ---- */
+
+.rummy-meld-cluster {
+  display: flex;
+  flex: none;
+}
+
+/* ---- Empty meld state ---- */
+
+.rummy-melds-empty {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+}
+
+/* ---- Your side ---- */
+
+.rummy-your-side {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.6vw, 16px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.rummy-your-melds {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Hand section ---- */
+
+.rummy-hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rummy-hand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rummy-hand-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rummy-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.rummy-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+/* ---- Sort toggle ---- */
+
+.rummy-sort-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.rummy-sort-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 2px solid var(--grey-border);
+  background: var(--surface);
+  color: var(--muted-text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.rummy-sort-btn--active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+/* ---- Hand fan ---- */
+
+.rummy-hand-fan {
+  display: flex;
+  min-height: 110px; /* enough room for selected lift (18px) + card height (104px) */
+  padding-top: 20px;
+  padding-bottom: 6px;
+}
+
+/* ---- Actions row ---- */
+
+.rummy-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.rummy-action-btn {
+  height: 56px;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+.rummy-action-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+/* ---- Footnote ---- */
+
+.rummy-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
