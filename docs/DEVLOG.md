@@ -227,3 +227,55 @@ sub-agent (user's explicit routing override for this run).
   actually built, not from the original specs, since several real
   architectural decisions (the stock-closure pattern chief among them) only
   crystallized during implementation and review.
+
+## Wrap-up — 2026-08-07
+
+Charter complete. All 6 milestones (M0-M6) shipped in 6 cycles, fully
+unattended per the user's instruction. Final state: 165 tests across 8
+files, `npx tsc -b --noEmit` and `npm run build` clean, 12 commits on
+`main` (all local — no push, per the project's standing policy of asking
+before pushing to GitHub).
+
+**Every single milestone's adversarial review found and fixed a real
+defect** — this is worth stating plainly since it's the strongest evidence
+the review discipline was load-bearing, not theater:
+- M0: shuffle/RNG tests too weak to catch a biased Fisher-Yates or an
+  algorithm swap.
+- M1: `removeCardsById` duplicated a card when the same id was requested
+  twice — a genuine conservation break.
+- M2: `skipNext`'s test only checked 3 of 5 result fields, missing a
+  silent `direction` corruption.
+- M3 (the trust-boundary module, reviewed hardest): an unguarded
+  prototype-chain lookup, a buggy-validator guard that missed `null`, a
+  validator that could silently drop a player, and `isJsonSerializable`
+  holes (circular-reference crash, array-subclass bypass).
+- M4: nothing proved a bot submits under its own seat id, not another
+  player's.
+- M5: a latent ordering hazard where a rejected action could still leak a
+  card out of the stock pile via a closure side-channel.
+
+Two implementer sessions died mid-task from infrastructure issues (a
+25-tool-round cap, a network `ECONNRESET`) rather than reasoning failures
+— both caught immediately by re-verifying the tree myself rather than
+trusting a completion notification, and recovered with narrow,
+context-aware re-dispatches rather than restarting whole specs. One real
+lead mistake (a wrong golden RNG value sourced from a review report,
+cycle 1) was caught by the implementer's own verification discipline
+before it could propagate — a reminder that "independently verify"
+applies to every link in the chain, including the reviewer's own output,
+not just the implementer's.
+
+**Delegation split honored throughout, per explicit user instruction:**
+DeepSeek CLI (`deepseek-v4-pro` for substantial slices, `deepseek-v4-flash`
+for narrow fixes) wrote 100% of the product code and tests; Opus
+sub-agents ran every adversarial review; this session (Sonnet) made every
+design decision, wrote every spec, and independently re-verified every
+single claim before committing — never advanced on a report alone.
+
+**What's next** (separate, future charter, not started here): full Rummy
+rules (melds/sets/runs/scoring/multiple rounds) and wiring a card-game
+session into the live app (screen routing, PeerJS transport). See
+`docs/card-engine.md` §5 for the precise boundary between what exists and
+what doesn't.
+
+**Continue?** No — charter's definition of done is met. Wrapping up.
