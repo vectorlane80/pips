@@ -103,3 +103,53 @@ sub-agent (user's explicit routing override for this run).
 - **Continue?** Yes — M0, M1, M2 all solid and committed (99 tests). M3
   (sync), M4 (bot seam), and M5 (Rummy harness) are all already spec'd and
   locked in scratch. Dispatching M3 next.
+
+## Cycle 4 — 2026-08-07
+- **Shipped:** M3 — `src/card-engine/sync.ts` (host-authoritative action
+  pipeline, public/private state split, revision numbers, reconnect
+  snapshots) + tests (commit `ce47e05`). This is the trust-boundary module —
+  the one that decides whether a player's hand can leak to another peer.
+- **Verification:** full ladder myself; read the implementation against spec
+  (exact match on first pass).
+- **Review:** Opus went at this one hardest, appropriately — 3-player leak
+  hunt via recursive `Reflect.ownKeys` walk + object-identity cross-check
+  (no leak found), 12 mutation tests (all caught). Found no actual
+  cross-player leak, but found 4 real trust-boundary defects: (1)
+  `deriveSnapshot` did a raw bracket lookup on a caller-supplied `playerId`,
+  so `deriveSnapshot(session, 'constructor')` returned a live `Function` via
+  the prototype chain instead of `undefined`; (2) the buggy-validator guard
+  checked `=== undefined` but not `null`, so a validator lying about its
+  return type could commit `privateStates: null` and bump the revision before
+  crashing later; (3) nothing verified a validator's returned `privateStates`
+  map still had every player the input session had — a validator bug could
+  silently erase a player; (4) `isJsonSerializable` (the utility meant to
+  catch exactly "don't send a class instance/function over PeerJS") stack-
+  overflowed on a circular reference instead of returning `false`, and
+  accepted `class Foo extends Array {}` as a plain array since `Array.isArray`
+  was checked before the prototype check.
+- I reproduced all four independently before locking the fix spec. Fixed:
+  own-property-only lookups (`Object.hasOwn`) in both the guard and
+  `deriveSnapshot`, a "no player dropped" completeness check in `applyAction`,
+  and cycle detection + array-subclass rejection in `isJsonSerializable`.
+- **Incident:** the fix dispatch died mid-task with `ECONNRESET` — DeepSeek's
+  connection dropped right after it had correctly applied all 4 `sync.ts`
+  fixes but before adding any of the 8 required regression tests or running
+  verification. Caught immediately by re-running the ladder myself rather than
+  waiting for a report that was never going to arrive complete: `tsc` failed
+  with a real type error the fix had introduced (TS couldn't narrow
+  `outcome.publicState`/`privateStates` through the intermediate
+  `hasValidState` boolean). Fixed that by hand (non-null assertions, since
+  the guard already proves non-null at that point), independently re-verified
+  all 4 bug fixes with fresh repro commands, then re-dispatched a narrower
+  "tests only, implementation is correct and read-only" follow-up rather than
+  re-running the whole original spec — which completed cleanly.
+- **Lesson carried forward:** a background dispatch can die for reasons that
+  have nothing to do with the model's judgment (network resets, not just
+  tool-round caps) — the response here was the same either way: never treat
+  "the task notification fired" as "the work is done and correct," always
+  inspect the actual tree state first, and prefer a narrow, context-aware
+  re-dispatch over restarting a whole spec from scratch when partial progress
+  is genuinely good and just incomplete.
+- **Continue?** Yes — M0-M3 all solid and committed (148 tests). M4 (bot
+  seam) and M5 (Rummy harness) specs are locked in scratch. Dispatching M4
+  next.
