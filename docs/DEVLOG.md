@@ -312,3 +312,66 @@ be kept pending for the duration of this run per explicit user request
   wired into actions, reach-in obligation, going-out, stock recycling,
   multi-round scoring) is the next, larger slice — spec already fully
   designed, dispatching next.
+
+## Rummy cycle 2 — 2026-08-07
+- **Shipped:** M0b — `state.ts`/`rules.ts` extended into real Rummy: meld
+  validation wired into `LAY_DOWN_MELD`, discard-pile reach-in with an
+  obligation mechanic, going-out detection (meld or discard to empty
+  hand), stock recycling via `recyclePile`, `START_NEXT_ROUND` for
+  multi-round matches, deadwood-based scoring (round winner awarded the
+  loser's deadwood, first to 100 wins the match). Deal size changed from
+  the M5 harness's 7-card/empty-discard placeholder to the real design's
+  10 cards + 1 flipped starting discard card (commit `b8fe7d0`).
+- Also fixed a wording inconsistency in `CHARTER.md`'s scoring-direction
+  ambiguity resolution, spotted while designing this milestone — the
+  prose read as if the losing player's score went up, which would
+  contradict "first to target wins." Corrected to be unambiguous: the
+  winner is awarded the loser's deadwood.
+- **Verification:** full ladder myself; read the diffs to `state.ts`/
+  `rules.ts`/`melds.ts` line by line against spec — matched exactly
+  (deal logic factored into a shared `dealRound()` helper as specced,
+  the existing stock-commit-only-on-`outcome.ok` pattern preserved and
+  extended rather than touched).
+- **Review:** Opus reviewed this milestone the hardest since M3
+  (`sync.ts`) — appropriately, since a validator this size sitting at
+  the PeerJS trust boundary is exactly the shape of module that hid
+  M3's bugs. Found and I independently reproduced 4 real defects before
+  locking the fix spec:
+  - A **permanent-deadlock bug**: reaching into the discard pile for a
+    card that turned out to be unmeldable with the resulting hand set
+    an inescapable obligation — no meld could clear it, `DISCARD_CARD`
+    refused forever, and `START_NEXT_ROUND` was unreachable since the
+    round could never end. Reachable in ordinary honest play (a
+    misjudged reach), not just adversarially.
+  - Two **host-crashing malformed inputs**: `DRAW_FROM_DISCARD`'s
+    `index` guard let `NaN`/non-integers through (comparisons against
+    `NaN` are always false) straight into an unguarded array index;
+    `LAY_DOWN_MELD`'s `cardIds` handling threw on anything that wasn't
+    an array. Either one is a single crafted PeerJS message away from
+    killing the host for both players.
+  - `START_NEXT_ROUND` accepted **any playerId**, not just the two
+    match participants — any connected peer could force a redeal.
+  - Two test-quality gaps: a going-out conservation check asserting
+    against the *pre-action* session instead of the result, using a
+    `Set` that can't detect a card counted in two zones at once; and
+    deadwood assertions that recomputed their expected value by calling
+    the same function under test on the same data, so a wrong
+    `deadwoodValue` couldn't have been caught.
+- Fixed: `melds.ts` gained a `hasMeldIncluding()` combinatorial-subset
+  check, called before a multi-card reach-in is allowed to set an
+  obligation; `Number.isInteger`/`Array.isArray` guards on the two
+  crash sites; an `Object.hasOwn(privateStates, playerId)` participant
+  check on `START_NEXT_ROUND`; count-based conservation assertions on
+  `result.rummy` plus literal (not recomputed) deadwood values in the
+  affected tests. All independently re-verified — malformed-input tests
+  now assert `{ ok: false }` without throwing, the deadlock repro now
+  asserts full state is unchanged on rejection.
+- **Lesson carried forward:** the `sync.ts` (M3) and now `rummy/rules.ts`
+  (M0b) reviews are the two hardest-hitting ones of either charter, and
+  both are validators sitting directly at the PeerJS trust boundary —
+  reinforces that any module accepting caller-supplied action payloads
+  needs adversarial-grade scrutiny by default, not proportional-to-size
+  scrutiny the way a small pure-logic module (M0a, M4) can get away with.
+- 226 tests (up from 205).
+- **Continue?** Yes — Rummy is now really playable at the rules-engine
+  level. M1 (house-player bot strategy) is next.
