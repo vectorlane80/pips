@@ -5,13 +5,12 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M1 — house-player bot strategy for Rummy (`card-engine/bot.ts` seam).
-2. M2 — generalize `src/net/peer.ts` transport to be payload-generic;
+1. M2 — generalize `src/net/peer.ts` transport to be payload-generic;
    regression-verify the 4 existing games unaffected.
-3. M3 — `PlayingCard` visual component matching the design handoff spec.
-4. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
+2. M3 — `PlayingCard` visual component matching the design handoff spec.
+3. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
    Results integration). Browser smoke test.
-5. M5 — documentation (`docs/rummy.md`).
+4. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
 - [cycle 1] M0a — pure meld classification, rank values, deadwood scoring —
@@ -21,6 +20,11 @@ for the current charter (real Rummy) — see `CHARTER.md`.
   4 real defects (permanent deadlock, 2 host crashes, non-participant
   START_NEXT_ROUND) + 2 test-quality gaps found by review and fixed —
   commit b8fe7d0
+- [cycle 3] M1 — house-player bot strategy (greedy meld-seeking,
+  connectivity-based discard, stock-vs-discard draw decision); 3 real
+  defects (livelock, crash-on-empty-hand, greedy-meld stranding a
+  guaranteed win) + 3 test-quality gaps found by review and fixed —
+  commit 4fc3752
 
 ## Done (prior charter — card-engine foundation, see docs/DEVLOG.md for detail)
 - M0-M6 — card-engine (cards/deck/rng/zones/turn-engine/sync/bot) + minimal

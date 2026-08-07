@@ -375,3 +375,74 @@ be kept pending for the duration of this run per explicit user request
 - 226 tests (up from 205).
 - **Continue?** Yes — Rummy is now really playable at the rules-engine
   level. M1 (house-player bot strategy) is next.
+
+## Rummy cycle 3 — 2026-08-07
+- **Shipped:** M1 — `src/card-games/rummy/bot.ts`/`bot.test.ts`: a single
+  `rummyBotStrategy` on the `card-engine/bot.ts` seam. Draw phase takes
+  the discard pile's top card when it's immediately meldable, else draws
+  stock; discard phase lays down melds (constrained to the obligated
+  card when reaching-in set one) before discarding the least-connected
+  card (fewest same-rank/same-suit-within-2 neighbors, ties broken by
+  highest deadwood). No difficulty tiers — one reasonable strategy, as
+  scoped (commit `4fc3752`).
+- **Verification:** full ladder myself; read the whole implementation
+  (small, new, additive-only) against spec — matched.
+- **Review:** Opus reviewed this as carefully as `sync.ts` (M3) and
+  `rules.ts` (M0b) — correctly so; a bot strategy the host loop calls
+  repeatedly across a turn has the same "what if state looks unusual"
+  surface. Found 3 real defects, all independently reproduced (small
+  standalone vitest repros, not just re-reading the review's claims)
+  before locking the fix spec:
+  - A **livelock**: when stock is empty and the discard pile has
+    exactly 1 unmeldable card, the bot proposed `DRAW_FROM_STOCK`
+    forever (never checked `stockCount`), and since a rejected action
+    doesn't mutate state, it would repeat identically on every call.
+    Reachable via ordinary legal play (a big reach-in that drains the
+    discard pile, followed by a normal discard leaving exactly 1 card).
+  - A **crash**: `rules.ts`'s going-out handler doesn't advance
+    `turn.phase`/`currentIndex` (by design — `roundOver` is the correct
+    signal). A caller loop keyed on "is it still my turn" rather than
+    checking `roundOver` first could call the bot again on an empty
+    hand, and `selectDiscard([])` threw reading `.rank` off
+    `hand[0] === undefined`.
+  - A **greedy meld choice that threw away a guaranteed round win**:
+    `findMeld` always picked the single largest meld, with no lookahead
+    — a 6-card hand with two simultaneous melds available (a 4-card run
+    + a 3-card set, using all 6 cards) got the 4-card run laid down
+    first, stranding the other 2 cards and missing an outright win that
+    was there for free.
+- Fixed: a `stockCount === 0` fallback to a safe single-card discard
+  take; a top-of-function `roundOver` guard that returns
+  `START_NEXT_ROUND` (both crash-proof AND the actually-correct action
+  in that state, not just a defensive no-op); and `bestFirstMeld`, a
+  small memoized recursive search (hands are small, ≤ ~14 cards, capped
+  defensively) that picks the meld leading to the most total cards
+  melded this turn rather than the single biggest meld. Also fixed 2
+  vacuous test assertions and 1 silently-swallowed `START_NEXT_ROUND`
+  failure in the bot-vs-bot test loop.
+- **Incident:** the fix-spec dispatch hit DeepSeek's 25-tool-round cap
+  again — this time after correctly applying all 5 fixes (verified: read
+  `bot.ts` by eye, all 3 code fixes present and correct; typecheck/
+  tests/build all green) but before writing any of the spec's required
+  NEW regression tests (the ones that would have caught these bugs in
+  the first place — livelock, crash, and the 6-card win scenario). Since
+  the fixes themselves were small and already correct, I wrote the 4
+  missing regression tests by hand rather than re-dispatching a follow-
+  up task for something this size — same judgment call as M4/M0a in the
+  prior charter. All 4 pass, including the win-scenario test which
+  fails against the pre-fix `findMeld`-only logic (verified this
+  by reasoning through the old code path, not by re-running a reverted
+  version — the fix is committed and correct).
+- **Lesson carried forward:** this is the third time a DeepSeek dispatch
+  has hit the 25-tool-round cap specifically on a *fix* task that had
+  more post-fix work (tests, verification) queued after the fixes
+  themselves — fix specs that bundle "apply N targeted fixes" with "add
+  M new regression tests" are more cap-prone than milestone specs,
+  possibly because reading+editing+re-reading each existing test file
+  section costs more tool-rounds than writing fresh code. Worth
+  splitting large fix-plus-test specs into two dispatches (fixes first,
+  tests second) if a fix spec has more than ~4-5 required new tests.
+- 244 tests (up from 226).
+- **Continue?** Yes — M0b and M1 both landed clean. M2 (generalize
+  `src/net/peer.ts`'s transport to be payload-generic) is next — the
+  last piece of plumbing before the visual/UI milestones (M3/M4).
