@@ -5,9 +5,19 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M4 — `RummyTable` screen + wiring (shelf tile, room/host/join flow,
-   Results integration). Browser smoke test.
-2. M5 — documentation (`docs/rummy.md`).
+1. M4a — the `RummyTable` screen component itself (three-band layout,
+   reach-in hover/select interaction, sort toggle, lay-down/discard
+   actions) plus a Rummy match-end panel, built and visually verified
+   against hand-built mock state — no networking, not wired into
+   `App.tsx` yet.
+2. M4b — wiring: `'rummy'` shelf tile on `Landing.tsx` (its own tile,
+   not merged into the `Game`/`Action`/`RoomState` union per CHARTER.md
+   resolution #7), a Rummy host/guest/bot session in `App.tsx` using
+   M2's generalized transport, connecting `RummyTable` to the real
+   `RummySession`/`applyRummyAction`/`runRummyBotTurn`. Browser smoke
+   test of a real full turn including the reach-in interaction,
+   host-vs-bot.
+3. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
 - [cycle 1] M0a — pure meld classification, rank values, deadwood scoring —
