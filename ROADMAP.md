@@ -5,21 +5,23 @@ Previous charter (card-engine foundation) is complete — see
 for the current charter (real Rummy) — see `CHARTER.md`.
 
 ## Next up
-1. M4a — the `RummyTable` screen component itself (three-band layout,
-   reach-in hover/select interaction, sort toggle, lay-down/discard
-   actions) plus a Rummy match-end panel, built and visually verified
-   against hand-built mock state — no networking, not wired into
-   `App.tsx` yet.
-2. M4b — wiring: `'rummy'` shelf tile on `Landing.tsx` (its own tile,
+1. M4b — wiring: `'rummy'` shelf tile on `Landing.tsx` (its own tile,
    not merged into the `Game`/`Action`/`RoomState` union per CHARTER.md
    resolution #7), a Rummy host/guest/bot session in `App.tsx` using
    M2's generalized transport, connecting `RummyTable` to the real
-   `RummySession`/`applyRummyAction`/`runRummyBotTurn`. Browser smoke
-   test of a real full turn including the reach-in interaction,
-   host-vs-bot.
-3. M5 — documentation (`docs/rummy.md`).
+   `RummySession`/`applyRummyAction`/`runRummyBotTurn`. Also needs a
+   small `state.ts`/`rules.ts` addition: a `handCounts` field on
+   `RummyPublicState` so a client can show the opponent's card count
+   without seeing their hand — a genuine trust-boundary-relevant change
+   to review carefully, unlike the rest of M4b. Browser smoke test of a
+   real full turn including the reach-in interaction, host-vs-bot.
+2. M5 — documentation (`docs/rummy.md`).
 
 ## Done (this charter)
+- [cycle 6] M4a — `RummyTable`/`RummyResults` screen components, pure
+  presentational, verified via a live browser mock-state check (reach-in
+  hover, card selection, round/match-over panels all confirmed working)
+  — commit 9f3bfac
 - [cycle 1] M0a — pure meld classification, rank values, deadwood scoring —
   commit b0c5595
 - [cycle 2] M0b — melds/reach-in/going-out/recycling/multi-round scoring
