@@ -1,0 +1,23 @@
+export function TableHeader({
+  gameLabel, gameColor, meta, onRules, onLeave,
+}: {
+  gameLabel: string
+  gameColor: string
+  meta: string
+  onRules: () => void
+  onLeave: () => void
+}) {
+  return (
+    <div className="header-row">
+      <div className="header-left">
+        <span style={{ fontWeight: 700, fontSize: 24 }}>Pips</span>
+        <span style={{ fontWeight: 700, fontSize: 20, color: gameColor }}>{gameLabel}</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--muted-text)' }}>{meta}</span>
+      </div>
+      <div className="header-actions">
+        <button type="button" className="btn pill-small" onClick={onRules}>Rules</button>
+        <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
+      </div>
+    </div>
+  )
+}

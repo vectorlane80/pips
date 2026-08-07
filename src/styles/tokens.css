@@ -1,0 +1,76 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
+
+:root {
+  --ink: #17173a;
+  --body-text: #3a3a63;
+  --muted-text: #5a5a86;
+  --faint-text: #8a8ab0;
+  --disabled-text: #9a9ab8;
+  --page-base: #eafaff;
+  --surface: #ffffff;
+  --surface-alt: #f4f4fb;
+  --grey-fill: #e7e7f5;
+  --grey-border: #c9c9e0;
+  --grey-border-2: #dcdcea;
+  --grey-border-3: #e4e4f0;
+  --grey-border-4: #d5d5e6;
+
+  --violet: #6c4cff;
+  --teal: #0fb5a0;
+  --amber: #ff9f1c;
+  --coral: #ff5d73;
+  --yellow: #ffd23f;
+  --green: #3ddc97;
+  --green-text: #1aa06d;
+  --slate-pip: #6f6f9c;
+  --slate-pip-border: #a6a6c8;
+
+  --farkle-color: var(--violet);
+  --yahtzee-color: var(--teal);
+  --ttt-color: var(--amber);
+  --hangman-color: var(--coral);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--page-base);
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(560px 380px at 88% 6%, #ffe6a8 0%, rgba(255, 230, 168, 0) 70%),
+    radial-gradient(520px 420px at 4% 90%, #ffd3dc 0%, rgba(255, 211, 220, 0) 70%),
+    var(--page-base);
+  color: var(--ink);
+  font-family: 'Fredoka', system-ui, sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+a {
+  color: var(--violet);
+}
+a:hover {
+  color: var(--coral);
+}
+
+:focus-visible {
+  outline: 3px solid var(--violet);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--yellow);
+}
+
+#root {
+  min-height: 100vh;
+}

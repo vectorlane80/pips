@@ -1,0 +1,93 @@
+import type { Die } from '../types'
+
+export function rollDie(id: number): Die {
+  return { id, val: 1 + Math.floor(Math.random() * 6), sel: false, rot: Math.random() * 10 - 5 }
+}
+
+export function rollDice(count: number, startId = 0): Die[] {
+  return Array.from({ length: count }, (_, i) => rollDie(startId + i))
+}
+
+function countByFace(vals: number[]): Record<number, number> {
+  const counts: Record<number, number> = {}
+  for (const v of vals) counts[v] = (counts[v] || 0) + 1
+  return counts
+}
+
+/** Score a fully-selected set of dice. `valid` is false if any die in the selection doesn't score. */
+export function scoreSelection(vals: number[]): { valid: boolean; score: number } {
+  if (vals.length === 0) return { valid: false, score: 0 }
+  if (vals.length === 6) {
+    const sorted = [...vals].sort((a, b) => a - b)
+    if (sorted.join(',') === '1,2,3,4,5,6') return { valid: true, score: 1500 }
+    const counts = countByFace(vals)
+    const groups = Object.values(counts)
+    if (groups.length === 3 && groups.every((c) => c === 2)) return { valid: true, score: 1500 }
+  }
+  const counts = countByFace(vals)
+  let score = 0
+  let valid = true
+  for (const [faceStr, count] of Object.entries(counts)) {
+    const face = Number(faceStr)
+    if (count >= 3) {
+      const base = face === 1 ? 1000 : face * 100
+      score += base * Math.pow(2, count - 3)
+    } else if (face === 1) {
+      score += count * 100
+    } else if (face === 5) {
+      score += count * 50
+    } else {
+      valid = false
+    }
+  }
+  return { valid, score }
+}
+
+export function hasAnyScore(vals: number[]): boolean {
+  if (vals.length === 0) return false
+  const { score } = bestSubset(vals)
+  return score > 0
+}
+
+/** Highest-scoring valid subset of a roll. Ties broken toward fewer dice. */
+export function bestSubset(vals: number[]): { indices: number[]; score: number } {
+  const n = vals.length
+  let best: { indices: number[]; score: number } = { indices: [], score: 0 }
+  for (let mask = 1; mask < 1 << n; mask++) {
+    const indices: number[] = []
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) indices.push(i)
+    const { valid, score } = scoreSelection(indices.map((i) => vals[i]))
+    if (!valid) continue
+    if (score > best.score || (score === best.score && indices.length < best.indices.length)) {
+      best = { indices, score }
+    }
+  }
+  return best
+}
+
+export interface FarkleBotMove {
+  keepIndices: number[]
+  bank: boolean
+}
+
+/** Decide what to keep from the current roll, and whether to bank afterward. */
+export function decideFarkleBot(
+  rollVals: number[],
+  turnScoreSoFar: number,
+  seatBanked: number,
+  openingScore: number,
+  winningScore: number,
+): FarkleBotMove {
+  const { indices, score } = bestSubset(rollVals)
+  const total = turnScoreSoFar + score
+  const diceLeft = rollVals.length - indices.length
+  const canBank = seatBanked > 0 ? total > 0 : total >= openingScore
+  let bank = false
+  if (canBank) {
+    if (seatBanked + total >= winningScore) bank = true
+    else if (total >= 550) bank = true
+    else if (total >= 350 && diceLeft <= 2) bank = true
+    else if (total >= 250 && diceLeft <= 1) bank = true
+  }
+  return { keepIndices: indices, bank }
+}
