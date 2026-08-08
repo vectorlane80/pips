@@ -7,6 +7,7 @@ import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, type Grou
 import { PHASES, type PhaseRequirement } from '../card-games/phase10/phases'
 import { DealIntro } from '../components/DealIntro'
 import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phase10Card'
+import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { Phase10RulesOverlay } from './Phase10RulesOverlay'
@@ -507,6 +508,14 @@ export function Phase10Table({
             </span>
           </span>
         </div>
+        <ScoreHeader
+          youScore={publicState.scores[localPlayerId] ?? 0}
+          youColor="var(--violet)"
+          opponentName={opponentName}
+          opponentScore={publicState.scores[opponentId] ?? 0}
+          opponentColor={opponentColor}
+          hint="lower wins"
+        />
         <div className="p10-header-actions">
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
@@ -540,7 +549,6 @@ export function Phase10Table({
           <div className="p10-their-side-left">
             <div className="p10-their-name" style={{ color: opponentColor }}>{opponentName}</div>
             <div className="p10-their-count">{opponentHandCount} cards · hidden</div>
-            <div className="p10-their-score">{publicState.scores[opponentId] ?? 0} pts</div>
             {fanCount > 0 && (
               <div className="p10-their-fan">
                 {Array.from({ length: fanCount }, (_, i) => (
@@ -682,11 +690,6 @@ export function Phase10Table({
             <span className="p10-phase-pill">
               <span className="p10-phase-pill-dot" />
               Phase {myRequirement.phase} — {myRequirement.label}
-            </span>
-
-            {/* Your score pill */}
-            <span className="p10-score-pill">
-              Your score: {publicState.scores[localPlayerId] ?? 0}
             </span>
           </div>
 

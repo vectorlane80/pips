@@ -104,12 +104,6 @@
   color: var(--muted-text);
 }
 
-.p10-their-score {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted-text);
-}
-
 .p10-their-fan {
   display: flex;
   margin-top: 6px;
@@ -459,21 +453,6 @@
   background: var(--violet);
   border: 1px solid var(--ink);
   flex: none;
-}
-
-/* Your running score — same chip weight as the phase pill but neutral (not violet),
-   so it doesn't read as the same kind of information. */
-.p10-score-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 2px solid var(--grey-border);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted-text);
-  white-space: nowrap;
 }
 
 /* ---- Hand section ---- */

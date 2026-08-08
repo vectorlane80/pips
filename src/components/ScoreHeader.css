@@ -1,0 +1,40 @@
+/* ===================================================================
+   ScoreHeader — bold scoreboard pills for table header rows
+   (Rummy + Phase 10). Deliberately heavier than the thin-border
+   .chip/.p10-phase-pill language: this reads as a scoreboard, not a
+   status chip.
+   =================================================================== */
+
+.score-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.score-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 3px solid var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.score-header-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.score-header-hint {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}

@@ -8,6 +8,7 @@ import { deadwood } from '../card-games/rummy/scoring'
 import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
+import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
@@ -510,6 +511,14 @@ export function RummyTable({
             </span>
           </span>
         </div>
+        <ScoreHeader
+          youScore={publicState.scores[localPlayerId] ?? 0}
+          youColor="var(--green-text)"
+          opponentName={opponentName}
+          opponentScore={publicState.scores[opponentId] ?? 0}
+          opponentColor={opponentColor}
+          hint={`to ${publicState.target}`}
+        />
         <div className="rummy-header-actions">
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
