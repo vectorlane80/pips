@@ -1,98 +1,119 @@
-# Charter: Phase 10 / Rummy polish pass
+# Charter: Deal-intro animation (Rummy + Phase 10)
 
 **Mode:** directed
 **Started:** 2026-08-08
-**Pre-approved:** yes — user explicitly asked for `/autonomous-dev-loop` with
-`/model-routing`, in an isolated worktree, to fix a specific list of live-app
-UX defects they found while actually playing the shipped game.
+**Pre-approved:** yes — user asked for `/autonomous-dev-loop` with
+`/model-routing` explicitly, after jointly deciding (in chat, before this
+charter) that the feature belongs in the UI layer, not `card-engine/`.
 
-**Delegation:** per `/model-routing`. Live-probed at charter start: Codex
-still reports usage-limit exhaustion ("try again at 6:51 PM" — same as the
-prior Phase 10 charter, quota hasn't reset). Per the fallback rule, this run
-uses `deepseek-v4-flash` for implementation, `claude --model sonnet --effort
-medium` for adversarial review, no escalation.
+**Delegation:** per `/model-routing`. Live-probed at charter start —
+Codex still reports usage-limit exhaustion (same "try again at 6:51 PM"
+quota window as every prior charter today). Per the fallback rule, this
+run uses `deepseek-v4-flash` for implementation and `claude --model
+sonnet --effort medium` for review, no escalation.
 
-**Worktree:** `.claude/worktrees/phase10-polish`, branch
-`worktree-phase10-polish`. No push to GitHub, no merge to `main` without
-explicit user confirmation — same standing policy, though given the pattern
-of this session (user reports a live bug, expects it fixed and deployed
-promptly), landing and shipping each fix as it's verified is the likely
-expectation; ambiguity resolution below covers this explicitly.
+**Worktree:** `.claude/worktrees/phase10-deal-intro`, branch
+`worktree-phase10-deal-intro`. No push/merge to `main` without explicit
+user confirmation — though this session's established pattern has been to
+ship each verified charter promptly, so land and ship once independently
+verified, same as every prior charter this session.
+
+## Design source
+
+`Design Handoff/DEAL-INTRO.md` and `Design Handoff/Deal Intro Concepts.dc.html`
+(interactive prototype — read in full, including the actual JS timing
+constants, before writing any spec). This is described in the handoff as
+"a concept exploration, not yet wired into the main prototype."
+
+## The architecture decision (made in chat, restated here for the record)
+
+The animation does **not** belong in `src/card-engine/`. The engine is
+deliberately React-free, has no concept of time/animation, and per
+`CLAUDE.md` must not import from `screens/`/`components/`. Nothing about
+the animation depends on engine internals — the design doc's own open
+question #1 confirms this is meant to be "cosmetic-only": the real deal
+already completes instantly and host-authoritatively (`dealRound` in each
+game's `state.ts`), and the animation is a pure client-side replay driven
+entirely by data already delivered to the client (own dealt hand,
+`handCounts` for the opponent, seat count). It goes in `src/components/`
+as a new shared, reusable component, called from each card game's table
+screen.
 
 ## Target user
-The user, actually playing the live Phase 10 / Rummy games and reporting
-real friction as they hit it — not a hypothetical player.
+A player starting a new hand of Rummy or Phase 10 (host-vs-human or
+host-vs-bot), who currently just sees an already-dealt table appear with
+no sense of a hand beginning.
 
 ## Core use case
-Fix five specific, user-reported UX defects in the already-shipped Phase 10
-and Rummy screens, verified live in a real browser (not just tsc/test/build)
-before considering any of them done — per the hard lesson from the previous
-hotfix cycle, where a shallow smoke test let real bugs ship.
+When a fresh hand deals — the very first hand of a match, and every
+subsequent round after `START_NEXT_ROUND` — both players see: an empty
+table with just the stock, a riffle-shuffle beat (with the existing
+`shuffle.mp3`, already wired via `useSound`), then cards flying one at a
+time from the stock to each seat alternately, capped at 10 total flights
+regardless of real hand size, then a snap to the fully-settled real table.
 
-## The five defects (user's own words, condensed)
+## Non-goals (explicit scope cuts, matching what the design doc itself
+flags as open/deferred, and what the current app actually supports)
 
-1. **No visible point scoring in Phase 10**, and no running score readable
-   anywhere on the live table (only ever shown on the final Results screen).
-2. **No sufficient pause between hands.** A sound plays, then a new hand
-   just appears — no round-result summary, nothing to read, nothing to mark
-   that a round just ended before the next one starts.
-3. **The card you just drew, in both Phase 10 and Rummy, pops immediately
-   into its sorted position in your hand** instead of staying visually
-   separated (e.g. at the right end) until you discard — the status-line
-   "You drew the X" indicator is fine, but the card itself jumping into the
-   sorted fan reads as visually confusing.
-4. **The two ladder progress dots have too little contrast** — small,
-   thick-bordered, both circles read as similar dark blobs (the user
-   describes "you" as reading as blue, though it's actually violet — a
-   real sign the current treatment doesn't read as distinct colors at that
-   size). Needs bigger dots, a lighter/thinner border, or both.
-5. **(raised mid-session, extending #4)** The ladder chips carry no visible
-   phase number at all — only on hover — so a user can't tell which chip
-   is "phase 3" without counting or hovering, and the opponent's current
-   phase is marked only by that same low-contrast dot, nothing on the chip
-   itself. The user was confused about why only one chip renders filled.
-
-## Non-goals
-- Redesigning the ladder's fundamental visual language (still 10 chips,
-  still violet = your current phase) — this is a legibility fix, not a
-  new design.
-- Touching Farkle/Yahtzee/TTT/Hangman — none of these defects apply there.
-- Any new game rule or scoring change — this is presentational only; the
-  underlying `Phase10PublicState`/`RummyPublicState` scoring and turn logic
-  are already correct (verified in the prior charter and hotfix).
+- **More than 2 seats.** Both Rummy and Phase 10 are hard-capped to 2
+  players by their own charters. The design doc explores 4-seat
+  generalization as a concept, but neither actual game needs it — building
+  N-seat layout math now would be an abstraction with zero real caller,
+  against `CLAUDE.md`'s "no abstractions beyond what the current spec
+  needs." The component's internals are written for exactly 2 seats
+  (you + opponent); revisit if a >2-player card game is ever built.
+- **Reconnect/interrupt handling** (design doc's open question #2). Neither
+  game supports resuming an in-progress hand after a disconnect at all
+  (an existing, separately-documented limitation from the Rummy and
+  Phase 10 charters) — there is no "player rejoins mid-deal" case to
+  handle. The only two real cases are: a table mounting for a genuinely
+  fresh hand (animate), or reconnecting to a session before ever seeing an
+  earlier round (which, since reconnection isn't supported, doesn't
+  happen either). Every table mount in this app corresponds to a fresh
+  hand.
+- **Gating on the real deal.** Per the design doc's own stated assumption,
+  this is cosmetic-only — it never blocks or waits on any host-authoritative
+  state; if the real deal somehow hadn't finished by the time the animation
+  wants to show real counts, the animation would just show what it has
+  (never a real scenario in practice, since dealing is synchronous).
+- **New sound assets.** `shuffle.mp3` already exists and is already wired
+  through `useSound`/`SoundName` (currently used for Rummy's stock-recycle
+  sound, being a reasonable enough shared meaning — "cards being
+  shuffled"). No new sound file, no new `SoundName` entry needed.
+- **Automated DOM/visual tests.** The project has no `jsdom`/testing-library
+  installed, and `CLAUDE.md` forbids new runtime dependencies without a
+  spec approving them — none does here. The animation's actual rendered
+  behavior is verified live in a real browser (this session's established
+  practice), not via vitest. The one piece of genuinely pure, non-DOM logic
+  (which seat gets which flight, in what order, capped at 10) is extracted
+  into a plain function and unit-tested normally.
 
 ## Milestones
-- M1: **Round-transition visibility** — a live, always-visible running
-  score for both players on `Phase10Table`, a round-over banner (mirroring
-  `RummyTable`'s existing `.rummy-round-banner` pattern, Phase10-specific
-  copy) that actually states the round result and both players' scores,
-  and a longer `ROUND_PAUSE_MS` so there's time to read it before the next
-  round deals. Touches `Phase10Table.tsx`/`.css`, `App.tsx`.
-- M2: **Drawn-card hand separation** — the just-drawn card (already tracked
-  as `justDrawn` in both `RummyTable.tsx` and `Phase10Table.tsx` for the
-  status line) renders at the right end of the hand fan, visually separated
-  from the sorted rest, until it's discarded. Touches both table files.
-- M3: **Ladder legibility** — bigger, lower-contrast-border dots; a
-  permanently visible phase number on every chip (not hover-only, the hover
-  caption's full requirement text stays as a bonus); the opponent's
-  current-phase chip gets a visible ring in their color, not just a dot,
-  so their position doesn't rely on a single tiny mark. Touches
-  `Phase10Table.tsx`/`.css` only.
+- M1: `src/components/DealIntro.tsx` — the shared component itself, plus
+  a pure `computeDealFlights` helper (unit-tested). Self-contained: renders
+  its own simple stock/opponent-pile/your-pile mini-layout (not aligned to
+  either game's real, more complex final layout — the design prototype
+  itself demos it as a self-contained sequence, not overlaid on the real
+  table), runs the shuffle beat, the capped alternating deal, calls
+  `onComplete` when done.
+- M2: wire into `RummyTable.tsx` — detect a fresh round (a ref tracking the
+  last-animated `roundNumber`), render `DealIntro` in place of the normal
+  `.rummy-table-card` contents while active, using Rummy's real `CardBack`
+  component and colors. Browser-verified.
+- M3: wire into `Phase10Table.tsx` — same, using `Phase10CardBack` and
+  Phase 10's colors. Browser-verified.
 
 ## Definition of done
-- All three milestones live-verified in a real browser: read the score
-  live during play (not just at Results), watch a full round transition
-  with the banner visible for a real pause, watch a drawn card stay
-  separated until discarded in both games, and visually confirm the ladder
-  reads clearly (numbers visible, opponent position visible without
-  squinting).
+- A fresh Rummy hand and a fresh Phase 10 hand (host-vs-bot, both playable
+  today) both show the full empty → shuffle → deal → settled sequence on
+  first mount, and again on every subsequent round after a round ends and
+  a new one deals — live-verified in a real browser, not just code-read.
 - `npx tsc -b --noEmit`, `npm test`, `npm run build` clean throughout.
-- No regression to Farkle/Yahtzee/TTT/Hangman (untouched by this charter,
-  but re-confirm at least one still loads).
+- No new runtime dependencies, no new sound assets, no `card-engine/`
+  changes.
 
 ## Run budget
-3 milestones, expect 1-3 cycles (M1+M2 may combine into one cycle if the
-implementer handles both cleanly; M3 is CSS-only and low-risk).
+3 milestones, expect 2-3 cycles.
 
 ## Stop criteria
 - Stop when all three milestones are live-verified and shipped.
@@ -100,33 +121,19 @@ implementer handles both cleanly; M3 is CSS-only and low-risk).
 
 ## Ambiguity resolutions
 
-1. **Ship each fix as it lands, or batch and ask?** Given the pattern this
-   session (user reports a live bug → expects a prompt fix → confirms the
-   fix by continuing to play) and that all three milestones are small,
-   low-risk, presentational changes to a game that's already live and
-   currently visibly broken in these ways, land and merge/push each
-   milestone once independently verified, same as the immediately prior
-   hotfix cycle — rather than batching all three into one final ask. State
-   clearly in the wrap-up what shipped.
-2. **Round-banner score wording** — mirror Rummy's own established
-   convention exactly (state each player's current CUMULATIVE score, not
-   the round's point delta) for consistency between the two games' banners,
-   even though a delta might arguably be more informative — matching an
-   existing, already-shipped pattern beats inventing a second convention
-   for a presentational-only fix.
-3. **Multi-card draws (Rummy's discard reach-in can pull more than one
-   card at once)** — the drawn-card separation fix (M2) only needs to
-   handle the single-card-draw case, matching `justDrawn`'s own existing
-   detection logic (`diff === 1`), which already doesn't fire for a
-   multi-card reach-in. Not extending this — a multi-card take is a
-   different, already-obligation-highlighted interaction Rummy already
-   handles distinctly.
-4. **Persistent chip numbers vs. the original design's hover-only spec**
-   — the design handoff (`PHASE10.md`) explicitly speces hover-only
-   captions with no permanent number, reasoning that dots alone should
-   read "at a glance." Live user feedback says this isn't landing — the
-   user was confused about which chip was which and why only one was
-   filled. Resolution: add permanent small numbers per chip. This is a
-   deliberate deviation from the original design doc, justified by actual
-   usage over a static spec that predates any real play — noted here so
-   it's a documented decision, not a silent drift.
+1. **Exact flight distribution when capped at 10** — alternate strictly
+   opponent/you/opponent/you… (matching the design doc's stated 2-player
+   order) until 10 total flights are used; since both games always deal
+   exactly 10 cards to each of 2 seats, this lands as exactly 5 flights per
+   seat, using the cap precisely rather than needing to under/over-shoot.
+   `computeDealFlights` is written generically (takes each seat's real
+   count, alternates, stops at the cap) so it stays correct if a hand size
+   ever changes, not hardcoded to "5 and 5."
+2. **Where the intro renders relative to the page chrome** — replaces only
+   the inner `.rummy-table-card`/`.p10-table-card` contents; the header,
+   code chip, and page shell stay visible and stable throughout, so the
+   transition into and out of the intro doesn't jolt the whole page.
+3. **Skip-ahead / can a player dismiss the intro early** — not built. The
+   design doc doesn't ask for it, the sequence is short (well under 2
+   seconds total per the spec's own timing numbers), and adding a skip
+   control would be scope the design never requested.

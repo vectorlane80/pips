@@ -1275,3 +1275,17 @@ build` clean; live-confirmed via `getComputedStyle` (40px/12px radius/
 3px border, exactly as intended) and a real screenshot showing chip 1's
 combined violet-fill + green-ring rendering correctly at the new size,
 matching the user's reference image's visual weight.
+
+## Charter 5: Deal-intro animation — started 2026-08-08
+
+New charter, see `CHARTER.md`. User asked to check the Design Handoff
+folder for new content, found `DEAL-INTRO.md`/`Deal Intro Concepts.dc.html`
+(a proposed empty-table → shuffle → deal intro sequence for card games,
+explicitly flagged as "a concept exploration, not yet wired into the main
+prototype"). Jointly decided in chat, before this charter, that the
+feature belongs in the UI layer (`src/components/`) not `src/card-engine/`
+— the design doc's own stated assumption is that the animation is
+cosmetic-only, replaying data the client already has, never gating on or
+needing real engine internals. Pre-approved, unattended, isolated
+worktree (`.claude/worktrees/phase10-deal-intro`, branch
+`worktree-phase10-deal-intro`). Delegation per `/model-routing`.
