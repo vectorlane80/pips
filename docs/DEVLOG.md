@@ -1240,3 +1240,38 @@ No push to GitHub, no merge to `main` without explicit confirmation —
 though given this session's established pattern (the user expects
 prompt fixes to reach the live site), merging and pushing now, same as
 every prior cycle this session.
+
+## Ladder shape fix — 2026-08-08 (user-reported, design-fidelity)
+
+The M3 polish cycle fixed the ladder dots' contrast but never questioned
+the chip SHAPE — it was built as a plain circle from the start, an
+assumption never actually checked against the design prototype
+(`Design Handoff/Pips.dc.html`), only against the prose spec in
+`PHASE10.md`, which never specifies a shape either way. The user pointed
+out — with a side-by-side screenshot — that the actual design prototype
+uses rounded squares, not circles, and the resulting circles were too
+small and low-contrast to read as ten distinct steps at a glance.
+
+Root-caused by finally opening the live prototype directly (`Pips.dc.html`
+in a browser) instead of continuing to work from the prose spec alone —
+though the prototype's own Phase 10 flow turned out to be a non-
+interactive static snapshot in this environment, so the fix used the
+user's reference screenshot as ground truth for the exact shape/weight,
+same as the rest of the app's established squircle button/tile language.
+
+**Fixed directly** (small, unambiguous CSS change, no dispatch needed):
+`.p10-ladder-chip` in `Phase10Table.css` — `border-radius: 50%` → `12px`
+(rounded square), size `22×22px` → `40×40px`, border `2px` → `3px solid
+var(--ink)` as the base weight, font-size `10px` → `17px`. The "ahead"
+(not-yet-reached) chip's border color also changed from the faint
+`--grey-border` to the same bold `--ink` the rest of the app's outlined
+elements use — the reference screenshot's un-filled chips read as clearly
+outlined, not faint. The opponent-ring box-shadow (`Phase10Table.tsx`)
+scaled proportionally, `2px/4px` → `3px/6px`, to stay visually
+correct at the new chip size.
+
+**Verification:** `tsc -b --noEmit`/`npm test` (464 passed)/`npm run
+build` clean; live-confirmed via `getComputedStyle` (40px/12px radius/
+3px border, exactly as intended) and a real screenshot showing chip 1's
+combined violet-fill + green-ring rendering correctly at the new size,
+matching the user's reference image's visual weight.

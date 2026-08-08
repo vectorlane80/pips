@@ -233,7 +233,7 @@ function PhaseLadder({
             >
               <div
                 className={`p10-ladder-chip p10-ladder-chip--${fill}${i === opponentPhaseIdx ? ' p10-ladder-chip--opponent-here' : ''}`}
-                style={i === opponentPhaseIdx ? { boxShadow: `0 0 0 2px var(--surface), 0 0 0 4px ${opponentColor}` } : undefined}
+                style={i === opponentPhaseIdx ? { boxShadow: `0 0 0 3px var(--surface), 0 0 0 6px ${opponentColor}` } : undefined}
               >
                 {p.phase}
               </div>
