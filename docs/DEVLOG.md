@@ -816,3 +816,36 @@ card-engine or leaking Phase-10 vocabulary into it.
 - **Continue?** Yes — M3 (visuals) already in flight; M4 (screen +
   wiring, the largest remaining slice) next, per explicit user
   instruction to keep going without checking in.
+
+## Phase 10 cycle 4 — 2026-08-08
+
+- **Shipped:** M3 — `src/components/Phase10Card.tsx`/`.css`
+  (`Phase10Card`, `Phase10CardBack`, `PHASE10_COLORS`): flat-ink card
+  back with yellow keyline and "10", solid-color number tiles (white
+  text, ink text on the yellow tile for legibility), ink Skip tile,
+  4-stop diagonal-gradient Wild tile, all sizes/radii matching the
+  design handoff exactly (hand 70×100, fan 30×44, stock 56×78) with
+  group (36×52) and discard (50×70) sized as documented judgment calls
+  scaled proportionally from Rummy's own equivalent precedent, same as
+  that file's own documented judgment calls.
+- **Delegation:** `deepseek-v4-flash`. Hit the 25-tool-round session cap
+  partway through (same known failure mode as M0b) — this time mid-way
+  through a self-directed scratch-test sanity check, after the real
+  files were already written and `tsc`/`build` verified clean. Notably
+  self-diagnosed and fixed a real environment gap along the way: React
+  19's `@types/react` has no global `JSX` namespace, so `JSX.Element`
+  return types need `import type { JSX } from 'react'` — done correctly
+  in the shipped file. Also symlinked this worktree's empty
+  `node_modules` to the main repo's (gitignored, harmless, and useful
+  for future work here) after initially being confused by it.
+- **Recovery:** the mandated scratch-render sanity check file
+  (`Phase10Card.scratch.test.tsx`) was left behind uncleaned when the
+  cap hit — removed it directly rather than re-dispatching, since the
+  two real files were already complete and correct.
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm run
+  build` (no tests required — presentational-only milestone with no game
+  logic, same as Rummy's own M3, which also skipped review for the same
+  reason); read both files and spot-checked every CSS dimension against
+  the spec.
+- **Continue?** Yes — M4 (screen + wiring, the largest remaining slice)
+  next, per explicit user instruction.

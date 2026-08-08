@@ -5,13 +5,15 @@ Prior charters (card-engine foundation, real Rummy) are complete — see
 This roadmap is for the current charter (Phase 10) — see `CHARTER.md`.
 
 ## Next up
-- [ ] M3 — Phase 10 card-visual components (in flight)
-- [ ] M4 — Phase10 screen + App.tsx/Landing.tsx wiring
+- [ ] M4 — Phase10 screen + App.tsx/Landing.tsx wiring (largest remaining slice)
 - [ ] M5 — `docs/phase10.md`
 
 (M2 folded away — `peer.ts` is already generic from Rummy's charter.)
 
 ## Done (this charter)
+- [cycle 4] M3 — `src/components/Phase10Card.tsx`/`.css`: card-visual
+  components matching the design handoff exactly. No review needed
+  (presentational only, no game logic).
 - [cycle 3] M1 — `src/card-games/phase10/bot.ts`, 23 tests. Review found
   a real engine soft-lock (stock empty + lone Skip on discard = no legal
   move for anyone) — fixed in `rules.ts`, not papered over in the bot.
