@@ -26,12 +26,13 @@ function Gallows({ wrong }: { wrong: number }) {
 }
 
 export function HangmanTable({
-  room, localSeatId, onSetWord, onGuess, onOpenRules, onLeave,
+  room, localSeatId, onSetWord, onGuess, onAdvanceRound, onOpenRules, onLeave,
 }: {
   room: RoomState
   localSeatId: string | null
   onSetWord: (word: string) => void
   onGuess: (letter: string) => void
+  onAdvanceRound: () => void
   onOpenRules: () => void
   onLeave: () => void
 }) {
@@ -87,28 +88,34 @@ export function HangmanTable({
                 >
                   {h.phase === 'roundOver' ? h.status : iAmGuesser ? 'Guess the word.' : `Watching ${guesser?.name} guess.`}
                 </div>
+                {h.phase === 'roundOver' && (
+                  <button type="button" className="btn btn-coral btn-lg" style={{ marginBottom: 16 }} onClick={onAdvanceRound}>
+                    Continue
+                  </button>
+                )}
                 <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Gallows wrong={h.wrong.length} />
                   <div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 400 }}>
-                      {h.word.split('').map((letter, i) => {
-                        if (letter === ' ') {
-                          return <div key={i} style={{ width: 18, flex: 'none' }} />
-                        }
-                        const revealed = h.guessed.includes(letter) || h.over
-                        return (
-                          <div key={i} style={{ width: 34, textAlign: 'center' }}>
-                            <div style={{
-                              fontSize: 32, fontWeight: 700, height: 40,
-                              color: !h.guessed.includes(letter) && h.over ? 'var(--coral)' : 'var(--ink)',
-                            }}
-                            >
-                              {revealed ? letter : ''}
-                            </div>
-                            <div style={{ height: 5, background: 'var(--ink)', borderRadius: 3 }} />
-                          </div>
-                        )
-                      })}
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', maxWidth: 400 }}>
+                      {h.word.split(' ').map((word, wi) => (
+                        <div key={wi} style={{ display: 'flex', flexWrap: 'nowrap', gap: 6 }}>
+                          {word.split('').map((letter, li) => {
+                            const revealed = h.guessed.includes(letter) || h.over
+                            return (
+                              <div key={li} style={{ width: 34, textAlign: 'center' }}>
+                                <div style={{
+                                  fontSize: 32, fontWeight: 700, height: 40,
+                                  color: !h.guessed.includes(letter) && h.over ? 'var(--coral)' : 'var(--ink)',
+                                }}
+                                >
+                                  {revealed ? letter : ''}
+                                </div>
+                                <div style={{ height: 5, background: 'var(--ink)', borderRadius: 3 }} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ))}
                     </div>
                     <p style={{ marginTop: 14, fontSize: 15 }}>
                       {h.wrong.length > 0 && <span style={{ color: 'var(--coral)', fontWeight: 600 }}>Wrong: {h.wrong.join(' ')} · </span>}

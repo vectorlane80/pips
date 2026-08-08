@@ -27,6 +27,7 @@ export function FarkleTable({
   const canAct = isMyTurn && !f.farkle && sel.valid
   const canRoll = canAct && (f.dice.length === 0 || selected.length > 0)
   const canBank = canAct && onTable > 0 && (activeSeat && activeSeat.score > 0 ? true : onTable >= f.openingScore)
+  const lastLog = f.log.length > 0 ? f.log[f.log.length - 1] : null
 
   const remaining = f.dice.length - selected.length
   let rollLabel = 'Roll six'
@@ -67,24 +68,43 @@ export function FarkleTable({
                   {f.farkle ? 'Farkle!' : 'Keep what scores.'}
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--muted-text)' }}>{f.farkle ? 'Lost' : 'On the table'}</div>
-                <div style={{
-                  fontSize: 'clamp(54px,8.5vw,94px)', fontWeight: 700, letterSpacing: '-0.03em',
-                  color: f.farkle ? 'var(--coral)' : onTable > 0 ? 'var(--violet)' : '#c2c2d8',
-                }}
-                >
-                  {f.farkle ? (f.lost > 0 ? f.lost.toLocaleString() : 'Farkle') : onTable.toLocaleString()}
+              {!f.farkle && (
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--muted-text)' }}>On the table</div>
+                  <div style={{
+                    fontSize: 'clamp(54px,8.5vw,94px)', fontWeight: 700, letterSpacing: '-0.03em',
+                    color: onTable > 0 ? 'var(--violet)' : '#c2c2d8',
+                  }}
+                  >
+                    {onTable.toLocaleString()}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 24, minHeight: 94 }}>
-              {f.dice.length === 0 && (
-                <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>
-                  {isMyTurn ? f.status : `${activeSeat?.name} is thinking…`}
-                </span>
+              {f.dice.length === 0 && f.kept.length === 0 && (
+                lastLog && !f.farkle ? (
+                  <span style={{
+                    color: lastLog.tone === 'farkle' ? 'var(--coral)' : lastLog.color,
+                    fontWeight: 600,
+                    alignSelf: 'center',
+                    fontSize: 'clamp(15px, 2vw, 18px)',
+                  }}
+                  >
+                    {lastLog.tone === 'farkle'
+                      ? `${lastLog.who} farkled — nothing banked.`
+                      : `${lastLog.who} banked ${lastLog.amount.toLocaleString()}.`}
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>
+                    {isMyTurn ? f.status : `${activeSeat?.name} is thinking…`}
+                  </span>
+                )
               )}
+              {f.kept.map((v, i) => (
+                <Die key={`kept-${i}`} value={v} selected />
+              ))}
               {f.dice.map((d, i) => (
                 <Die
                   key={d.id}
@@ -95,12 +115,6 @@ export function FarkleTable({
                 />
               ))}
             </div>
-
-            {f.kept.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
-                {f.kept.map((v, i) => <Die key={i} value={v} setAside />)}
-              </div>
-            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginTop: 18 }}>
@@ -149,7 +163,7 @@ export function FarkleTable({
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
                     <span style={{ color: entry.color, fontWeight: 600 }}>{entry.who}</span>
                     <span style={{ color: entry.tone === 'farkle' ? 'var(--coral)' : 'var(--green-text)', fontWeight: 600 }}>
-                      {entry.tone === 'farkle' ? `−${entry.amount.toLocaleString()}` : `+${entry.amount.toLocaleString()}`}
+                      {entry.tone === 'farkle' ? 'Farkle' : `+${entry.amount.toLocaleString()}`}
                     </span>
                   </div>
                 ))}

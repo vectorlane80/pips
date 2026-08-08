@@ -18,7 +18,9 @@ export function useDiceAnimation(dice: Die[]) {
     const tick = () => {
       if (runId.current !== id) return
       if (frame < total) {
-        setDisplay(dice.map(() => 1 + Math.floor(Math.random() * 6)))
+        // Held dice show their real (unchanging) value throughout — only dice that are
+        // actually about to re-roll flicker through random faces.
+        setDisplay(dice.map((d) => (d.sel ? d.val : 1 + Math.floor(Math.random() * 6))))
         frame++
         setTimeout(tick, 60)
       } else {

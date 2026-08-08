@@ -102,6 +102,7 @@ export interface YahtzeeState {
   round: number
   rolling: boolean
   status: string
+  lastTurn: { name: string; color: string; category: YCategory; points: number } | null
 }
 
 export interface TttState {

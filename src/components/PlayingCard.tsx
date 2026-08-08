@@ -118,12 +118,17 @@ export function PlayingCard({
         )
       case 'discard':
         return (
-          <span className="playing-card__corner playing-card__corner--stacked">
-            <span className="playing-card__rank">{rank}</span>
-            <span className="playing-card__suit" style={{ color }}>
+          <>
+            <span className="playing-card__corner playing-card__corner--stacked">
+              <span className="playing-card__rank">{rank}</span>
+              <span className="playing-card__suit" style={{ color }}>
+                {glyph}
+              </span>
+            </span>
+            <span className="playing-card__bottom-suit playing-card__bottom-suit--discard" style={{ color }}>
               {glyph}
             </span>
-          </span>
+          </>
         )
     }
   }

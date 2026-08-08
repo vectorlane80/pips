@@ -111,12 +111,12 @@
 
 /* Hand — small rank + suit side-by-side in the corner */
 .playing-card--hand .playing-card__rank {
-  font-size: 13px;
+  font-size: 19px;
   line-height: 1;
 }
 
 .playing-card--hand .playing-card__suit {
-  font-size: 11px;
+  font-size: 16px;
   line-height: 1;
 }
 
@@ -129,25 +129,40 @@
 }
 
 .playing-card--discard .playing-card__rank {
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 15px;
+  line-height: 1.15;
 }
 
 .playing-card--discard .playing-card__suit {
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 1.15;
 }
 
 /* ===================================================================
-   Content — bottom-large suit glyph (hand only, per RUMMY.md)
+   Content — bottom-large suit glyph (hand cards per RUMMY.md, plus the
+   discard pile's own smaller variant — see below)
    =================================================================== */
 
 .playing-card__bottom-suit {
   position: absolute;
   bottom: 6px;
   left: 7px;
-  font-size: 18px;
+  font-size: 28px;
   line-height: 1;
+}
+
+/*
+   Judgment call — RUMMY.md only specifies the discard strip's overlapped
+   top-left corner (the sliver that's visible on a covered card). It doesn't
+   say anything about the topmost, fully-visible discard card, which without
+   this looked bare next to a hand card. Scaled down proportionally from the
+   hand card's 28px glyph at the same ratio as the discard card's own
+   dimensions relative to the hand card's (50/74 ≈ 0.68 → 19px).
+*/
+.playing-card__bottom-suit--discard {
+  bottom: 4px;
+  left: 5px;
+  font-size: 19px;
 }
 
 /* ===================================================================
@@ -165,11 +180,11 @@
 }
 
 .playing-card--meld .playing-card__rank {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .playing-card--meld .playing-card__suit {
-  font-size: 11px;
+  font-size: 13px;
 }
 
 /* ===================================================================

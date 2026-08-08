@@ -45,7 +45,7 @@ function initFarkle(): FarkleState {
 function initYahtzee(seats: Seat[]): YahtzeeState {
   const cards: YahtzeeState['cards'] = {}
   seats.forEach((s) => { cards[s.id] = {} })
-  return { dice: [], rollsLeft: 3, cards, round: 1, rolling: false, status: 'Your roll.' }
+  return { dice: [], rollsLeft: 3, cards, round: 1, rolling: false, status: 'Your roll.', lastTurn: null }
 }
 
 function initTtt(seats: Seat[]): TttState {
@@ -292,7 +292,11 @@ function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomSt
     return { ...state, seats, screen: 'results', winnerId, yahtzee: { ...y, cards } }
   }
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, y.round)
-  return { ...state, seats, turnIdx, yahtzee: { ...y, cards, dice: [], rollsLeft: 3, round, status: 'Your roll.' } }
+  const lastTurnSeat = state.seats.find((s) => s.id === by)!
+  return {
+    ...state, seats, turnIdx,
+    yahtzee: { ...y, cards, dice: [], rollsLeft: 3, round, status: 'Your roll.', lastTurn: { name: lastTurnSeat.name, color: lastTurnSeat.color, category, points } },
+  }
 }
 
 // ---------- Tic Tac Toe ----------

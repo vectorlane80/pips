@@ -63,17 +63,51 @@ export function YahtzeeTable({
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 24, minHeight: 96 }}>
+            {y.dice.length === 0 && y.lastTurn !== null && (
+              <div style={{
+                marginTop: 16, padding: '10px 16px', background: 'var(--surface-alt)', borderRadius: 12,
+                fontSize: 14, fontWeight: 500, border: '3px solid var(--grey-fill)',
+              }}>
+                <span style={{ color: y.lastTurn.color, fontWeight: 700 }}>{y.lastTurn.name}</span>
+                {' scored '}
+                <strong>{y.lastTurn.points}</strong>
+                {' on '}
+                <strong>{Y_LABEL[y.lastTurn.category]}</strong>.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: y.dice.length === 0 && y.lastTurn !== null ? 12 : 24, minHeight: 96 }}>
               {y.dice.length === 0 && <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>Five dice, ready.</span>}
-              {y.dice.map((d, i) => (
-                <Die
-                  key={d.id}
-                  value={displayVals[i] ?? d.val}
-                  selected={d.sel}
-                  rotation={d.rot}
-                  onClick={isMyTurn && y.dice.length > 0 ? () => onToggleHold(d.id) : undefined}
-                />
-              ))}
+              {y.dice.length > 0 && (() => {
+                const displayMap = new Map(y.dice.map((d, i) => [d.id, displayVals[i] ?? d.val]))
+                const heldDice = y.dice.filter((d) => d.sel)
+                const unheldDice = y.dice.filter((d) => !d.sel)
+                return (
+                  <>
+                    {heldDice.map((d) => (
+                      <Die
+                        key={d.id}
+                        value={displayMap.get(d.id) ?? d.val}
+                        selected={d.sel}
+                        rotation={d.rot}
+                        onClick={isMyTurn ? () => onToggleHold(d.id) : undefined}
+                      />
+                    ))}
+                    {heldDice.length > 0 && unheldDice.length > 0 && (
+                      <div style={{ width: 3, background: 'var(--grey-fill)', borderRadius: 2, alignSelf: 'stretch', margin: '6px 4px' }} />
+                    )}
+                    {unheldDice.map((d) => (
+                      <Die
+                        key={d.id}
+                        value={displayMap.get(d.id) ?? d.val}
+                        selected={d.sel}
+                        rotation={d.rot}
+                        onClick={isMyTurn ? () => onToggleHold(d.id) : undefined}
+                      />
+                    ))}
+                  </>
+                )
+              })()}
             </div>
             {y.dice.length > 0 && (
               <p style={{ fontSize: 14, color: 'var(--muted-text)', marginTop: 12 }}>

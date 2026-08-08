@@ -23,6 +23,7 @@ import { deriveSnapshot } from './card-engine/sync'
 import { currentPlayer } from './card-engine/turn-engine'
 import { RummyTable } from './screens/RummyTable'
 import { RummyResults } from './screens/RummyResults'
+import { RummyRoom } from './screens/RummyRoom'
 
 type RummyView = { publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 
@@ -464,7 +465,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, room?.screen, room?.turnIdx, room?.hangman.phase, room?.hangman.guesserIdx])
 
-  // Pause on a finished round (winning line / solved-or-lost word still visible) before moving
+  // Pause on a finished Tic-Tac-Toe round (winning line still visible) before moving
   // on, whether the round ended on a bot's move or a human's — otherwise it flashes past.
   useEffect(() => {
     if (role !== 'host' || !room) return
@@ -472,12 +473,8 @@ export default function App() {
       const t = setTimeout(() => dispatch({ type: 'tttAdvanceRound' }), ROUND_PAUSE_MS)
       return () => clearTimeout(t)
     }
-    if (room.screen === 'hangman' && room.hangman.phase === 'roundOver') {
-      const t = setTimeout(() => dispatch({ type: 'hangmanAdvanceRound' }), ROUND_PAUSE_MS)
-      return () => clearTimeout(t)
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, room?.screen, room?.ttt.roundOver, room?.hangman.phase])
+  }, [role, room?.screen, room?.ttt.roundOver])
 
   // ---- Rummy effects (host-only) ----
 
@@ -588,6 +585,7 @@ export default function App() {
             localSeatId={localSeatId}
             onSetWord={(word) => dispatch({ type: 'hangmanSetWord', word })}
             onGuess={(letter) => dispatch({ type: 'hangmanGuess', letter })}
+            onAdvanceRound={() => dispatch({ type: 'hangmanAdvanceRound' })}
             onOpenRules={() => setRulesOpen(true)}
             onLeave={resetToEntry}
           />
@@ -607,24 +605,16 @@ export default function App() {
   }
 
   // ---- Rummy session active ----
-  // Rummy waiting screen (host waiting for opponent)
+  // Rummy waiting screen (host waiting for opponent) — mirrors the shared Room.tsx
+  // layout dice games use, so Rummy's start flow doesn't feel like a different app.
   if (rummyRole === 'host' && rummyWaiting) {
     return (
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: 'clamp(28px,6vw,72px) clamp(18px,5vw,48px) 72px', textAlign: 'center' }}>
-        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Rummy · {rummyCode}</span>
-        <h1 style={{ fontSize: 'clamp(34px,5vw,48px)', fontWeight: 700, margin: '20px 0 8px' }}>Rummy Room</h1>
-        <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginBottom: 20 }}>
-          Share the code or add a house player to get started.
-        </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-coral btn-lg" onClick={addRummyHouseBot}>
-            Add a house player
-          </button>
-          <button type="button" className="btn btn-lg" onClick={resetToEntry}>
-            Leave
-          </button>
-        </div>
-      </div>
+      <RummyRoom
+        code={rummyCode}
+        localName={name}
+        onAddHouseBot={addRummyHouseBot}
+        onLeave={resetToEntry}
+      />
     )
   }
 
@@ -666,6 +656,7 @@ export default function App() {
         onDrawStock={() => rummyDispatch({ type: 'DRAW_FROM_STOCK' })}
         onDrawDiscard={(index) => rummyDispatch({ type: 'DRAW_FROM_DISCARD', index })}
         onLayDownMeld={(cardIds) => rummyDispatch({ type: 'LAY_DOWN_MELD', cardIds })}
+        onLayOffMeld={(targetPlayerId, meldIndex, cardIds) => rummyDispatch({ type: 'LAY_OFF', targetPlayerId, meldIndex, cardIds })}
         onDiscard={(cardId) => rummyDispatch({ type: 'DISCARD_CARD', cardId })}
         onOpenRules={() => {}}
         onLeave={resetToEntry}
