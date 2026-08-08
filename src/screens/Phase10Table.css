@@ -156,34 +156,55 @@
   border-radius: 50%;
   border: 2px solid var(--grey-border);
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .p10-ladder-chip--current {
   background: var(--violet);
   border-color: var(--violet);
+  color: #fff;
 }
 
 .p10-ladder-chip--done {
   background: var(--grey-fill);
   border-color: var(--grey-fill);
+  color: var(--muted-text);
 }
 
 .p10-ladder-chip--ahead {
   background: #fff;
   border-color: var(--grey-border);
+  color: var(--muted-text);
 }
+
+/* Opponent's current-phase chip: intentionally NOT a border-color override —
+   that fought the cascade with .p10-ladder-chip--current's own violet border
+   (equal specificity, declared later, silently won and mismatched the chip's
+   background whenever the same chip is also the local player's current phase,
+   e.g. turn one of every game). The ring is applied entirely via the inline
+   `boxShadow` in Phase10Table.tsx instead: an inner ring matching the card's
+   actual background (--surface, not --page-base — this chip sits on the white
+   table card, not the page) for breathing room, then the real opponent-color
+   ring outside it. This class intentionally has no rules of its own now aside
+   from documenting why — kept as a hook in case future non-color styling is
+   needed for "this chip is the opponent's."
+*/
 
 .p10-ladder-dots {
   display: flex;
-  gap: 3px;
-  min-height: 7px;
+  gap: 4px;
+  min-height: 11px;
 }
 
 .p10-ladder-dot {
-  width: 7px;
-  height: 7px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  border: 1px solid var(--ink);
+  border: 1px solid rgba(23, 23, 58, 0.25);
 }
 
 /* Fixed-height caption row — a non-breaking space keeps it from collapsing */

@@ -231,7 +231,12 @@ function PhaseLadder({
               onMouseEnter={() => setHovered(i)}
               onMouseLeave={() => setHovered(null)}
             >
-              <div className={`p10-ladder-chip p10-ladder-chip--${fill}`} />
+              <div
+                className={`p10-ladder-chip p10-ladder-chip--${fill}${i === opponentPhaseIdx ? ' p10-ladder-chip--opponent-here' : ''}`}
+                style={i === opponentPhaseIdx ? { boxShadow: `0 0 0 2px var(--surface), 0 0 0 4px ${opponentColor}` } : undefined}
+              >
+                {p.phase}
+              </div>
               <div className="p10-ladder-dots">
                 {i === localPhaseIdx && <span className="p10-ladder-dot" style={{ background: 'var(--violet)' }} />}
                 {i === opponentPhaseIdx && <span className="p10-ladder-dot" style={{ background: opponentColor }} />}
