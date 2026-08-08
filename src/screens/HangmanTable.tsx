@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RoomState } from '../types'
+import { isWordSolved } from '../games/hangman'
 import { TableHeader } from '../components/TableHeader'
+import { useSound } from '../hooks/useSound'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const PART_THRESHOLD = { head: 1, body: 2, armL: 3, armR: 4, legL: 5, legR: 6 }
@@ -37,12 +39,31 @@ export function HangmanTable({
   onLeave: () => void
 }) {
   const h = room.hangman
+  const { play } = useSound()
   const [wordInput, setWordInput] = useState('')
   const guesser = room.seats[h.guesserIdx]
   const setterIdx = h.guesserIdx === 0 ? 1 : 0
   const setter = room.seats[setterIdx]
   const iAmGuesser = guesser?.id === localSeatId
   const iAmSetter = setter?.id === localSeatId
+
+  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  // Hangman turns are signaled by guesserIdx (room.turnIdx is never touched for this game).
+  const soundSigRef = useRef({ guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, turnSignal: h.guesserIdx })
+
+  useEffect(() => {
+    const p = soundSigRef.current
+    if (h.wrong.length > p.wrongLen) {
+      play('letter-wrong')
+    } else if (h.guessed.length > p.guessedLen) {
+      play('letter-correct')
+    }
+    if (!p.over && h.over && isWordSolved(h.word, h.guessed)) {
+      play('round-win')
+    }
+    if (h.guesserIdx !== p.turnSignal) play('turn-start')
+    soundSigRef.current = { guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, turnSignal: h.guesserIdx }
+  }, [h.wrong.length, h.guessed.length, h.over, h.guesserIdx, h.word, h.guessed, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

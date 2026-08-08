@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import type { Phase10PublicState } from '../card-games/phase10/state'
 import { PHASES } from '../card-games/phase10/phases'
+import { useSound } from '../hooks/useSound'
 
 // ---- Props ----
 
@@ -38,6 +40,9 @@ export function Phase10Results({
   onRematch,
   onBackToShelf,
 }: Phase10ResultsProps) {
+  const { play } = useSound()
+  useEffect(() => { play('game-win') }, [])
+
   // Only render when the match is over
   if (!publicState.matchWinnerId) return null
 

@@ -1,9 +1,10 @@
-import { Fragment, useLayoutEffect, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RoomState, YCategory } from '../types'
 import { Y_CATEGORIES, Y_LABEL, Y_SUBLABEL, partitionDiceOrder, scoreCategory, upperTotal } from '../games/yahtzee'
 import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
+import { useSound } from '../hooks/useSound'
 
 export function YahtzeeTable({
   room, localSeatId, onRoll, onToggleHold, onScore, onOpenRules, onLeave,
@@ -17,6 +18,7 @@ export function YahtzeeTable({
   onLeave: () => void
 }) {
   const y = room.yahtzee
+  const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
   const displayVals = useDiceAnimation(y.dice)
@@ -32,6 +34,27 @@ export function YahtzeeTable({
 
   const rollLabel = y.dice.length === 0 ? 'Roll five' : y.rollsLeft > 0 ? `Roll again (${y.rollsLeft} left)` : 'No rolls left'
   const canRoll = isMyTurn && y.rollsLeft > 0
+
+  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  const valuesKey = y.dice.map((d) => d.val).join(',')
+  const selKey = y.dice.map((d) => d.sel).join(',')
+  const lastTurnRef = y.lastTurn ? `${y.lastTurn.name}:${y.lastTurn.category}:${y.lastTurn.points}` : ''
+  const soundSigRef = useRef({ valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, turnIdx: room.turnIdx })
+
+  useEffect(() => {
+    const p = soundSigRef.current
+    if (valuesKey !== p.valuesKey && y.dice.length > 0) {
+      play('dice-roll')
+    } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+      play('die-select')
+    }
+    if (lastTurnRef !== p.lastTurnRef && lastTurnRef !== '') {
+      if (y.lastTurn?.points === 50) play('hot-dice')
+      else play('bank-points')
+    }
+    if (room.turnIdx !== p.turnIdx) play('turn-start')
+    soundSigRef.current = { valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, turnIdx: room.turnIdx }
+  }, [valuesKey, selKey, lastTurnRef, y.dice.length, y.lastTurn, room.turnIdx, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

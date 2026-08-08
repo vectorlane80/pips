@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import type { RoomState } from '../types'
 import { TTT_MARKS } from '../games/ttt'
 import { TableHeader } from '../components/TableHeader'
+import { useSound } from '../hooks/useSound'
 
 export function TttTable({
   room, localSeatId, onPlay, onOpenRules, onLeave,
@@ -12,6 +14,7 @@ export function TttTable({
   onLeave: () => void
 }) {
   const t = room.ttt
+  const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
   const roundWinner = t.roundOver && t.winLine.length > 0 ? room.seats[t.board[t.winLine[0]]!] : null
@@ -20,6 +23,19 @@ export function TttTable({
       ? roundWinner.id === localSeatId ? 'You win this one!' : `${roundWinner.name} wins this one!`
       : "It's a draw — playing again."
     : null
+
+  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  const soundSigRef = useRef({ roundOver: t.roundOver, turnIdx: room.turnIdx })
+
+  useEffect(() => {
+    const p = soundSigRef.current
+    if (!p.roundOver && t.roundOver) {
+      play('round-win')
+    } else if (room.turnIdx !== p.turnIdx) {
+      play('turn-start')
+    }
+    soundSigRef.current = { roundOver: t.roundOver, turnIdx: room.turnIdx }
+  }, [t.roundOver, room.turnIdx, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
