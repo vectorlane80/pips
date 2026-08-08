@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type { Card, Rank, Suit } from '../card-engine/cards'
 import type { RummyPublicState } from '../card-games/rummy/state'
 import { currentPlayer } from '../card-engine/turn-engine'
-import { classifyMeld } from '../card-games/rummy/melds'
+import { classifyMeld, isAceHighRun } from '../card-games/rummy/melds'
 import { deadwood } from '../card-games/rummy/scoring'
-import { rankValue } from '../card-games/rummy/rank'
+import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
+import { RummyRulesOverlay } from './RummyRulesOverlay'
 import './RummyTable.css'
 
 // ---- Props ----
@@ -43,6 +44,16 @@ function getReachedCard(pile: Card[], index: number): { rank: string; suit: Excl
   return { rank: c.rank, suit: c.suit as Exclude<Suit, 'joker'> }
 }
 
+function sortMeldForDisplay(cards: Card[]): Card[] {
+  const allSameRank = cards.every((c) => c.rank === cards[0].rank)
+  if (allSameRank) {
+    const suitOrder: Record<string, number> = { spades: 0, hearts: 1, diamonds: 2, clubs: 3, joker: 4 }
+    return [...cards].sort((a, b) => suitOrder[a.suit] - suitOrder[b.suit])
+  }
+  const valueFn = isAceHighRun(cards) ? rankValueAceHigh : rankValue
+  return [...cards].sort((a, b) => valueFn(a.rank) - valueFn(b.rank))
+}
+
 function computeStatus(
   publicState: RummyPublicState,
   isMyTurn: boolean,
@@ -50,6 +61,7 @@ function computeStatus(
   localPlayerId: string,
   hoverIndex: number | null,
   hand: Card[],
+  justDrawn: Card | null,
 ): StatusLine {
   // Round over
   if (publicState.roundOver) {
@@ -104,6 +116,14 @@ function computeStatus(
         card: { rank: card.rank, suit: card.suit as Exclude<Suit, 'joker'> },
         post: ' \u2014 that card has to be used.',
       }
+    }
+  }
+
+  if (justDrawn) {
+    return {
+      pre: 'You drew the ',
+      card: { rank: justDrawn.rank, suit: justDrawn.suit as Exclude<Suit, 'joker'> },
+      post: '.',
     }
   }
 
@@ -193,9 +213,10 @@ function MeldCluster({ cards, ownerColor, ownerShadow }: {
   ownerColor?: string
   ownerShadow?: string
 }) {
+  const sorted = sortMeldForDisplay(cards)
   return (
     <div className="rummy-meld-cluster">
-      {cards.map((card, i) => (
+      {sorted.map((card, i) => (
         <PlayingCard
           key={card.id}
           rank={card.rank as Exclude<Rank, 'JOKER'>}
@@ -247,6 +268,7 @@ export function RummyTable({
 }: RummyTableProps) {
   // ---- Derived ----
   void localName // preserved in props for M4b wiring; unused in this presentational milestone
+  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
   const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && !publicState.roundOver
@@ -258,6 +280,9 @@ export function RummyTable({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'suit' | 'rank'>('suit')
+  const [justDrawn, setJustDrawn] = useState<Card | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const prevHandRef = useRef<Card[]>(hand)
 
   // ---- Effects ----
   // Clear selectedIds when hand changes in a way that invalidates the selection
@@ -273,12 +298,35 @@ export function RummyTable({
     }
   }, [publicState.obligatedCardId])
 
+  // Reset hoverIndex on every turn boundary
+  useEffect(() => {
+    setHoverIndex(null)
+  }, [publicState.turn.turnNumber])
+
+  // Clear justDrawn on every turn boundary
+  useEffect(() => {
+    setJustDrawn(null)
+  }, [publicState.turn.turnNumber])
+
+  // Detect single-card draws for "you drew the X" feedback
+  useEffect(() => {
+    const prev = prevHandRef.current
+    const diff = hand.length - prev.length
+    if (diff === 1 && publicState.turn.phase === 'discard' && !publicState.obligatedCardId) {
+      const newCard = hand.find((c) => !prev.some((pc) => pc.id === c.id))
+      if (newCard) setJustDrawn(newCard)
+    } else {
+      setJustDrawn(null)
+    }
+    prevHandRef.current = hand
+  }, [hand, publicState.turn.phase, publicState.obligatedCardId])
+
   // ---- Computed ----
   const sortedHand = useMemo(() => sortHand(hand, sortBy), [hand, sortBy])
 
   const status = useMemo(
-    () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand),
-    [publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand],
+    () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand, justDrawn),
+    [publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand, justDrawn],
   )
 
   const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId && publicState.roundWinnerId
@@ -332,7 +380,7 @@ export function RummyTable({
           </span>
         </div>
         <div className="rummy-header-actions">
-          <button type="button" className="btn pill-small" onClick={onOpenRules}>Rules</button>
+          <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
         </div>
       </div>
@@ -404,6 +452,7 @@ export function RummyTable({
 
             {/* Discard */}
             <div className="rummy-discard-group">
+              <div className="rummy-discard-caption">Discard · {pile.length} {pile.length === 1 ? 'card' : 'cards'}</div>
               <div className="rummy-discard-strip">
                 {pile.length > 0 ? (
                   pile.map((card, i) => {
@@ -538,6 +587,8 @@ export function RummyTable({
 
       {/* Footnote */}
       <p className="rummy-footnote">Your hand never leaves this device — only the play does.</p>
+
+      {rulesOpen && <RummyRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>
   )
 }

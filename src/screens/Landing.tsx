@@ -46,7 +46,7 @@ export function Landing({
               style={{ marginTop: 6 }}
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              placeholder="Ada"
+              placeholder="Player One"
               autoComplete="off"
             />
           </label>

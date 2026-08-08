@@ -137,7 +137,9 @@
 .rummy-centre-left {
   flex: 1 1 380px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: clamp(12px, 2vw, 20px);
 }
 
@@ -164,9 +166,17 @@
   color: var(--muted-text);
 }
 
+.rummy-discard-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 6px;
+}
+
 /* ---- Discard ---- */
 
 .rummy-discard-group {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
