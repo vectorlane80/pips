@@ -23,12 +23,14 @@ function totalCards(
       meldCards += cardCount(meld)
     }
   }
+  const layoffCards = pub.layoffs.reduce((sum, l) => sum + l.cards.length, 0)
   return (
     cardCount(rummy.stock) +
     cardCount(pub.discardPile) +
     cardCount(priv['p1'].hand) +
     cardCount(priv['p2'].hand) +
-    meldCards
+    meldCards +
+    layoffCards
   )
 }
 
@@ -42,6 +44,9 @@ function allUniqueCardIds(rummy: RummySession): Set<string> {
     for (const meld of rummy.session.publicState.melds[playerId]) {
       for (const card of meld.cards) ids.add(card.id)
     }
+  }
+  for (const l of rummy.session.publicState.layoffs) {
+    for (const card of l.cards) ids.add(card.id)
   }
   return ids
 }
@@ -107,6 +112,7 @@ function buildSession(config: {
     discardPile,
     stockCount: cardCount(stock),
     melds: config.melds ?? { p1: [], p2: [] },
+    layoffs: [],
     obligatedCardId: config.obligatedCardId ?? null,
     scores: config.scores ?? { p1: 0, p2: 0 },
     target: 100,
@@ -1376,5 +1382,167 @@ describe('Rummy integration harness', () => {
     expect(pub.scores['p2']).toBe(105)
     // Equal scores, player who went out wins the tiebreak
     expect(pub.matchWinnerId).toBe('p1')
+  })
+
+  // ── LAY_OFF: adding cards to an existing meld (yours or the opponent's) ──
+
+  it('LAY_OFF onto your own meld — extends it, still owned by you', () => {
+    // p1 meld on table: 5♣,5♦,5♥ (c4,c17,c30). p1 hand: 5♠ (c43) + filler.
+    const p1MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const used = new Set(['c4', 'c17', 'c30', 'c43', 'c50', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c43', 'c50'],
+      p2HandCardIds: [],
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: ['c43'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    // The original meld zone is untouched — the laid-off card stays a separate layoff entry.
+    expect(pub.melds['p1'][0].cards.map(c => c.id).sort()).toEqual(['c17', 'c30', 'c4'].sort())
+    expect(pub.layoffs).toHaveLength(1)
+    expect(pub.layoffs[0]).toMatchObject({ playerId: 'p1', targetPlayerId: 'p1', targetMeldIndex: 0 })
+    expect(pub.layoffs[0].cards.map(c => c.id)).toEqual(['c43'])
+    expect(result.rummy.session.privateStates['p1'].hand.cards.map(c => c.id)).toEqual(['c50'])
+    expect(totalCards(result.rummy)).toBe(52)
+  })
+
+  it('LAY_OFF onto the opponent\'s meld — scores to the layer, not the meld owner', () => {
+    // p1 already melded A♣,2♣,3♣ (c0,c1,c2 = value 6) earlier this round.
+    // p2's meld on the table: 5♣,5♦,5♥ (c4,c17,c30 = value 15), owned by p2.
+    // p1's only remaining card is 5♠ (c43) — laying it off onto p2's set goes p1 out,
+    // and the 5♠'s value (5) should count toward p1's score, not p2's.
+    const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const used = new Set(['c0', 'c1', 'c2', 'c4', 'c17', 'c30', 'c43', 'c5', 'c18', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c43'],
+      p2HandCardIds: ['c5', 'c18'],   // 6♣,6♦ → deadwood 12
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c43'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p2's original meld zone is untouched — the laid-off 5♠ renders on p1's side instead.
+    expect(pub.melds['p2'][0].cards.length).toBe(3)
+    expect(pub.layoffs).toHaveLength(1)
+    expect(pub.layoffs[0]).toMatchObject({ playerId: 'p1', targetPlayerId: 'p2', targetMeldIndex: 0 })
+    expect(pub.layoffs[0].cards.map(c => c.id)).toEqual(['c43'])
+    // p1: own meld (A-2-3♣ ace-low run, Ace=5 → 5+2+3=10) + laid-off 5♠ (5) = 15, no deadwood (hand empty)
+    // p2: own meld (15) - deadwood (6+6=12) = 3 — NOT credited for the 5♠
+    expect(pub.scores['p1']).toBe(15)
+    expect(pub.scores['p2']).toBe(3)
+    expect(totalCards(result.rummy)).toBe(52)
+  })
+
+  it('LAY_OFF rejected — player has not laid down a meld of their own yet', () => {
+    const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const used = new Set(['c4', 'c17', 'c30', 'c43', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c43'],
+      p2HandCardIds: [],
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c43'] })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('lay down a meld of your own')
+  })
+
+  it('LAY_OFF rejected — the added card does not form a valid meld with the target', () => {
+    const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const used = new Set(['c0', 'c1', 'c2', 'c4', 'c17', 'c30', 'c6', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c6'],   // 7♣ — unrelated to p2's set of 5s
+      p2HandCardIds: [],
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c6'] })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('cannot be added')
+  })
+
+  it('LAY_OFF chains indefinitely — either player can extend an already-extended meld', () => {
+    // p2's original meld: 5♣,6♣,7♣ (c4,c5,c6). p1 has a trivial meld of their own (required
+    // to lay off at all): A♦,2♦,3♦ (c13,c14,c15).
+    // p1 lays off 4♣ (c3) onto p2's run. Then p2 lays off 3♣ (c2) onto the SAME meld — which
+    // must be validated against the run as it now stands (3-4-5-6-7), not just the original
+    // 5-6-7 — proving the chain has no fixed depth.
+    const p1MeldCards = [cardMap('c13'), cardMap('c14'), cardMap('c15')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const p2MeldCards = [cardMap('c4'), cardMap('c5'), cardMap('c6')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const used = new Set(['c13', 'c14', 'c15', 'c4', 'c5', 'c6', 'c3', 'c2', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c3'],   // 4♣
+      p2HandCardIds: ['c2'],   // 3♣
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
+    })
+
+    const r1 = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c3'] })
+    expect(r1.outcome.ok).toBe(true)
+    expect(r1.rummy.session.publicState.melds['p2'][0].cards.length).toBe(3)   // still just the original 3
+    expect(r1.rummy.session.publicState.layoffs).toHaveLength(1)
+
+    // Hand the turn to p2 (LAY_OFF is turn-gated; direct index flip mirrors buildSession's own pattern).
+    const midSession = r1.rummy.session
+    const p2Turn = { ...midSession.publicState.turn, currentIndex: midSession.publicState.turn.playerOrder.indexOf('p2') }
+    const midRummy = { ...r1.rummy, session: { ...midSession, publicState: { ...midSession.publicState, turn: p2Turn } } }
+
+    const r2 = applyRummyAction(midRummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c2'] })
+    expect(r2.outcome.ok).toBe(true)
+
+    const pub = r2.rummy.session.publicState
+    expect(pub.melds['p2'][0].cards.length).toBe(3)   // original zone still untouched
+    expect(pub.layoffs).toHaveLength(2)
+    expect(pub.layoffs[0]).toMatchObject({ playerId: 'p1', targetPlayerId: 'p2', targetMeldIndex: 0 })
+    expect(pub.layoffs[1]).toMatchObject({ playerId: 'p2', targetPlayerId: 'p2', targetMeldIndex: 0 })
+    // p2's LAY_OFF above only succeeds because it's validated against the full 4-5-6-7 group
+    // (3 is only consecutive with 4, not with the original 5-6-7 alone) — that's the chain proof.
+    expect(totalCards(r2.rummy)).toBe(52)
   })
 })

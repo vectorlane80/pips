@@ -1,3 +1,4 @@
+import type { Card } from '../../card-engine/cards.ts'
 import type { Zone } from '../../card-engine/zones.ts'
 import type { TurnState } from '../../card-engine/turn-engine.ts'
 import type { HostSession } from '../../card-engine/sync.ts'
@@ -9,11 +10,28 @@ import { createHostSession } from '../../card-engine/sync.ts'
 
 export type RummyPhase = 'draw' | 'discard'
 
+// A card (or cards) laid off from a player's hand onto an existing meld — theirs or the
+// opponent's. Laid-off cards stay attributed to whoever played them (they render on the
+// LAYER's own side, not inside the target meld's cluster) but still count toward that meld's
+// validity and completeness. Chains indefinitely: each new lay-off targets the same original
+// (targetPlayerId, targetMeldIndex) and is checked against the FULL accumulated group so far
+// (see fullMeldCards) — e.g. opponent lays 5-6-7, I lay off a 4, opponent lays off a 3 against
+// my 4, and so on, with no limit.
+export interface RummyLayoff {
+  id: string
+  playerId: string          // who played these cards — whose side they render on, who scores them
+  targetPlayerId: string    // whose original meld (melds[targetPlayerId]) this extends
+  targetMeldIndex: number   // index into melds[targetPlayerId]
+  cards: Card[]
+}
+
 export interface RummyPublicState {
   turn: TurnState<RummyPhase>
   discardPile: Zone
   stockCount: number
-  melds: Record<string, Zone[]>          // playerId -> array of meld zones laid down so far this round
+  melds: Record<string, Zone[]>          // playerId -> the meld zones THEY originally laid down this round.
+                                            // Never mutated by a lay-off — see `layoffs` for those.
+  layoffs: RummyLayoff[]
   obligatedCardId: string | null          // if set, the current acting player must include this card id in a
                                             // LAY_DOWN_MELD before they may DISCARD_CARD this turn
   scores: Record<string, number>          // match score per player, accumulates across rounds
@@ -37,8 +55,30 @@ export type RummyAction =
                                                       // above/newer than it, matching Zone's documented convention
                                                       // that the last array index is the "top")
   | { type: 'LAY_DOWN_MELD'; cardIds: string[] }
+  | { type: 'LAY_OFF'; targetPlayerId: string; meldIndex: number; cardIds: string[] }
+                                                      // add card(s) from hand onto an existing meld — yours or
+                                                      // the opponent's — identified by (targetPlayerId, index
+                                                      // into publicState.melds[targetPlayerId]). Requires having
+                                                      // already laid down at least one meld of your own this round.
   | { type: 'DISCARD_CARD'; cardId: string }
   | { type: 'START_NEXT_ROUND' }
+
+// The current full set of cards in a meld group — its original zone plus every lay-off (by
+// either player) that has targeted it since. This is what a NEW lay-off's validity is checked
+// against, and what scoring uses for correct Ace-value context (ace-high run vs ace-low vs a
+// set of aces) — never just the original zone's cards once anything's been laid off onto it.
+export function fullMeldCards(
+  melds: Record<string, Zone[]>,
+  layoffs: RummyLayoff[],
+  targetPlayerId: string,
+  meldIndex: number,
+): Card[] {
+  const base = melds[targetPlayerId]?.[meldIndex]?.cards ?? []
+  const extensions = layoffs
+    .filter((l) => l.targetPlayerId === targetPlayerId && l.targetMeldIndex === meldIndex)
+    .flatMap((l) => l.cards)
+  return [...base, ...extensions]
+}
 
 export interface RummySession {
   session: HostSession<RummyPublicState, RummyPrivateState>
@@ -77,6 +117,7 @@ export function createRummyGame(playerIds: [string, string], seed: number): Rumm
     discardPile,
     stockCount: cardCount(stock),
     melds: { [playerIds[0]]: [], [playerIds[1]]: [] },
+    layoffs: [],
     obligatedCardId: null,
     scores: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
     target: TARGET_SCORE,

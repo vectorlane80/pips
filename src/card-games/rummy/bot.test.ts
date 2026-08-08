@@ -69,6 +69,7 @@ function buildSession(config: {
     discardPile,
     stockCount: cardCount(stock),
     melds: config.melds ?? { p1: [], p2: [] },
+    layoffs: [],
     obligatedCardId: config.obligatedCardId ?? null,
     scores: config.scores ?? { p1: 0, p2: 0 },
     target: 100,

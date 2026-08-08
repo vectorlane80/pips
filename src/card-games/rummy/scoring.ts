@@ -30,3 +30,26 @@ export function playerRoundScore(melds: Zone[], remainingHand: Card[]): number {
   const meldedTotal = melds.reduce((sum, meld) => sum + meldValue(meld.cards), 0)
   return meldedTotal - deadwood(remainingHand)
 }
+
+// Sum of point values, across every meld group on the table, for cards CONTRIBUTED by
+// `playerId` — i.e. cards they played themselves, whether into their own original meld or
+// laid off onto the other player's. Each group's `cards` must already be the FULL current set
+// for that meld (original zone + every lay-off it's received — see state.ts's fullMeldCards),
+// since a card's Ace value depends on the complete group it ends up in. `contributedBy` looks
+// up who actually played a given card id — this is what makes laying off score to the layer,
+// not to whoever originally owns the group.
+export function playerContributedMeldValue(
+  groups: { cards: Card[] }[],
+  contributedBy: (cardId: string) => string | undefined,
+  playerId: string,
+): number {
+  let total = 0
+  for (const group of groups) {
+    for (const card of group.cards) {
+      if (contributedBy(card.id) === playerId) {
+        total += meldedCardValue(card, group.cards)
+      }
+    }
+  }
+  return total
+}

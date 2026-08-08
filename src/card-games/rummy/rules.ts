@@ -2,27 +2,64 @@ import type { ActionOutcome, ActionValidator } from '../../card-engine/sync.ts'
 import { applyAction } from '../../card-engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../card-engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../card-engine/turn-engine.ts'
-import { moveCards, topCard, cardCount, createPlayerZone, recyclePile, type Zone } from '../../card-engine/zones.ts'
+import { moveCards, removeCardsById, topCard, cardCount, createPlayerZone, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
 import { classifyMeld, hasMeldIncluding } from './melds.ts'
-import { playerRoundScore } from './scoring.ts'
-import type { RummySession, RummyPublicState, RummyPrivateState, RummyAction, RummyPhase } from './state.ts'
-import { dealRound } from './state.ts'
+import { deadwood, playerContributedMeldValue } from './scoring.ts'
+import type { RummySession, RummyPublicState, RummyPrivateState, RummyAction, RummyPhase, RummyLayoff } from './state.ts'
+import { dealRound, fullMeldCards } from './state.ts'
+
+// Every meld group currently on the table, each with its FULL current cards (original zone +
+// any lay-offs it's received) — the unit scoring and Ace-value context operate over.
+function allMeldGroups(
+  melds: Record<string, Zone[]>,
+  layoffs: RummyLayoff[],
+): { targetPlayerId: string; meldIndex: number; cards: ReturnType<typeof fullMeldCards> }[] {
+  const groups: { targetPlayerId: string; meldIndex: number; cards: ReturnType<typeof fullMeldCards> }[] = []
+  for (const [ownerId, zones] of Object.entries(melds)) {
+    zones.forEach((_zone, meldIndex) => {
+      groups.push({ targetPlayerId: ownerId, meldIndex, cards: fullMeldCards(melds, layoffs, ownerId, meldIndex) })
+    })
+  }
+  return groups
+}
+
+// Who actually played a given card id — the zone owner if it's part of an original meld zone,
+// or whoever laid it off otherwise. Every meld card comes from exactly one of these two places.
+function contributorOf(
+  melds: Record<string, Zone[]>,
+  layoffs: RummyLayoff[],
+  cardId: string,
+): string | undefined {
+  for (const [ownerId, zones] of Object.entries(melds)) {
+    for (const zone of zones) {
+      if (zone.cards.some((c) => c.id === cardId)) return ownerId
+    }
+  }
+  for (const l of layoffs) {
+    if (l.cards.some((c) => c.id === cardId)) return l.playerId
+  }
+  return undefined
+}
 
 function finishRoundByGoingOut(
   publicState: RummyPublicState,
   privateStates: Record<string, RummyPrivateState>,
   playerId: string,
-  newMeldsForPlayer: Zone[],
+  newMelds: Record<string, Zone[]>,
+  newLayoffs: RummyLayoff[],
   newObligated: string | null,
   newDiscard?: Zone,
 ): ActionOutcome<RummyPublicState, RummyPrivateState> {
   const opponentId = publicState.turn.playerOrder.find((p) => p !== playerId)!
   const opponentHand = privateStates[opponentId].hand
 
-  const playerDelta = playerRoundScore(newMeldsForPlayer, [])   // going-out player's hand is empty
-  const opponentMelds = publicState.melds[opponentId] ?? []
-  const opponentDelta = playerRoundScore(opponentMelds, opponentHand.cards)
+  // Score by CONTRIBUTION, not by whose meld a card physically sits in — a card either player
+  // laid off onto the other's meld still scores to whoever played it.
+  const groups = allMeldGroups(newMelds, newLayoffs)
+  const contributedBy = (cardId: string) => contributorOf(newMelds, newLayoffs, cardId)
+  const playerDelta = playerContributedMeldValue(groups, contributedBy, playerId)   // going-out player's hand is empty, no deadwood
+  const opponentDelta = playerContributedMeldValue(groups, contributedBy, opponentId) - deadwood(opponentHand.cards)
 
   const newScores = {
     ...publicState.scores,
@@ -49,7 +86,8 @@ function finishRoundByGoingOut(
     ok: true,
     publicState: {
       ...publicState,
-      melds: { ...publicState.melds, [playerId]: newMeldsForPlayer },
+      melds: newMelds,
+      layoffs: newLayoffs,
       obligatedCardId: newObligated,
       ...(newDiscard ? { discardPile: newDiscard } : {}),
       scores: newScores,
@@ -89,6 +127,7 @@ function makeValidator(
           discardPile,
           stockCount: cardCount(newStock),
           melds: { [nextOrder[0]]: [], [nextOrder[1]]: [] },
+          layoffs: [],
           obligatedCardId: null,
           roundNumber: publicState.roundNumber + 1,
           roundOver: false,
@@ -196,16 +235,55 @@ function makeValidator(
       const meldZoneName = `meld-${publicState.melds[playerId]?.length ?? 0}`
       const { from: newHand, to: meldZone } = moveCards(myHand, createPlayerZone(playerId, meldZoneName, 'public'), action.cardIds)
       const newMeldsForPlayer = [...(publicState.melds[playerId] ?? []), meldZone]
+      const newMelds = { ...publicState.melds, [playerId]: newMeldsForPlayer }
       const newObligated = publicState.obligatedCardId && action.cardIds.includes(publicState.obligatedCardId)
         ? null
         : publicState.obligatedCardId
 
       if (cardCount(newHand) === 0) {
-        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, newMeldsForPlayer, newObligated)
+        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, newMelds, publicState.layoffs, newObligated)
       }
       return {
         ok: true,
-        publicState: { ...publicState, melds: { ...publicState.melds, [playerId]: newMeldsForPlayer }, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
+        publicState: { ...publicState, melds: newMelds, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
+        privateStates: { ...privateStates, [playerId]: { hand: newHand } },
+      }
+    }
+
+    if (action.type === 'LAY_OFF') {
+      if (publicState.turn.phase !== 'discard') return { ok: false, reason: 'draw first' }
+      if (!(publicState.melds[playerId]?.length)) {
+        return { ok: false, reason: 'lay down a meld of your own before laying off onto others' }
+      }
+      if (!Array.isArray(action.cardIds) || action.cardIds.length === 0) return { ok: false, reason: 'invalid cardIds' }
+      if (!publicState.melds[action.targetPlayerId]?.[action.meldIndex]) return { ok: false, reason: 'no such meld' }
+      const selected = myHand.cards.filter((c) => action.cardIds.includes(c.id))
+      if (selected.length !== action.cardIds.length) return { ok: false, reason: 'card not in hand' }
+      const currentFull = fullMeldCards(publicState.melds, publicState.layoffs, action.targetPlayerId, action.meldIndex)
+      const combined = [...currentFull, ...selected]
+      if (!classifyMeld(combined).valid) return { ok: false, reason: 'those cards cannot be added to that group' }
+
+      // Cards leave the hand but are NOT merged into the target meld's zone — they stay
+      // attributed to (and render on the side of) whoever laid them off. See RummyLayoff.
+      const { zone: newHand, removed } = removeCardsById(myHand, action.cardIds)
+      const newLayoff: RummyLayoff = {
+        id: `layoff-${publicState.layoffs.length}`,
+        playerId,
+        targetPlayerId: action.targetPlayerId,
+        targetMeldIndex: action.meldIndex,
+        cards: removed,
+      }
+      const newLayoffs = [...publicState.layoffs, newLayoff]
+      const newObligated = publicState.obligatedCardId && action.cardIds.includes(publicState.obligatedCardId)
+        ? null
+        : publicState.obligatedCardId
+
+      if (cardCount(newHand) === 0) {
+        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.melds, newLayoffs, newObligated)
+      }
+      return {
+        ok: true,
+        publicState: { ...publicState, layoffs: newLayoffs, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
     }
@@ -220,7 +298,7 @@ function makeValidator(
       const { from: newHand, to: newDiscard } = moveCards(myHand, publicState.discardPile, [action.cardId])
 
       if (cardCount(newHand) === 0) {
-        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.melds[playerId] ?? [], null, newDiscard)
+        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.melds, publicState.layoffs, null, newDiscard)
       }
       return {
         ok: true,
