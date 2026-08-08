@@ -699,3 +699,44 @@ of which fit the existing unions. Resolved as CHARTER.md's M0: widen
 both to `string` (pure type-level change, same category of move as the
 prior charter's `peer.ts` generalization) rather than either forking
 card-engine or leaking Phase-10 vocabulary into it.
+
+## Phase 10 cycle 1 — 2026-08-08
+
+- **Shipped:** M0 (`card-engine/cards.ts` `Suit`/`Rank` widened to
+  `string`, zero behavior change) + M0a (`src/card-games/phase10/`:
+  `deck.ts`/`phases.ts`/`classify.ts` — 108-card deck builder, the 10-
+  phase requirement table, and pure set/run/color-group classifiers with
+  wild substitution and a brute-force two-part partition search for
+  `classifyPhaseHand`).
+- **Delegation:** Codex reported usage-limit exhaustion on the live
+  availability probe at charter start ("try again at 6:51 PM") — used
+  `deepseek-v4-flash` for both the initial implementation and the review
+  fix round, per `/model-routing`'s fallback rule. No escalation asked.
+- **Verification:** re-ran `npx tsc -b --noEmit`, `npm test`, `npm run
+  build` myself after both DeepSeek reports, not just read its output.
+  Read the actual diffs line by line, including the `isValidRun`
+  span/gap/room algorithm and `classifyPhaseHand`'s partition search,
+  against the spec.
+- **Review:** a `claude --model sonnet --effort medium` adversarial pass
+  found one real bug — `isValidSet`/`isValidRun`/`isValidColorGroup`
+  never verified `naturals.length + wildCount === cards.length`, so a
+  Skip-kind card silently passed through as invisible padding (e.g. two
+  natural 5s plus a Skip card classified as a valid set of "3"). Chained
+  impact: `classifyPhaseHand` would have let a player lay down a phase
+  using a Skip card as a meld member, which is illegal. Also found a
+  smaller latent gap: the all-wild branch of `isValidRun` had no upper
+  bound tied to the `[1,12]` range (unreachable with this deck's 8 wilds
+  and max run of 9, but a real gap in the function's stated contract).
+  Both fixed in a follow-up dispatch, with 6 new test cases covering
+  Skip-card leakage into every predicate; re-verified independently
+  after the fix.
+- **Process note:** the first review dispatch (piped via a bash heredoc
+  into `claude -p`) produced badly truncated output (386 bytes, an
+  isolated closing sentence) for reasons that weren't fully diagnosed —
+  re-running the same review with the prompt written to a file first and
+  piped via `<` produced the complete, useful review. Worth remembering
+  for future dispatches in this repo: prefer `claude -p ... < promptfile`
+  over a heredoc-into-pipe construction.
+- **Continue?** Yes — proceeding straight to M0b (full rules engine)
+  without a check-in, per explicit user instruction ("you're in an
+  autonomous loop," no further questions).

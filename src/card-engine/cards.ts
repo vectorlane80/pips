@@ -1,5 +1,5 @@
-export type Suit = 'clubs' | 'diamonds' | 'hearts' | 'spades' | 'joker'
-export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'JOKER'
+export type Suit = string
+export type Rank = string
 
 export interface Card {
   id: string

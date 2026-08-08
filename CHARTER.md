@@ -12,19 +12,22 @@ on directly.
 Phase 10," asked for an isolated worktree, and asked for `/model-routing`
 and `/autonomous-dev-loop` by name. No charter sign-off wait.
 
-**Delegation (per `/model-routing`, checked live this session — `codex`,
-`deepseek`, and `claude` CLIs all present on `PATH`):** implementer is
-`codex exec` (defaults to `gpt-5.6-terra` at `low` effort per
-`~/.codex/config.toml`) for spec-locked implementation and test authoring;
-fallback to `deepseek -m deepseek-v4-flash` only if Codex reports
-quota/subscription exhaustion. Reviewer is a `claude --model sonnet
---effort medium` adversarial pass (never Codex for review, per the routing
-table's explicit prohibition). Lead (this session) never writes product
-code, writes every spec, independently re-verifies every claim, owns every
-architecture/security/design decision. This differs from the prior
-charter's DeepSeek+Opus split — that was a prior session's explicit
-one-off instruction; this session's explicit instruction is
-`/model-routing`, so its table governs.
+**Delegation (per `/model-routing`, checked live this session):**
+implementer is `codex exec` (`gpt-5.6-terra` @ low) for spec-locked
+implementation and test authoring — **but Codex reported usage-limit
+exhaustion on the live availability probe at charter start** ("hit your
+usage limit... try again at 6:51 PM"), so per the routing skill's
+fallback rule this run uses `deepseek -m deepseek-v4-flash` for
+implementation from cycle 1 onward, no escalation, no re-asking. Re-probe
+Codex each cycle; switch back only if it responds clean, per the skill's
+"availability is runtime state" guidance. Reviewer is `claude --model
+sonnet --effort medium` (confirmed live), never Codex for review per the
+table's explicit prohibition. Lead (this session) never writes product
+code, writes every spec, independently re-verifies every claim, owns
+every architecture/security/design decision. This differs from the prior
+charter's DeepSeek+Opus-review split — that was a prior session's
+explicit one-off instruction; this session's explicit instruction is
+`/model-routing`, so its table (and fallback rule) governs.
 
 **Scheduled safety net:** kept pending for the whole run, rescheduled at
 the end of every cycle while work remains, canceled only at wrap-up or a
