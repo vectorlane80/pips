@@ -1339,3 +1339,30 @@ worktree (`.claude/worktrees/phase10-deal-intro`, branch
   (always makes forward progress, correctly bounded) — all confirmed
   clean. The two real findings above were the only ones that survived
   scrutiny.
+
+## Deal-intro cycle 2 — 2026-08-08
+
+- **Shipped:** M2 — wired `DealIntro` into `RummyTable.tsx`. A ref
+  tracking the last-animated `roundNumber` shows the intro exactly once
+  per distinct round this component instance sees (covers the first
+  mount and every subsequent `START_NEXT_ROUND`, never re-fires on an
+  unrelated re-render like a card draw). Replaces the `.rummy-table-card`
+  contents with `DealIntro` while active, using Rummy's real `CardBack`
+  component; the existing their-side/centre/your-side JSX is untouched,
+  just wrapped.
+- **Shipped:** M3 — identical wiring into `Phase10Table.tsx`, using
+  `Phase10CardBack`.
+- **Delegation:** `deepseek-v4-flash` for both, dispatched in parallel
+  with each other and with M1's review (no file overlap between
+  `RummyTable.tsx`/`Phase10Table.tsx`/`DealIntro.tsx`).
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm test`
+  (469 passed)/`npm run build` for both; read both diffs line by line —
+  each is a minimal, correct, near-identical wrap of the existing render
+  tree, no existing JSX modified. No adversarial review dispatched for
+  either — simple prop-wiring into already-reviewed components, judged
+  low-risk (though per this project's own documented history of "just
+  wiring" judgment calls being wrong before, both diffs were read
+  carefully rather than skimmed).
+- **Continue?** Yes — mandatory live browser verification of both games
+  next, before shipping. Nothing in this charter has actually been
+  observed rendering yet.

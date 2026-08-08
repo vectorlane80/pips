@@ -6,6 +6,7 @@ import { currentPlayer } from '../card-engine/turn-engine'
 import { classifyMeld, isAceHighRun } from '../card-games/rummy/melds'
 import { deadwood } from '../card-games/rummy/scoring'
 import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
+import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
@@ -323,7 +324,21 @@ export function RummyTable({
   const [rulesOpen, setRulesOpen] = useState(false)
   const prevHandRef = useRef<Card[]>(hand)
 
+  // Fresh-round detection: show the deal intro exactly once per distinct
+  // roundNumber this component instance ever sees.
+  const introShownForRoundRef = useRef<number | null>(null)
+  const [showIntro, setShowIntro] = useState(false)
+
   // ---- Effects ----
+  // Show the deal intro on mount and on every START_NEXT_ROUND transition;
+  // never re-fires for the same round on an unrelated re-render.
+  useEffect(() => {
+    if (introShownForRoundRef.current !== publicState.roundNumber) {
+      introShownForRoundRef.current = publicState.roundNumber
+      setShowIntro(true)
+    }
+  }, [publicState.roundNumber])
+
   // Clear selectedIds when hand changes in a way that invalidates the selection
   useEffect(() => {
     setSelectedIds((prev) => prev.filter((id) => hand.some((c) => c.id === id)))
@@ -512,6 +527,17 @@ export function RummyTable({
 
       {/* Main table card */}
       <div className="rummy-table-card">
+        {showIntro ? (
+          <DealIntro
+            opponentName={opponentName}
+            opponentColor={opponentColor}
+            yourHandSize={hand.length}
+            opponentHandSize={opponentHandCount}
+            renderCardBack={(p) => <CardBack {...p} />}
+            onComplete={() => setShowIntro(false)}
+          />
+        ) : (
+        <>
         {/* Their side */}
         <div className="rummy-their-side">
           <div className="rummy-their-side-left">
@@ -749,6 +775,8 @@ export function RummyTable({
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Footnote */}
