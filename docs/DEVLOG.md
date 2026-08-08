@@ -740,3 +740,41 @@ card-engine or leaking Phase-10 vocabulary into it.
 - **Continue?** Yes — proceeding straight to M0b (full rules engine)
   without a check-in, per explicit user instruction ("you're in an
   autonomous loop," no further questions).
+
+## Phase 10 cycle 2 — 2026-08-08
+
+- **Shipped:** M0b — `src/card-games/phase10/{scoring,state,rules}.ts` +
+  `phase10.test.ts` (33 integration tests): draw (stock/discard top-only,
+  Skip-pickup rejection), lay-phase (whole phase from hand at once via
+  `classifyPhaseHand`, Skip-exclusion), hit (own/opponent groups, full-
+  accumulated-group validation, un-wrapped predicates), discard (going-
+  out, Skip-triggered opponent-turn-skip capped at one per round via
+  `skipNext`'s 2-player wraparound), stock recycling, blocked-round
+  handling, round scoring (opponent-only penalty), phase advancement
+  (persists across rounds, only mutated at round-end not at
+  `START_NEXT_ROUND`), and match-end (any player who laid Phase 10 that
+  hand is win-eligible, not only the one who went out — tiebreak by
+  lowest score).
+- **Delegation:** `deepseek-v4-flash` per the standing charter decision
+  (Codex still not re-probed this cycle — assumed still exhausted given
+  the "try again at 6:51 PM" estimate). Hit the known 25-tool-round
+  session cap partway through cleanup edits (same failure mode the prior
+  Rummy charter's M0b/M1/M4a hit) — recovered by checking the actual tree
+  state rather than trusting the truncated report: all intended files
+  existed, were syntactically complete, and `tsc`/`npm test`/`npm run
+  build` were all clean, so no work was lost or needed redoing.
+- **Verification:** independently re-ran `tsc -b --noEmit`, `npm test`
+  (433 passed), `npm run build`; read `state.ts` and all of `rules.ts`
+  line by line against `specs/03-m0b-phase10-rules-engine.md`, including
+  the two spots most likely to hide an off-by-one — the pre- vs post-
+  advancement `phaseIdx` read in the match-win check, and the three
+  going-out call sites' `newGroups`/`newHits`/`newHasLaidPhase` argument
+  wiring.
+- **Review:** a `claude --model sonnet --effort medium` adversarial pass
+  checked all 9 rule-correctness concerns plus the test suite for
+  vacuous assertions. No real defects found — confirmed the phaseIdx/
+  match-win logic is correct as designed (pre-advancement value, any
+  completer this hand is win-eligible), not just "looks plausible."
+- **Continue?** Yes — M1 (bot) already dispatched in parallel while this
+  review ran; proceeding through M3/M4/M5 next without a check-in, per
+  explicit user instruction.

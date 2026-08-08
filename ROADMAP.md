@@ -5,8 +5,6 @@ Prior charters (card-engine foundation, real Rummy) are complete — see
 This roadmap is for the current charter (Phase 10) — see `CHARTER.md`.
 
 ## Next up
-- [ ] M0b — full rules engine wired onto card-engine (draw/lay/hit/discard/
-      skip/going-out/recycling/scoring/phase advancement/match end)
 - [ ] M1 — house-player bot strategy
 - [ ] M3 — Phase 10 card-visual components
 - [ ] M4 — Phase10 screen + App.tsx/Landing.tsx wiring
@@ -15,13 +13,17 @@ This roadmap is for the current charter (Phase 10) — see `CHARTER.md`.
 (M2 folded away — `peer.ts` is already generic from Rummy's charter.)
 
 ## Done (this charter)
+- [cycle 2] M0b — `src/card-games/phase10/{scoring,state,rules}.ts` +
+  33-test integration harness: full rules engine (draw/lay-phase/hit/
+  discard/skip/going-out/stock-recycling/scoring/phase-advancement/
+  match-end) wired onto card-engine. No real defects found by review.
+  433 tests total.
 - [cycle 1] M0 (prep) — widened `card-engine/cards.ts` `Suit`/`Rank` to
   `string`, zero behavior change, existing tests unmodified and green.
   M0a — `src/card-games/phase10/{deck,phases,classify}.ts`: 108-card deck
   builder, 10-phase requirement table, pure set/run/color-group
   classifiers with wild substitution + partition search. One real
   Skip-card-leak bug found by review and fixed (see docs/DEVLOG.md).
-  396 tests total.
 
 ## Done (prior charters — see docs/DEVLOG.md for detail)
 - Card-engine foundation (M0-M6): cards/deck/rng/zones/turn-engine/sync/bot
