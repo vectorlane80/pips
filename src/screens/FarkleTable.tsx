@@ -32,29 +32,31 @@ export function FarkleTable({
   const canBank = canAct && onTable > 0 && (activeSeat && activeSeat.score > 0 ? true : onTable >= f.openingScore)
   const lastLog = f.log.length > 0 ? f.log[f.log.length - 1] : null
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  // Sound effects — diff room state transitions, but only for my own actions
+  // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
   const valuesKey = f.dice.map((d) => d.val).join(',')
   const selKey = f.dice.map((d) => d.sel).join(',')
-  const soundSigRef = useRef({ valuesKey, selKey, logLen: f.log.length, turnIdx: room.turnIdx, keptLen: f.kept.length })
+  const soundSigRef = useRef({ valuesKey, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
-    const valuesChanged = valuesKey !== p.valuesKey
-    const hotDice = valuesChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
-    const busted = f.log.length > p.logLen && f.log[f.log.length - 1].tone === 'farkle'
-    if (valuesChanged && f.dice.length > 0 && !busted) {
-      play(hotDice ? 'hot-dice' : 'dice-roll')
-    } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
-      play('die-select')
+    if (p.wasMyTurn) {
+      const valuesChanged = valuesKey !== p.valuesKey
+      const hotDice = valuesChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
+      const busted = f.log.length > p.logLen && f.log[f.log.length - 1].tone === 'farkle'
+      if (valuesChanged && f.dice.length > 0 && !busted) {
+        play(hotDice ? 'hot-dice' : 'dice-roll')
+      } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+        play('die-select')
+      }
+      if (f.log.length > p.logLen) {
+        const tone = f.log[f.log.length - 1].tone
+        if (tone === 'bank') play('bank-points')
+        else if (tone === 'farkle') play('farkle-bust')
+      }
     }
-    if (f.log.length > p.logLen) {
-      const tone = f.log[f.log.length - 1].tone
-      if (tone === 'bank') play('bank-points')
-      else if (tone === 'farkle') play('farkle-bust')
-    }
-    if (room.turnIdx !== p.turnIdx) play('turn-start')
-    soundSigRef.current = { valuesKey, selKey, logLen: f.log.length, turnIdx: room.turnIdx, keptLen: f.kept.length }
-  }, [valuesKey, selKey, room.turnIdx, f.log.length, f.kept.length, f.dice.length, play])
+    soundSigRef.current = { valuesKey, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
+  }, [valuesKey, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
 
   const trigIdx = f.finalTrigger ? room.seats.findIndex((s) => s.id === f.finalTrigger) : -1
 

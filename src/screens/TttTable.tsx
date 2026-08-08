@@ -24,18 +24,21 @@ export function TttTable({
       : "It's a draw — playing again."
     : null
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
-  const soundSigRef = useRef({ roundOver: t.roundOver, turnIdx: room.turnIdx })
+  // Sound effects — diff room state transitions, but only for my own actions
+  // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
+  const markCount = t.board.filter((c) => c !== null).length
+  const soundSigRef = useRef({ roundOver: t.roundOver, markCount, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
+    if (p.wasMyTurn && markCount > p.markCount) {
+      play('mark-place')
+    }
     if (!p.roundOver && t.roundOver) {
       play('round-win')
-    } else if (room.turnIdx !== p.turnIdx) {
-      play('turn-start')
     }
-    soundSigRef.current = { roundOver: t.roundOver, turnIdx: room.turnIdx }
-  }, [t.roundOver, room.turnIdx, play])
+    soundSigRef.current = { roundOver: t.roundOver, markCount, wasMyTurn: isMyTurn }
+  }, [t.roundOver, markCount, isMyTurn, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

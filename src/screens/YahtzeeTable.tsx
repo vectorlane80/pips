@@ -35,26 +35,28 @@ export function YahtzeeTable({
   const rollLabel = y.dice.length === 0 ? 'Roll five' : y.rollsLeft > 0 ? `Roll again (${y.rollsLeft} left)` : 'No rolls left'
   const canRoll = isMyTurn && y.rollsLeft > 0
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  // Sound effects — diff room state transitions, but only for my own actions
+  // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
   const valuesKey = y.dice.map((d) => d.val).join(',')
   const selKey = y.dice.map((d) => d.sel).join(',')
   const lastTurnRef = y.lastTurn ? `${y.lastTurn.name}:${y.lastTurn.category}:${y.lastTurn.points}` : ''
-  const soundSigRef = useRef({ valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, turnIdx: room.turnIdx })
+  const soundSigRef = useRef({ valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
-    if (valuesKey !== p.valuesKey && y.dice.length > 0) {
-      play('dice-roll')
-    } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
-      play('die-select')
+    if (p.wasMyTurn) {
+      if (valuesKey !== p.valuesKey && y.dice.length > 0) {
+        play('dice-roll')
+      } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+        play('die-select')
+      }
+      if (lastTurnRef !== p.lastTurnRef && lastTurnRef !== '') {
+        if (y.lastTurn?.points === 50) play('hot-dice')
+        else play('bank-points')
+      }
     }
-    if (lastTurnRef !== p.lastTurnRef && lastTurnRef !== '') {
-      if (y.lastTurn?.points === 50) play('hot-dice')
-      else play('bank-points')
-    }
-    if (room.turnIdx !== p.turnIdx) play('turn-start')
-    soundSigRef.current = { valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, turnIdx: room.turnIdx }
-  }, [valuesKey, selKey, lastTurnRef, y.dice.length, y.lastTurn, room.turnIdx, play])
+    soundSigRef.current = { valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn }
+  }, [valuesKey, selKey, lastTurnRef, y.dice.length, y.lastTurn, isMyTurn, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

@@ -47,23 +47,24 @@ export function HangmanTable({
   const iAmGuesser = guesser?.id === localSeatId
   const iAmSetter = setter?.id === localSeatId
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
-  // Hangman turns are signaled by guesserIdx (room.turnIdx is never touched for this game).
-  const soundSigRef = useRef({ guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, turnSignal: h.guesserIdx })
+  // Sound effects — diff room state transitions, but only for my own guesses
+  // (never for the opponent's turn — otherwise a fast bot spams sound).
+  const soundSigRef = useRef({ guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, wasGuesser: iAmGuesser })
 
   useEffect(() => {
     const p = soundSigRef.current
-    if (h.wrong.length > p.wrongLen) {
-      play('letter-wrong')
-    } else if (h.guessed.length > p.guessedLen) {
-      play('letter-correct')
+    if (p.wasGuesser) {
+      if (h.wrong.length > p.wrongLen) {
+        play('letter-wrong')
+      } else if (h.guessed.length > p.guessedLen) {
+        play('letter-correct')
+      }
     }
     if (!p.over && h.over && isWordSolved(h.word, h.guessed)) {
       play('round-win')
     }
-    if (h.guesserIdx !== p.turnSignal) play('turn-start')
-    soundSigRef.current = { guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, turnSignal: h.guesserIdx }
-  }, [h.wrong.length, h.guessed.length, h.over, h.guesserIdx, h.word, h.guessed, play])
+    soundSigRef.current = { guessedLen: h.guessed.length, wrongLen: h.wrong.length, over: h.over, wasGuesser: iAmGuesser }
+  }, [h.wrong.length, h.guessed.length, h.over, h.word, h.guessed, iAmGuesser, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

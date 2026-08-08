@@ -360,7 +360,8 @@ export function RummyTable({
     prevHandRef.current = hand
   }, [hand, publicState.turn.phase, publicState.obligatedCardId])
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  // Sound effects — diff room state transitions, but only for my own actions
+  // (never for the opponent's turn — otherwise a fast bot spams sound).
   const meldCount = Object.values(publicState.melds).reduce(
     (total, zones) => total + zones.reduce((n, z) => n + z.cards.length, 0),
     0,
@@ -368,30 +369,30 @@ export function RummyTable({
   const stockCount = publicState.stockCount
   const discardLen = publicState.discardPile.cards.length
   const layoffCount = publicState.layoffs.length
-  const turnIndex = publicState.turn.currentIndex
   const soundSigRef = useRef({
     stockCount, discardLen, meldCount, layoffCount,
-    roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+    roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
   })
   const noticeSeenRef = useRef(!!notice)
 
   useEffect(() => {
     const p = soundSigRef.current
-    if (stockCount > p.stockCount) {
-      play('shuffle')
-    } else if (stockCount < p.stockCount) {
-      play('card-draw')
-    } else if (discardLen < p.discardLen) {
-      play('card-draw')
-    } else if (discardLen > p.discardLen) {
-      play('card-play')
-    } else if (meldCount > p.meldCount || layoffCount > p.layoffCount) {
-      play('card-play')
+    if (p.wasMyTurn) {
+      if (stockCount > p.stockCount) {
+        play('shuffle')
+      } else if (stockCount < p.stockCount) {
+        play('card-draw')
+      } else if (discardLen < p.discardLen) {
+        play('card-draw')
+      } else if (discardLen > p.discardLen) {
+        play('card-play')
+      } else if (meldCount > p.meldCount || layoffCount > p.layoffCount) {
+        play('card-play')
+      }
     }
     if (!p.roundOver && publicState.roundOver && publicState.roundWinnerId !== null) {
       play('round-win')
     }
-    if (turnIndex !== p.turnIndex) play('turn-start')
     if (notice && !noticeSeenRef.current) {
       play('error')
       noticeSeenRef.current = true
@@ -400,9 +401,9 @@ export function RummyTable({
     }
     soundSigRef.current = {
       stockCount, discardLen, meldCount, layoffCount,
-      roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+      roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
     }
-  }, [stockCount, discardLen, meldCount, layoffCount, publicState.roundOver, publicState.roundWinnerId, turnIndex, notice, play])
+  }, [stockCount, discardLen, meldCount, layoffCount, publicState.roundOver, publicState.roundWinnerId, isMyTurn, notice, play])
 
   // ---- Computed ----
   const sortedHand = useMemo(() => sortHand(hand, sortBy), [hand, sortBy])

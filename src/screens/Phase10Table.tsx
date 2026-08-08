@@ -320,7 +320,8 @@ export function Phase10Table({
     prevHandRef.current = hand
   }, [hand, publicState.turn.phase])
 
-  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  // Sound effects — diff room state transitions, but only for my own actions
+  // (never for the opponent's turn — otherwise a fast bot spams sound).
   const groupCount = Object.values(publicState.groups).reduce(
     (total, gs) => total + gs.reduce((n, g) => n + g.zone.cards.length, 0),
     0,
@@ -328,30 +329,30 @@ export function Phase10Table({
   const stockCount = publicState.stockCount
   const discardLen = publicState.discardPile.cards.length
   const hitCount = publicState.hits.length
-  const turnIndex = publicState.turn.currentIndex
   const soundSigRef = useRef({
     stockCount, discardLen, groupCount, hitCount,
-    roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+    roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
   })
   const noticeSeenRef = useRef(!!notice)
 
   useEffect(() => {
     const p = soundSigRef.current
-    if (stockCount > p.stockCount) {
-      play('shuffle')
-    } else if (stockCount < p.stockCount) {
-      play('card-draw')
-    } else if (discardLen < p.discardLen) {
-      play('card-draw')
-    } else if (discardLen > p.discardLen) {
-      play('card-play')
-    } else if (groupCount > p.groupCount || hitCount > p.hitCount) {
-      play('card-play')
+    if (p.wasMyTurn) {
+      if (stockCount > p.stockCount) {
+        play('shuffle')
+      } else if (stockCount < p.stockCount) {
+        play('card-draw')
+      } else if (discardLen < p.discardLen) {
+        play('card-draw')
+      } else if (discardLen > p.discardLen) {
+        play('card-play')
+      } else if (groupCount > p.groupCount || hitCount > p.hitCount) {
+        play('card-play')
+      }
     }
     if (!p.roundOver && publicState.roundOver && publicState.roundWinnerId !== null) {
       play('round-win')
     }
-    if (turnIndex !== p.turnIndex) play('turn-start')
     if (notice && !noticeSeenRef.current) {
       play('error')
       noticeSeenRef.current = true
@@ -360,9 +361,9 @@ export function Phase10Table({
     }
     soundSigRef.current = {
       stockCount, discardLen, groupCount, hitCount,
-      roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+      roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
     }
-  }, [stockCount, discardLen, groupCount, hitCount, publicState.roundOver, publicState.roundWinnerId, turnIndex, notice, play])
+  }, [stockCount, discardLen, groupCount, hitCount, publicState.roundOver, publicState.roundWinnerId, isMyTurn, notice, play])
 
   // ---- Computed ----
   const sortedHand = useMemo(() => sortHandForDisplay(hand), [hand])

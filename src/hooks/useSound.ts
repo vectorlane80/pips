@@ -10,7 +10,6 @@ import cardPlay from '../assets/sounds/card-play.mp3'
 import shuffle from '../assets/sounds/shuffle.mp3'
 import letterCorrect from '../assets/sounds/letter-correct.mp3'
 import letterWrong from '../assets/sounds/letter-wrong.mp3'
-import turnStart from '../assets/sounds/turn-start.mp3'
 import roundWin from '../assets/sounds/round-win.mp3'
 import gameWin from '../assets/sounds/game-win.mp3'
 import error from '../assets/sounds/error.mp3'
@@ -18,7 +17,7 @@ import error from '../assets/sounds/error.mp3'
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'mark-place' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
-  | 'letter-wrong' | 'turn-start' | 'round-win' | 'game-win' | 'error'
+  | 'letter-wrong' | 'round-win' | 'game-win' | 'error'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -32,7 +31,6 @@ const SOUND_FILES: Record<SoundName, string> = {
   'shuffle': shuffle,
   'letter-correct': letterCorrect,
   'letter-wrong': letterWrong,
-  'turn-start': turnStart,
   'round-win': roundWin,
   'game-win': gameWin,
   'error': error,
