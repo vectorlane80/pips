@@ -1,3 +1,5 @@
+import { Wordmark } from './Wordmark'
+
 export function TableHeader({
   gameLabel, gameColor, meta, onRules, onLeave,
 }: {
@@ -10,7 +12,7 @@ export function TableHeader({
   return (
     <div className="header-row">
       <div className="header-left">
-        <span style={{ fontWeight: 700, fontSize: 24 }}>Pips</span>
+        <Wordmark small onClick={onLeave} />
         <span style={{ fontWeight: 700, fontSize: 20, color: gameColor }}>{gameLabel}</span>
         <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--muted-text)' }}>{meta}</span>
       </div>

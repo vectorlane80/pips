@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
+import { Wordmark } from '../components/Wordmark'
 
 export function RummyRoom({
   code, localName, notice, onAddHouseBot, onLeave,
@@ -24,7 +25,7 @@ export function RummyRoom({
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
       <div className="header-row">
         <div className="header-left">
-          <span style={{ fontWeight: 700, fontSize: 24 }}>Pips</span>
+          <Wordmark small onClick={onLeave} />
           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--muted-text)' }}>Rummy table</span>
         </div>
         <div className="header-actions">

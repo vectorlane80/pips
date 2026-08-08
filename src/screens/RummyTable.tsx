@@ -7,6 +7,7 @@ import { classifyMeld, isAceHighRun } from '../card-games/rummy/melds'
 import { deadwood } from '../card-games/rummy/scoring'
 import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
+import { Wordmark } from '../components/Wordmark'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
 import './RummyTable.css'
 
@@ -428,7 +429,7 @@ export function RummyTable({
       {/* Header */}
       <div className="rummy-header">
         <div className="rummy-header-left">
-          <span className="rummy-brand">Pips</span>
+          <Wordmark small onClick={onLeave} />
           <span className="rummy-game-label">Rummy</span>
           <span className="rummy-peer-strip">
             <span

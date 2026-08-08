@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { BotDifficulty, Game, RoomState, Seat } from '../types'
 import { GAME_COLOR, GAME_LABEL, GAME_MAX_SEATS } from '../types'
 import { SeatAvatar } from '../components/SeatAvatar'
+import { Wordmark } from '../components/Wordmark'
 
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
 const DIFFICULTIES: BotDifficulty[] = ['easy', 'medium', 'hard']
@@ -35,7 +36,7 @@ export function Room({
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
       <div className="header-row">
         <div className="header-left">
-          <span style={{ fontWeight: 700, fontSize: 24 }}>Pips</span>
+          <Wordmark small onClick={onLeave} />
           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--muted-text)' }}>{GAME_LABEL[room.game]} table</span>
         </div>
         <div className="header-actions">
