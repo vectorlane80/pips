@@ -5,11 +5,12 @@ Prior charters (card-engine foundation, real Rummy) are complete — see
 This roadmap is for the current charter (Phase 10) — see `CHARTER.md`.
 
 ## Next up
-- [ ] M5 — `docs/phase10.md`
-
-(M2 folded away — `peer.ts` is already generic from Rummy's charter.)
+(none — charter complete)
 
 ## Done (this charter)
+- [cycle 6] M5 — `docs/phase10.md`: full documentation of rules,
+  trust-boundary architecture, bot strategy, transport/session wiring,
+  UI, all four real defects found and fixed, and a file map.
 - [cycle 5] M4 — Phase10Table/.css/Room/Results/RulesOverlay screens +
   full App.tsx/Landing.tsx wiring (`P10-` room codes). Two real defects
   found by review and fixed: a `groupPhaseNumber` off-by-one (fixed by

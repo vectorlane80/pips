@@ -910,3 +910,100 @@ card-engine or leaking Phase-10 vocabulary into it.
   confirming the M0 `Suit`/`Rank` widening and all of M4's wiring
   changed nothing about the existing games.
 - **Continue?** Yes — M5 (documentation) is the last milestone.
+
+## Phase 10 cycle 6 — 2026-08-08
+
+- **Shipped:** M5 — `docs/phase10.md`. Written directly rather than
+  delegated (a synthesis task, not an implementation one — same
+  precedent as the prior charter's own M5/M6). Covers the one
+  card-engine touch (widening `Suit`/`Rank`), the rules as implemented,
+  the trust-boundary architecture, the bot strategy, the transport/
+  session wiring (reusing Rummy's already-generalized `peer.ts` and its
+  documented closure-staleness discipline), the UI, all four real
+  defects found across the run with their fixes, and a file map.
+- **Continue?** No — this is the last milestone. Wrapping up.
+
+## Wrap-up — 2026-08-08 (Charter 3: Phase 10)
+
+Charter complete. All milestones (M0, M0a, M0b, M1, M3, M4, M5 — M2
+folded away since Rummy's charter had already generalized `peer.ts`)
+shipped across 6 cycles, fully unattended per the user's instruction,
+in an isolated git worktree (`.claude/worktrees/phase10`, branch
+`worktree-phase10`). Final state: 458 tests, `npx tsc -b --noEmit` and
+`npm run build` clean, Phase 10 playable end to end in the running
+app — verified live in a real browser (host-vs-bot, a full draw/
+discard/bot-turn cycle, no console errors), with Farkle and Rummy
+regression-checked in the same session.
+
+**Delegation per `/model-routing`** (a deliberate departure from the
+prior Rummy charter's user-specified DeepSeek+Opus split, since this
+session's explicit instruction was `/model-routing` itself): Codex
+reported usage-limit exhaustion on the live availability probe at
+charter start, so per the routing skill's fallback rule this entire
+run used `deepseek-v4-flash` for implementation and `claude --model
+sonnet --effort medium` for adversarial review — no escalation, no
+re-asking, exactly as the fallback rule specifies. Every dispatch was a
+fully decision-locked spec (algorithms, exact data shapes, exact test
+cases) written by this session before delegating, per the loop's
+core discipline that spec precision is the main quality lever.
+
+**Four real defects found across the run, none of them cosmetic:**
+1. M0a: `isValidSet`/`isValidRun`/`isValidColorGroup` let a Skip card
+   silently pass through as invisible padding inside an otherwise-valid
+   group (no check that every card was accounted for as natural-or-
+   wild).
+2. M1's review (checking the bot against the real validator, not its
+   own intent comments): a genuine engine soft-lock, not a bot bug —
+   stock empty plus a lone Skip on the discard pile left NO legal move
+   for anyone, human or bot. Fixed at the actual root cause in
+   `rules.ts`, not papered over in the bot.
+3. M4's review: a UI-side phase-number inference had a real off-by-one
+   at the Phase 9/10 boundary, traced to a genuine gap in the engine's
+   own data model (`Phase10Group` didn't store which phase it was laid
+   for) — fixed by adding the missing field rather than patching the
+   inference further, even though it meant touching the already-
+   committed `state.ts`/`rules.ts` a second time.
+4. M4's review, same pass: the stock pile was wrongly unclickable
+   whenever empty, even though the engine treats that as a fully legal
+   draw trigger — a real dead-end for a live player in an edge state.
+
+**Two large dispatches (M0b, M3, and both halves of M4) hit the known
+25-tool-round DeepSeek session cap mid-task.** In every case, checking
+the actual tree state (not the truncated report) showed the real work
+was either already complete and correct, or missing only a small,
+well-understood remainder — recovered each time by either confirming
+completeness directly or finishing the small remainder by hand (a
+content-only rules-overlay file, and the render-branch/join-routing/
+Landing.tsx tail end of the App.tsx wiring) rather than spending a full
+extra dispatch round-trip on work that was mechanical and low-risk once
+the pattern was established from repeated reading of Rummy's equivalent
+code.
+
+**One tooling pitfall worth recording for future sessions in this
+repo:** the harness's default dev-server launch (`.claude/launch.json`'s
+`pips-dev` config) resolves its working directory to the main repo
+checkout, not the current git worktree — so `preview_start` silently
+served stale code from `main` during this run's browser smoke test
+(caught only because the Phase 10 shelf tile simply didn't appear).
+Worked around by starting `vite` manually inside the worktree on a
+second port and attaching to it directly. A future session working in
+a worktree should verify which directory a launch-config dev server is
+actually serving from before trusting what it renders.
+
+**Delegation split honored throughout:** DeepSeek CLI wrote effectively
+all product code and tests from fully decision-locked specs; Sonnet
+adversarial-review subagents ran every dispatched review; this session
+(Sonnet, as lead) wrote every spec, made every architecture/security/
+UX decision, independently re-verified every claim (never trusting a
+sub-agent's self-report), and wrote the final documentation and this
+wrap-up directly.
+
+**What's next** (a future charter, not started here): the design
+handoff's own undesigned edges carried forward unchanged from Rummy's
+precedent (host migration/reconnection), plus whatever the next card
+game on `docs/card-engine.md`'s original list turns out to be (Golf,
+Crazy Eights, Hearts, Spades — Phase 10 is now built).
+
+**Continue?** No — charter's definition of done is met. Wrapping up.
+No push to GitHub, no merge to `main` — both need explicit user
+confirmation in a later message, per standing project policy.
