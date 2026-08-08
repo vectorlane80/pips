@@ -670,3 +670,32 @@ scratch again.
 
 **Continue?** No — charter's definition of done is met (see
 `CHARTER.md`). Wrapping up. Scheduled safety-net wakeup canceled.
+
+## Charter 3: Phase 10 — started 2026-08-08
+
+New charter, see `CHARTER.md`. Pre-approved, unattended, in an isolated
+worktree (`.claude/worktrees/phase10`, branch `worktree-phase10`) per
+explicit user instruction. Delegation per `/model-routing` this time
+(not the prior charter's DeepSeek+Opus override): `codex exec` for
+implementation/tests, `claude --model sonnet --effort medium` for
+adversarial review, this session (Sonnet) as lead — spec-writing,
+independent verification, and every architecture/security decision.
+
+Official rules confirmed live from phase10rules.com at charter start
+(deck composition, the 10 phases, scoring table) and cross-checked
+against the design handoff's own phase table
+(`Design Handoff/design_handoff_pips 2/PHASE10.md`) — one discrepancy
+found and resolved in the design handoff's favor: Phase 10 itself is
+"1 set of 5 + 1 set of 3", not "1 set of 4 + 1 set of 3" (an initial
+web-scrape summary had this wrong; the design handoff's table and the
+actual official rule agree).
+
+Key architectural finding before any code was written: `card-engine/
+cards.ts`'s `Suit`/`Rank` are closed literal unions sized for a standard
+52-card deck, and `zones.ts`'s `Zone.cards: Card[]` is hardcoded to that
+type — there's no generic-over-card-shape escape hatch. Phase 10 needs
+colors instead of suits, numbers to 12, and Skip/Wild pseudo-cards none
+of which fit the existing unions. Resolved as CHARTER.md's M0: widen
+both to `string` (pure type-level change, same category of move as the
+prior charter's `peer.ts` generalization) rather than either forking
+card-engine or leaking Phase-10 vocabulary into it.

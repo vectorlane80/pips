@@ -1,204 +1,224 @@
-# Charter: Real Rummy (Pips)
+# Charter: Phase 10 (Pips)
 
 **Mode:** directed
-**Started:** 2026-08-07
-**Supersedes:** the previous "card-engine foundation" charter (complete, see
-`docs/card-engine.md` and the devlog entries through the 2026-08-07 wrap-up).
-That charter's deliverable — `src/card-engine/*` — is the dependency this one
-builds on, unchanged except where §Ambiguity resolutions below explicitly
-calls out a generalization.
+**Started:** 2026-08-08
+**Supersedes:** the "Real Rummy" charter (complete, see `docs/rummy.md` and
+the devlog's 2026-08-07 wrap-up). That charter's deliverables —
+`src/card-engine/*` (unchanged except §Ambiguity resolution 1 below) and the
+generalized `src/net/peer.ts` transport — are dependencies this one builds
+on directly.
 
-**Pre-approved:** yes — user said "go ahead and implement" plus explicitly
-asked for `/autonomous-dev-loop`, `/model-routing`, and a scheduled `/loop`
-for usage-limit recovery. No charter sign-off wait; runs unattended.
+**Pre-approved:** yes — user explicitly said "execute the addition of
+Phase 10," asked for an isolated worktree, and asked for `/model-routing`
+and `/autonomous-dev-loop` by name. No charter sign-off wait.
 
-**Delegation (explicit user instruction, same as the prior charter):**
-implementer is the DeepSeek CLI (`deepseek-shell` skill; `deepseek-v4-pro`
-for substantial slices, `deepseek-v4-flash` for narrow/fix slices), reviewer
-is a Claude sub-agent on `opus`. Lead (this session) never writes product
-code, independently re-verifies everything, owns every architecture/security/
-design decision.
+**Delegation (per `/model-routing`, checked live this session — `codex`,
+`deepseek`, and `claude` CLIs all present on `PATH`):** implementer is
+`codex exec` (defaults to `gpt-5.6-terra` at `low` effort per
+`~/.codex/config.toml`) for spec-locked implementation and test authoring;
+fallback to `deepseek -m deepseek-v4-flash` only if Codex reports
+quota/subscription exhaustion. Reviewer is a `claude --model sonnet
+--effort medium` adversarial pass (never Codex for review, per the routing
+table's explicit prohibition). Lead (this session) never writes product
+code, writes every spec, independently re-verifies every claim, owns every
+architecture/security/design decision. This differs from the prior
+charter's DeepSeek+Opus split — that was a prior session's explicit
+one-off instruction; this session's explicit instruction is
+`/model-routing`, so its table governs.
 
-**Scheduled safety net:** a wakeup is kept pending for the whole run — not
-just armed once at setup — specifically so a session usage-limit reset
-doesn't kill the run silently. Rescheduled at the end of every cycle while
-work remains; canceled only at genuine wrap-up or a blocking pause.
+**Scheduled safety net:** kept pending for the whole run, rescheduled at
+the end of every cycle while work remains, canceled only at wrap-up or a
+genuine blocking pause.
+
+**Worktree:** all work happens in the git worktree at
+`.claude/worktrees/phase10` (branch `worktree-phase10`), entered via
+`EnterWorktree` per the user's explicit "open an isolated worktree"
+instruction. Commits land on `worktree-phase10` only. No push to GitHub
+and no merge into `main` without explicit user confirmation in chat —
+same standing project policy carried over from the prior charter.
 
 ## Target user
-Two people (or one person + the house bot) who pick Rummy off the shelf and
-want to actually play a hand — draw, meld, discard, go out, see a score —
-not look at a mockup of one.
+Two people (or one person + the house bot) who pick Phase 10 off the shelf
+and want to play real hands — draw, lay a phase, hit, discard, skip an
+opponent, work up the phase ladder to Phase 10 — not look at a mockup.
 
 ## Core use case
-A complete, real two-player Rummy match, playable end to end in the running
-app over the existing serverless PeerJS architecture, matching the visual
-and interaction design in the handoff bundle
-(`Design Handoff/design_handoff_pips 2/RUMMY.md`).
+A complete, real two-player Phase 10 match, playable end to end in the
+running app over the existing serverless PeerJS architecture, matching the
+visual and interaction design in
+`Design Handoff/design_handoff_pips 2/PHASE10.md`, and the official rules
+at phase10rules.com (deck composition, the 10 phases in order, scoring
+table, skip/wild mechanics) as confirmed at charter start.
 
 ## Non-goals
-- **Laying off** onto an existing meld (adding a card to a meld already on
-  the table). The design doc itself says this "isn't in the design yet" —
-  deferred, not an oversight. A hand can still be completed and scored
-  without it; it's a strict improvement for later, not a blocker now.
-- **Rummy variants** beyond the one described (no jokers, no wild cards, no
-  Gin-style knocking, no Contract-Rummy sequencing across hands). Standard
-  draw/meld/discard Rummy only.
-- **Host migration on disconnect.** If the host (who holds the only copy of
-  the stock/discard/hidden state) drops mid-hand, the hand cannot continue —
-  this is a known, documented limitation of the serverless architecture
-  itself, not something this charter solves. See ambiguity resolution below
-  for exactly what *does* happen.
-- **More than 2 players.** Rummy is a fixed 2-player game in this design
-  (unlike Farkle/Yahtzee's up-to-8 scaling) — matches the shelf tile's own
-  "2 players" label already shown in the design handoff.
-- **Difficulty tiers for the bot.** One competent house player, not
-  easy/medium/hard — Rummy's bot-strategy space (which melds to chase, what
-  to discard) doesn't have the same natural difficulty knobs Farkle's bank
-  threshold or Yahtzee's hold logic did; a single reasonable strategy is in
-  scope, tiering is not.
-- **Touching the visual design system** beyond what Rummy's card visuals
-  require (a new card-face component). `tokens.css`/`components.css` stay
-  as they are; anything Rummy-specific lives in its own screen/component.
+- **More than 2 players.** Like Rummy (not like Farkle/Yahtzee's 2–8), the
+  design handoff's layout shows exactly one opponent band, no
+  player-count picker. Matches the shelf tile's expected "2 players" note.
+- **Reach-in on the discard pile.** PHASE10.md is explicit: "top card
+  only — no reach-in, unlike Rummy" — a real rule difference, not an
+  oversight to fix.
+- **Difficulty tiers for the bot.** One competent house player, same
+  precedent as Rummy.
+- **Touching the visual design system** beyond Phase 10's own card-face
+  component and screen. `tokens.css`/`components.css` stay as-is.
+- **Host migration on disconnect.** Same documented limitation as Rummy —
+  see ambiguity resolution below.
 
 ## Milestones
-- M0: real Rummy rules on `src/card-games/rummy/` — extend the existing
-  minimal harness (`state.ts`, `rules.ts` from the prior charter) with meld
-  validation (sets, runs), the discard reach-in mechanic with its
-  must-use-that-card obligation, going-out detection, deadwood scoring,
-  stock recycling via the already-built `recyclePile`, and multi-round match
-  scoring against a target. Tests for all of it.
-- M1: a real house-player bot strategy for Rummy on the existing
-  `card-engine/bot.ts` seam — greedy meld-seeking, sensible discard choice,
-  reasonable stock-vs-discard decision. One strategy, tested via the same
-  `runRummyBotTurn` harness pattern the prior charter proved.
-- M2: generalize `src/net/peer.ts`'s `createHost`/`joinHost` to be
-  payload-generic (type parameters instead of hardcoded dice-game
-  `Action`/`RoomState` imports) so Rummy can reuse the same PeerJS transport
-  without duplicating connection plumbing — with the existing four games'
-  behavior explicitly regression-verified unchanged (typecheck, build, and a
-  manual browser smoke test of at least one existing game).
-- M3: the Rummy card-visual component (`PlayingCard` or similar) matching
-  the design handoff's exact measurements — rank/suit, suit coloring, sizes/
-  radii/borders/shadows for hand cards, meld cards, discard-pile cards, and
-  the card-back fan.
-- M4: the `RummyTable` screen (three-band layout: their side / centre /
-  your side), the discard reach-in hover/select interaction with its
-  status-line copy pattern, sort toggle, lay-down/discard actions, header
-  connection-status dot — plus wiring: `'rummy'` added to the game shelf,
-  a Rummy room/host/join flow in `App.tsx` using M2's generalized transport,
-  and hookup to the existing `Results` screen pattern for match end. Browser
-  smoke test of a real turn including the reach-in interaction, host-vs-bot.
-- M5: documentation — a new `docs/rummy.md` (or an addition to
-  `docs/card-engine.md`, decided once it's clear which reads better) laying
-  out the rules implemented, the bot's strategy, the transport
-  generalization, and every deferred/limited item (laying off, host
-  migration, single difficulty) so a future session knows the real state
-  without re-deriving it from code.
+- M0 (prep): widen `card-engine/cards.ts`'s `Suit`/`Rank` from closed
+  literal unions to `string`. Phase 10 needs values (`'red'|'blue'|
+  'green'|'yellow'`, `'1'..'12'`, `'SKIP'`, `'WILD'`) the current literal
+  unions can't express, and `zones.ts`'s `Zone.cards: Card[]` is hardcoded
+  to that type — there's no generic-over-card-shape escape hatch. Pure
+  type-level widening, zero behavior change: `SUITS`/`RANKS`/
+  `createStandardDeck` keep producing the exact same values, every
+  existing card-engine and Rummy test stays green unmodified. This is the
+  same category of move as the prior charter's M2 (`peer.ts` generalized
+  to `<TState,TAction>`) — widen a shared primitive's type, not its
+  behavior, so a second consumer can exist without forking the file.
+  Verified by: full test suite unchanged, `tsc -b --noEmit`, `npm run
+  build`.
+- M0a: pure Phase 10 rules on `src/card-games/phase10/` — deck builder (108
+  cards: 24 each red/blue/green/yellow numbered 1–12, 4 Skip, 8 Wild),
+  phase requirement table (the 10 phases, exact wording from the design
+  handoff table), and pure classifiers: is a set of N cards (with 0+
+  wilds, ≥1 natural required) a valid "set of N", a valid "run of N", or
+  (Phase 8) "N cards of one color." No wiring yet. Tests for all of it,
+  including wild-substitution edge cases and the ace-adjacent question
+  (Phase 10 numbers run 1–12 with no wraparound — 12 is not adjacent to
+  1).
+- M0b: full rules engine (`state.ts` + `rules.ts`) wired onto
+  `card-engine`'s `sync.ts`/`turn-engine.ts`/`bot.ts` seams, mirroring
+  Rummy's stock-visible-to-nobody closure pattern from
+  `docs/card-engine.md` §3. Deal 10, draw (stock, or discard top-only —
+  never a Skip off the discard, per official rules), lay your current
+  phase (once per hand, whole phase from hand at once), hit onto any
+  laid group (yours or the opponent's) after your own phase is laid,
+  discard to end turn (Skip cards resolve their effect automatically on
+  discard — see ambiguity resolution 2), going out, stock recycling via
+  the existing `recyclePile`, round scoring (5/10/15/25 point table),
+  phase advancement (completers move to next phase index, non-completers
+  repeat), match end (first to complete Phase 10 and go out wins; ties on
+  the same hand broken by lowest cumulative score). Tests for all of it,
+  scenario-style like `rummy.test.ts`.
+- M1: house-player bot strategy on `card-engine/bot.ts`'s seam — greedy
+  phase-completion seeking, sensible discard (don't feed the opponent's
+  visible phase progress), opportunistic hitting once its own phase is
+  laid, stock-vs-discard draw decision, Skip played when it denies the
+  opponent a card they visibly need. One strategy, tested via
+  `runBotTurn`.
+- M2: **none needed.** `src/net/peer.ts`'s `createHost`/`joinHost` are
+  already generic over `<TState, TAction>` (Rummy's M2) — Phase 10 reuses
+  them with its own type arguments, no transport work required. Folded
+  into M3's wiring instead of its own milestone.
+- M3: the Phase 10 card-visual components — `Phase10Card`/`CardBack`
+  (or similar), matching PHASE10.md's exact spec: flat-ink card back with
+  yellow keyline and "10", solid-color number tiles (no suits), ink Skip
+  tile, 4-stop diagonal-gradient Wild tile, sizing/radii/selected-state
+  matching the fan/meld/discard measurements given.
+- M4: the Phase 10 screen — ladder band (10 chips, hover-to-caption, dual
+  progress dots), centre band (stock + discard top-only, turn/status
+  chip), your/their bands (laid groups spatially separated by owner, "Lay
+  phase N" pill), hand band (fan, lay/discard actions) — plus wiring:
+  shelf tile added to `Landing.tsx`, a Phase 10 room/host/join flow in
+  `App.tsx` reusing the generalized transport (own `P10-`-prefixed room
+  codes, disambiguated in the shared join field same as Rummy's `RM-`),
+  hookup to a Phase-10 results/match-end panel. Resolves PHASE10.md's
+  open questions 2 and 3 (ambiguity resolutions below). Browser smoke
+  test of a real turn including laying a phase, hitting, and a skip,
+  host-vs-bot.
+- M5: documentation — `docs/phase10.md` covering rules as implemented,
+  the trust-boundary architecture, bot strategy, UI, and every
+  deferred/limited item, matching `docs/rummy.md`'s shape.
 
 ## Definition of done
 - Two players — including host-vs-house-bot — can play a complete hand of
-  real Rummy end to end in the actual running app: draw (stock or reach-in
-  discard), lay down valid melds, discard, go out, see a scored result, and
-  (if under the match target) rematch into a new hand.
+  real Phase 10 end to end in the actual running app: draw, lay a phase,
+  hit onto laid groups, discard (including playing a Skip), go out, see a
+  scored round, advance up the phase ladder across multiple hands, and
+  reach a match winner at Phase 10.
 - `npx tsc -b --noEmit` and `npm run build` clean at every landed slice.
-- Existing games (Farkle, Yahtzee, Tic Tac Toe, Hangman) verified unaffected
-  after M2's transport generalization specifically, and again at the end.
-- The design handoff's layout and interaction spec is matched (three-band
-  table, spatial meld ownership, reach-in mechanic and its copy, hidden-hand
-  model, header connection dot).
+- Existing games (Farkle, Yahtzee, Tic Tac Toe, Hangman, Rummy) verified
+  unaffected — especially after M0's `cards.ts` type widening — at the
+  end of the run at minimum.
+- The design handoff's layout and interaction spec is matched (ladder,
+  spatial group ownership, top-card-only discard, hover captions).
 - Documentation lands describing what exists and what's deliberately
   deferred.
 
 ## Run budget
-Directed mode default: 25 cycles or the milestone list (6 milestones: M0-M5),
-whichever comes first. Expect fewer, based on the prior charter's pace
-(6 milestones landed in 6 cycles, each with a review-driven fix round).
+Directed mode default: 25 cycles or the milestone list (7 milestones:
+M0, M0a, M0b, M1, M3, M4, M5 — M2 folded away), whichever comes first.
+Expect close to 7, based on both prior charters landing one milestone
+(occasionally split) per cycle.
 
 ## Stop criteria
-- Stop when M0-M5 are shipped and DoD is met (normal completion).
+- Stop when the milestone list is shipped and DoD is met.
 - Any milestone unresolved after 3 cycles forces a pivot/pause/re-scope
   decision, not a fourth attempt.
-- Pause to REQUESTS.md (and exit, per this skill's blocking protocol) only
-  if something is genuinely infeasible without a human decision. Given the
-  user's explicit "go ahead, don't stop me," judgment calls get made and
-  documented here, not escalated.
-- No push to GitHub without explicit user confirmation in a later session —
-  local commits only, same standing project policy as before.
+- Pause to REQUESTS.md only if something is genuinely infeasible without
+  a human decision — given the explicit "execute this" instruction,
+  judgment calls get made and documented here, not escalated.
+- No push to GitHub, no merge to `main`, without explicit user
+  confirmation in a later message.
 
 ## Ambiguity resolutions
 
-The design handoff (`RUMMY.md`) explicitly flags 4 open questions as
-undesigned. Resolved here, since the user said not to stop and ask:
+PHASE10.md flags 4 open questions. Resolved here so the run doesn't stop
+to ask:
 
-1. **Host disconnect mid-hand** — RUMMY.md: "If the host drops mid-hand the
-   hand cannot continue — that state needs a design before launch."
-   Resolution: rely on the existing generic PeerJS disconnect handling
-   already in the app (a guest's `onDisconnected` callback in
-   `src/net/peer.ts`, already wired for the other four games) rather than
-   building new host-migration/resume logic. A guest whose host drops sees
-   whatever the existing generic disconnect UX already shows (inspect it
-   fresh in M2/M4 rather than assume) and can return to the landing screen
-   and start a fresh room. The in-progress hand is lost — documented as a
-   known limitation, matching the design doc's own framing that this
-   "needs a design before launch" (i.e., before a real public launch, which
-   this app is not aiming for — it's a private family-game site).
-2. **Scoring across hands / target score** — RUMMY.md: "the prototype ends
-   at 'went out'; multi-hand scoring and a target score aren't designed."
-   Resolution: deadwood-based scoring (`sum(min(rank,10))` over the LOSING
-   player's unmelded cards, matching the design doc's own formula exactly).
-   The round WINNER is awarded that amount, added to the winner's own
-   running match score; **first player whose match score reaches 100 wins
-   the match** and moves to the existing `Results` screen. 100 is picked as
-   a reasonable
-   target for a quick multi-hand session (a single hand's deadwood swing is
-   typically 20-60 points, so 100 means roughly 2-4 hands per match) —
-   explicit judgment call, not derived from a specific rule set.
-3. **Meld-validation UI feedback** — RUMMY.md: "'Lay down' currently
-   enables on any 3+ selection. When your card layer can validate sets/runs,
-   the button should reject invalid groups and say why." Resolution: now
-   that the card layer exists, `Lay down` is enabled only when the current
-   selection forms exactly one valid meld (a set: 3-4 cards same rank,
-   different suits; or a run: 3+ consecutive cards, same suit, Ace low
-   only, no wrap), and disabled with a reason hint otherwise (mirroring the
-   existing games' disabled-button-with-hint-text pattern, e.g. Farkle's
-   "One of those doesn't score.").
-4. **Laying off onto existing melds** — RUMMY.md: "isn't in the design
-   yet." Resolution: out of scope for this charter (see Non-goals) — a
-   player can only lay down brand-new melds from their hand, never add to
-   one already on the table (their own or the opponent's). Noted for a
-   future charter.
+1. **Host disconnect mid-hand** — same resolution as the Rummy charter:
+   rely on the existing generic PeerJS disconnect handling already wired
+   in `src/net/peer.ts`. No new host-migration logic. Documented known
+   limitation.
+2. **Skip card target selection** — PHASE10.md flags this as needing "a
+   UI moment for 'choose who to skip.'" Resolution: **not needed.**
+   Phase 10 is 2-player only (see Non-goals) — a Skip has exactly one
+   possible target, the sole opponent, so it resolves automatically the
+   instant a Skip is discarded. No new action type, no picker UI. Skip
+   still goes onto the discard pile as the (untakeable) top card, per
+   official rules ("a skip card may never be picked up from the discard
+   pile"). Capped at one Skip played against the same opponent per round
+   (official rule; trivially "one per round" in a 2-player game), tracked
+   on `Phase10PublicState` and cleared on `START_NEXT_ROUND`.
+3. **Hitting validation feedback** — PHASE10.md: "the ring shows *that*
+   you can attempt a hit, not whether the specific card is valid." Now
+   that the rules engine (M0a/M0b) can validate a hit, resolution: a hit
+   attempt goes through the same `ActionValidator` as everything else; on
+   rejection, the UI shows an inline reason (mirrors the existing
+   disabled-button-with-hint pattern, e.g. Rummy's lay-down gating).
+4. **Phase failure at hand end** — PHASE10.md: "no 'hand over, redeal'
+   transition designed yet, only 'someone goes out.'" Resolution: a
+   *round* ends the instant a player discards their last card. Players
+   who laid their current phase this round advance to the next phase
+   index for the next round; players who didn't repeat the same phase
+   index. Deal, stock, discard, and all laid groups reset for the next
+   round; `p10MyPhaseIdx`/`p10OppPhaseIdx`-equivalent persist across
+   rounds. The match ends the moment a player both completes Phase 10
+   *and* goes out in the same hand — ties (both complete Phase 10 in the
+   same hand) broken by lowest cumulative score, per official rules,
+   confirmed at charter start via a live fetch of phase10rules.com.
 
-Additional resolutions the design doc didn't flag but this charter needs:
+Additional resolutions PHASE10.md didn't flag but this charter needs:
 
-5. **Structure of the "must use that card" obligation** — reaching into the
-   discard pile at index `i` takes cards `i..top` into the hand, and the
-   reached-for card (at index `i`) must be used in a meld laid down before
-   the turn's discard. Resolution: enforced at `DISCARD_CARD` validation
-   time — if the player's current turn included a multi-card discard-pile
-   take (more than the single top card), the validator tracks the
-   obligated card id and rejects `DISCARD_CARD` (with a clear reason) until
-   a `LAY_DOWN_MELD` action that turn included that specific card id. This
-   state (the obligated card, if any) lives in `RummyPublicState` per the
-   acting player's turn, cleared on discard/turn-advance.
-6. **`createHost`/`joinHost` generalization approach (M2)** — make them
-   generic over `<TState, TAction>` type parameters instead of importing
-   concrete `Action`/`RoomState` from `src/types.ts`, keeping the exact
-   same runtime message shapes/behavior (`{kind:'join'}` /
-   `{kind:'action'}` / `{kind:'state'}`) — a pure type-level change, zero
-   behavior change, so the 4 existing games need no logic changes, only
-   (if TypeScript inference doesn't carry it automatically) explicit type
-   arguments at their existing call sites in `App.tsx`. Rummy's own
-   host/guest session reuses the same functions with its own `<TState,
-   TAction>` — its own room codes never collide with a dice-game room's
-   codes (both are randomly generated per session), so reusing the same
-   PeerJS ID-namespacing scheme (`peerIdForCode`) is safe as-is.
-7. **Where does Rummy's "room" live relative to the existing dice-game
-   `RoomState`?** Resolution: kept separate, not merged into
-   `src/state/room.ts`'s dice-game reducer/`Action` union — matching the
-   prior charter's own M3 resolution that card games get their own
-   sync/action model rather than being forced into the existing one. A
-   Rummy session in `App.tsx` is its own parallel branch (own local React
-   state, own host/guest connection via M2's generalized transport, own
-   screen components), coexisting with — not replacing — the existing dice-
-   game flow. `Landing.tsx`'s shelf and game-picking UX stay shared/uniform
-   across all 5 games; only the underlying session machinery branches.
+5. **`Card.rank`/`Card.suit` representation for Phase 10's four card
+   kinds.** Numbers use `suit` = color (`'red'|'blue'|'green'|'yellow'`),
+   `rank` = the number as a string (`'1'`..`'12'`); Skip uses
+   `suit:'special'`, `rank:'SKIP'`; Wild uses `suit:'special'`,
+   `rank:'WILD'`. `meta: {kind: 'number'|'skip'|'wild'}` is set on every
+   card as the primary discriminator the rules engine actually switches
+   on (never string-parsing `rank`), per `cards.ts`'s own documented
+   purpose for `meta` ("an untouched tag space for game-specific flags").
+6. **Wild-card commitment.** Per official rules, once played a wild
+   cannot be moved or reclaimed. Enforced structurally: laid phase groups
+   and hit/lay-off records are append-only, same as Rummy's
+   `RummyLayoff` pattern — nothing in the validator ever removes a card
+   from an already-laid group.
+7. **Where does Phase 10's "room" live relative to the existing dice-game
+   `RoomState` and Rummy's session?** Resolution: same pattern as
+   Rummy — a third fully parallel branch in `App.tsx` (own state, own
+   host/guest/bot wiring reusing the already-generalized
+   `createHost`/`joinHost`), not merged into `room.ts` or into Rummy's
+   session code. `Landing.tsx`'s shelf stays uniform across all 6 games;
+   only session machinery branches, exactly as `docs/card-engine.md` §
+   Migration work anticipated.
