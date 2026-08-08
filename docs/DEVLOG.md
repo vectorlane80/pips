@@ -1088,3 +1088,17 @@ Rules dialog cannot claim the Rules dialog works, and a smoke test that
 never selects a valid phase can't claim laying a phase works. Every future
 verification pass on this game must exercise lay, hit, and skip, not just
 draw/discard, before claiming success.
+
+## Charter 4: Phase 10 / Rummy polish — started 2026-08-08
+
+New charter, see `CHARTER.md`. Pre-approved, unattended, isolated worktree
+(`.claude/worktrees/phase10-polish`, branch `worktree-phase10-polish`).
+Five user-reported live-play defects: no visible Phase 10 scoring, no
+readable pause between rounds, drawn cards jumping into sorted hand
+position instead of staying separated (both games), low-contrast ladder
+dots, and ladder chips carrying no persistent phase number (mid-session
+addition, after the user saw a screenshot-worthy point of confusion about
+why only one chip renders filled). Delegation per `/model-routing`: Codex
+still exhausted (re-probed live, same "try again at 6:51 PM" as the
+previous charter), using `deepseek-v4-flash` + `claude --model sonnet`
+review, no escalation.
