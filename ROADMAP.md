@@ -3,7 +3,7 @@
 Charter: Deal-intro animation (Rummy + Phase 10) — see `CHARTER.md`.
 
 ## Next up
-(none — implementation complete, pending live browser verification)
+(none — charter complete, both games live-verified)
 
 ## Done (this charter)
 - [cycle 2] M2 — wired into RummyTable.tsx. M3 — wired into

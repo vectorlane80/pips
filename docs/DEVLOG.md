@@ -1366,3 +1366,80 @@ worktree (`.claude/worktrees/phase10-deal-intro`, branch
 - **Continue?** Yes — mandatory live browser verification of both games
   next, before shipping. Nothing in this charter has actually been
   observed rendering yet.
+
+## Deal-intro cycle 3 — 2026-08-08 (live verification + wrap-up)
+
+- **Live-verified both games in a real browser**, the one thing in this
+  charter that hadn't actually been observed rendering until now:
+  - **Rummy**: caught the animation mid-deal (screenshot: "Opal · 5" /
+    "You · 5" piles, a flying card mid-transit, "Dealing…" status),
+    watched it settle into the fully-dealt real table (hand, stock,
+    discard, deadwood count, turn prompt), then confirmed a normal
+    stock draw still works — including the drawn card rendering
+    correctly separated at the hand's right end, per the earlier polish
+    charter's fix.
+  - **Phase 10**: same — caught mid-deal with Phase 10's own flat-ink
+    "10" card-back art rendering correctly in the flying-card element
+    and both growing piles (confirming `renderCardBack` injection
+    correctly carries each game's real visual identity), watched it
+    settle into the full table (ladder with numbers/ring/dots, running
+    score, phase pill), confirmed a normal stock draw still works.
+  - No console errors in either game, before or after the intro.
+- **Continue?** No — this was the last milestone. Wrapping up.
+
+## Wrap-up — 2026-08-08 (Charter 5: Deal-intro animation)
+
+Charter complete. All three milestones (M1 shared component, M2 Rummy
+wiring, M3 Phase 10 wiring) shipped across 3 cycles, fully unattended,
+in an isolated worktree (`.claude/worktrees/phase10-deal-intro`, branch
+`worktree-phase10-deal-intro`). Final state: 469 tests, `tsc -b
+--noEmit`/`npm run build` clean, both games' deal animations live-
+verified end to end in a real browser — not just code-reviewed.
+
+**The architecture question the user asked to settle first** (card-engine
+vs. UI layer) was decided correctly in chat before any code was written:
+the feature lives entirely in `src/components/DealIntro.tsx`, is fully
+game-agnostic (never imports either game's real card components, only a
+shared `{size:'fan'|'stock', style?, className?}` shape both already
+happened to share), and never touches `src/card-engine/` — matching the
+design doc's own "cosmetic-only" framing, confirmed correct by the fact
+that zero engine changes were needed anywhere in this charter.
+
+**Delegation per `/model-routing`:** Codex remained exhausted for this
+entire charter (re-probed live at the start, same quota window as every
+charter today) — `deepseek-v4-flash` for all implementation,
+`claude --model sonnet --effort medium` for review.
+
+**Two real defects found in M1's review, both fixed before shipping:**
+1. A backgrounded-tab timer race — `setTimeout` (throttled, not
+   suspended) could outrun `requestAnimationFrame` (fully suspended) and
+   fire `onComplete` before the animation visually finished. Fixed by
+   making `settle()`'s scheduling depend on a real rAF execution having
+   happened, not a parallel synchronous timer.
+2. A live prop-desync — the review flagged this as a dormant risk
+   assuming callers never change hand-size props mid-animation, but the
+   lead traced through the actual call sites and found it's live: the
+   house bot can act (changing `opponentHandCount`) while the ~1.9s
+   intro is still playing if it goes first in a round. Fixed by freezing
+   the deal schedule once at mount via a `useState` initializer instead
+   of a prop-reactive `useMemo`.
+
+**A genuinely good instance of the "trust but verify" discipline paying
+off exactly as designed:** the review's own wording for finding #2 was
+cautious ("dormant risk... charter says real callers never do this"),
+and it would have been easy to accept that framing and skip the fix. The
+lead re-traced the actual runtime scenario (bot-goes-first + intro
+timing) independently instead of taking the review's own confidence
+level at face value, and found the "dormant" risk was actually live.
+Worth stating plainly: a review's own hedging is data, not a verdict —
+verify the specific claim yourself when the stakes justify it.
+
+**What's next:** nothing planned — this was a self-contained feature
+request, not a milestone list. `Design Handoff/CONNECT4.md` describes a
+fully-implemented Connect 4 game (unlike Rummy/Phase 10, which started
+as unwired prototypes) — a candidate for a future charter if the user
+wants it ported, but not started here.
+
+**Continue?** No — charter's definition of done is met. Wrapping up.
+Merging and pushing now, matching this session's established pattern of
+shipping each verified charter promptly.
