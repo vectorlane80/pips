@@ -778,3 +778,41 @@ card-engine or leaking Phase-10 vocabulary into it.
 - **Continue?** Yes — M1 (bot) already dispatched in parallel while this
   review ran; proceeding through M3/M4/M5 next without a check-in, per
   explicit user instruction.
+
+## Phase 10 cycle 3 — 2026-08-08
+
+- **Shipped:** M1 — `src/card-games/phase10/bot.ts` (`phase10BotStrategy`):
+  draw decision (take discard top only when it completes the phase and
+  isn't a Skip, with a livelock-prevention fallback), lay-phase via a
+  brute-force `findPhaseSelection`, opportunistic single-card hits after
+  the player's own phase is laid, and a discard heuristic that plays an
+  unused Skip as a tempo move before falling back to a connectivity
+  score. 23 new tests.
+- **Real defect found and fixed (in `rules.ts`, not the bot):** review
+  traced a state — stock empty, discard pile holds exactly one card, and
+  that card is a Skip — where NO player, bot or human, has any legal
+  move at all (`DRAW_FROM_STOCK` rejects and suggests the discard pile;
+  `DRAW_FROM_DISCARD` rejects because it's a Skip). The engine didn't
+  recognize this as a blocked round the way a fully-empty discard pile
+  already was. Fixed at the correct point — `rules.ts`'s
+  `DRAW_FROM_STOCK` handler now also blocks the round when the discard
+  pile holds a lone Skip, not just when it's fully empty — rather than
+  papering over it with bot-side avoidance logic, since a real human
+  player would hit the identical soft-lock otherwise. New test added;
+  two HIT tests in `bot.test.ts` also hardened to assert against the
+  real validator (`runPhase10BotTurn`), not just the bot's returned
+  action shape, per the same review's test-coverage finding.
+- **Delegation:** `deepseek-v4-flash` throughout (Codex not re-probed
+  this cycle). M3 (visuals) dispatched in parallel with this fix — both
+  are independent of each other.
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm test`
+  (457 passed)/`npm run build`; read `bot.ts` and the `rules.ts` diff
+  line by line against their specs.
+- **Review:** `claude --model sonnet --effort medium` traced every
+  claimed-illegal-action path against the real validator logic (not just
+  the bot's intent comments) — found the soft-lock above plus a minor
+  test-coverage gap (two HIT tests checked shape, not the validator);
+  both fixed and re-verified.
+- **Continue?** Yes — M3 (visuals) already in flight; M4 (screen +
+  wiring, the largest remaining slice) next, per explicit user
+  instruction to keep going without checking in.

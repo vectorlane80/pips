@@ -164,11 +164,14 @@ function makeValidator(
           privateStates: { ...privateStates, [playerId]: { hand: newHand } },
         }
       }
-      // can't recycle (discard has 0 or 1 cards) — if discard is completely empty too, nobody
-      // can draw anything at all this turn: the round is blocked. Otherwise, the player should
-      // draw from the discard pile instead (it still has exactly 1 card available). On a
-      // block there are no score/phaseIdx changes — nobody completed or failed anything.
-      if (cardCount(publicState.discardPile) === 0) {
+      // can't recycle (discard has 0 or 1 cards) — if discard is completely empty, or it holds
+      // just a lone Skip (which can never be drawn from the discard pile), nobody can draw
+      // anything at all this turn: the round is blocked. Otherwise, the player should draw from
+      // the discard pile instead (it still has exactly 1 card available). On a block there are
+      // no score/phaseIdx changes — nobody completed or failed anything.
+      const discardCount = cardCount(publicState.discardPile)
+      const lonelySkip = discardCount === 1 && topCard(publicState.discardPile)?.meta?.kind === 'skip'
+      if (discardCount === 0 || lonelySkip) {
         return {
           ok: true,
           publicState: { ...publicState, roundOver: true, roundWinnerId: null },

@@ -624,6 +624,38 @@ describe('Phase 10 integration harness', () => {
     expect(pub.phaseIdx).toEqual({ p1: 3, p2: 2 })
   })
 
+  it('blocked round — empty stock and a lone Skip on the discard pile, no score or phaseIdx change', () => {
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: remainingDeckIds([...p1Cards, 'p10-96']),
+      discardCardIds: ['p10-96'],   // the ONLY card left anywhere to draw — and it's a Skip
+      stockCardIds: [],
+      phase: 'draw',
+      currentPlayerIndex: 0,
+      scores: { p1: 5, p2: 7 },
+      phaseIdx: { p1: 3, p2: 2 },
+    })
+
+    expect(cardCount(game.stock)).toBe(0)
+    expect(cardCount(game.session.publicState.discardPile)).toBe(1)
+
+    // stock draw must be accepted — there is no other legal action this turn
+    const stockResult = applyPhase10Action(game, 'p1', { type: 'DRAW_FROM_STOCK' })
+    expect(stockResult.outcome.ok).toBe(true)
+
+    const pub = stockResult.game.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBeNull()
+    // a dead round: nobody completed or failed anything
+    expect(pub.scores).toEqual({ p1: 5, p2: 7 })
+    expect(pub.phaseIdx).toEqual({ p1: 3, p2: 2 })
+
+    // the lone Skip is still never drawable — the fix must not have opened that door
+    const discardResult = applyPhase10Action(game, 'p1', { type: 'DRAW_FROM_DISCARD' })
+    expect(discardResult.outcome.ok).toBe(false)
+  })
+
   it('scoring exact values — opponent hand of 5/10/Skip/Wild costs exactly 55', () => {
     // red 5 (value 5), red 10 (value 10), Skip (15), Wild (25) → 5+10+15+25 = 55
     const p2Cards = ['p10-8', 'p10-18', 'p10-96', 'p10-100']
