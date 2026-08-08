@@ -25,8 +25,14 @@ function countByFace(vals: number[]): Record<number, number> {
 }
 
 const UPPER_FACE: Partial<Record<YCategory, number>> = { ones: 1, twos: 2, threes: 3, fours: 4, fives: 5, sixes: 6 }
+const UPPER_CAT_FOR_FACE: Record<number, YCategory> = { 1: 'ones', 2: 'twos', 3: 'threes', 4: 'fours', 5: 'fives', 6: 'sixes' }
 
-export function scoreCategory(vals: number[], cat: YCategory): number {
+export function isFiveKind(vals: number[]): boolean {
+  return vals.length === 5 && vals.every((v) => v === vals[0])
+}
+
+export function scoreCategory(vals: number[], cat: YCategory, card: Partial<Record<YCategory, number>> = {}): number {
+  const joker = isFiveKind(vals) && card.yahtzee !== undefined && card[UPPER_CAT_FOR_FACE[vals[0]]] !== undefined
   const sum = vals.reduce((a, b) => a + b, 0)
   const counts = countByFace(vals)
   const groups = Object.values(counts)
@@ -40,13 +46,16 @@ export function scoreCategory(vals: number[], cat: YCategory): number {
     case 'fourKind':
       return groups.some((c) => c >= 4) ? sum : 0
     case 'fullHouse':
+      if (joker) return 25
       return groups.length === 2 && groups.includes(3) && groups.includes(2) ? 25 : 0
     case 'smallStraight': {
+      if (joker) return 30
       const set = new Set(vals)
       const runs = [[1, 2, 3, 4], [2, 3, 4, 5], [3, 4, 5, 6]]
       return runs.some((run) => run.every((n) => set.has(n))) ? 30 : 0
     }
     case 'largeStraight': {
+      if (joker) return 40
       const set = new Set(vals)
       const runs = [[1, 2, 3, 4, 5], [2, 3, 4, 5, 6]]
       return runs.some((run) => run.every((n) => set.has(n))) ? 40 : 0
@@ -72,6 +81,13 @@ export function grandTotal(card: Partial<Record<YCategory, number>>): number {
 
 export function rollDice(count: number, startId = 0) {
   return Array.from({ length: count }, (_, i) => rollDie(startId + i))
+}
+
+/** Display order for the dice row: held dice first (original relative order), then unheld. */
+export function partitionDiceOrder(dice: Die[]): { ids: number[]; heldCount: number } {
+  const held = dice.filter((d) => d.sel).map((d) => d.id)
+  const unheld = dice.filter((d) => !d.sel).map((d) => d.id)
+  return { ids: [...held, ...unheld], heldCount: held.length }
 }
 
 const BURN_ORDER: YCategory[] = [
@@ -148,7 +164,7 @@ export function decideYahtzeeCategory(
   let best: YCategory | null = null
   let bestWeight = -1
   for (const c of open) {
-    const s = scoreCategory(vals, c)
+    const s = scoreCategory(vals, c, card)
     const weight = difficulty === 'hard' && s > 0 && HARD_TO_FILL.includes(c) ? s + 20 : s
     if (weight > bestWeight) {
       bestWeight = weight

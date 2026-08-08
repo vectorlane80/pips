@@ -19,7 +19,8 @@ export interface RummyTableProps {
   opponentName: string
   opponentColor: string
   opponentHandCount: number
-  connection: 'connected' | 'reconnecting'
+  connection: 'connected' | 'disconnected'
+  notice?: string | null
   publicState: RummyPublicState
   hand: Card[]
   onDrawStock: () => void
@@ -281,6 +282,7 @@ export function RummyTable({
   opponentColor,
   opponentHandCount,
   connection,
+  notice,
   publicState,
   hand,
   onDrawStock,
@@ -431,9 +433,11 @@ export function RummyTable({
           <span className="rummy-peer-strip">
             <span
               className="rummy-peer-dot"
-              style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--amber)' }}
+              style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
             />
-            <span className="rummy-peer-label">peer to peer with {opponentName}</span>
+            <span className="rummy-peer-label">
+              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+            </span>
           </span>
         </div>
         <div className="rummy-header-actions">
@@ -446,6 +450,9 @@ export function RummyTable({
       <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
         <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Rummy · {code}</span>
       </div>
+
+      {/* Error banner */}
+      {notice && <div className="rummy-error-banner">{notice}</div>}
 
       {/* Main table card */}
       <div className="rummy-table-card">

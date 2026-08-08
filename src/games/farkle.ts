@@ -65,6 +65,24 @@ export function bestSubset(vals: number[]): { indices: number[]; score: number }
   return best
 }
 
+/**
+ * Whether the seat at `seatIndex` has already taken its one final-round turn: it is the
+ * trigger seat (their bank started the final round) or the turn has passed it since the
+ * trigger's bank, in cyclic seat order.
+ */
+export function tookFinalTurn(
+  seatIndex: number,
+  triggerSeatIndex: number,
+  seatCount: number,
+  turnIdx: number,
+  finalRound: boolean,
+): boolean {
+  if (!finalRound || triggerSeatIndex === -1) return false
+  if (seatIndex === triggerSeatIndex) return true
+  const n = seatCount
+  return ((seatIndex - triggerSeatIndex - 1 + n) % n) < ((turnIdx - triggerSeatIndex - 1 + n) % n)
+}
+
 export interface FarkleBotMove {
   keepIndices: number[]
   bank: boolean

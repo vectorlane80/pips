@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { BotDifficulty, Game, RoomState } from '../types'
+import type { BotDifficulty, Game, RoomState, Seat } from '../types'
 import { GAME_COLOR, GAME_LABEL, GAME_MAX_SEATS } from '../types'
 import { SeatAvatar } from '../components/SeatAvatar'
 
@@ -21,8 +21,8 @@ export function Room({
 }) {
   const [copied, setCopied] = useState(false)
   const max = GAME_MAX_SEATS[room.game]
-  const rows = [...room.seats]
-  while (rows.length < 2) rows.push(null as never)
+  const rows: (Seat | null)[] = [...room.seats]
+  while (rows.length < 2) rows.push(null)
 
   function copyLink() {
     const url = `${location.origin}${location.pathname}?join=${room.code}`

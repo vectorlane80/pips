@@ -99,6 +99,7 @@ export interface YahtzeeState {
   dice: Die[]
   rollsLeft: number
   cards: Record<string, Partial<Record<YCategory, number>>>
+  bonuses: Record<string, number>
   round: number
   rolling: boolean
   status: string

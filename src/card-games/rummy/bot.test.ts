@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRummyGame, type RummyPublicState, type RummyPrivateState, type RummyPhase, type RummySession } from './state.ts'
+import { createRummyGame, type RummyPublicState, type RummyPrivateState, type RummyPhase, type RummySession, type RummyLayoff } from './state.ts'
 import { applyRummyAction, runRummyBotTurn } from './rules.ts'
 import { currentPlayer } from '../../card-engine/turn-engine.ts'
 import { cardCount, createHand, createDiscardPile, createPublicZone, addCards, type Zone } from '../../card-engine/zones.ts'
@@ -22,12 +22,14 @@ function totalCards(rummy: RummySession): number {
       meldCards += cardCount(meld)
     }
   }
+  const layoffCards = pub.layoffs.reduce((sum, l) => sum + l.cards.length, 0)
   return (
     cardCount(rummy.stock) +
     cardCount(pub.discardPile) +
     cardCount(priv['p1'].hand) +
     cardCount(priv['p2'].hand) +
-    meldCards
+    meldCards +
+    layoffCards
   )
 }
 
@@ -44,6 +46,7 @@ function buildSession(config: {
   matchWinnerId?: string | null
   obligatedCardId?: string | null
   melds?: Record<string, Zone[]>
+  layoffs?: RummyLayoff[]
   handCounts?: Record<string, number>
 }): RummySession {
   const deck = createStandardDeck()
@@ -69,7 +72,7 @@ function buildSession(config: {
     discardPile,
     stockCount: cardCount(stock),
     melds: config.melds ?? { p1: [], p2: [] },
-    layoffs: [],
+    layoffs: config.layoffs ?? [],
     obligatedCardId: config.obligatedCardId ?? null,
     scores: config.scores ?? { p1: 0, p2: 0 },
     target: 100,
@@ -341,6 +344,252 @@ describe('rummyBotStrategy', () => {
     // A♣ has deadwood 15 (highest among 15, 5, 10) → gets discarded
     expect(discardTop.id).toBe('c0')
     expect(totalCards(result.rummy)).toBe(52)
+  })
+})
+
+// ── tests: rummyBotStrategy lay-off support ─────────────────
+
+describe('rummyBotStrategy lay-off support', () => {
+  it('lays a hand card off onto its own meld instead of discarding it', () => {
+    // p1 has 5♣6♣7♣ (c4,c5,c6) down; hand holds 8♣ (c7) which extends the run.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: ['c7'] })
+  })
+
+  it('lays a hand card off onto the opponent\'s meld', () => {
+    // p1 has A♠2♠3♠ (c39,c40,c41) down (own-meld precondition), p2 has 5♣6♣7♣ (c4,c5,c6).
+    // p1's hand holds 8♣ (c7) which extends p2's run but nothing of p1's own.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c39', 'c40', 'c41'))
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c7'] })
+  })
+
+  it('never lays off without an own meld down — discards instead', () => {
+    // p2 has 5♣6♣7♣ (c4,c5,c6); p1 holds 8♣ (c7) which would extend it, but p1 has no
+    // meld of its own down, so LAY_OFF is illegal — the bot must discard, not lay off.
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    // All three hand cards are isolated; K♠ (deadwood 10) is the most expensive → discarded.
+    expect(action).toEqual({ type: 'DISCARD_CARD', cardId: 'c51' })
+  })
+
+  it('validates extensions against the full group including prior lay-offs', () => {
+    // p2's meld 5♣6♣7♣ (c4,c5,c6) was already extended by a laid-off 8♣ (c7).
+    // p1 holds the 9♣ (c8): without the lay-off, 5-6-7 + 9 is not a run, so this
+    // proves the bot checks fullMeldCards rather than the original meld zone.
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c8', 'c51', 'c14'],
+      p2HandCardIds: ['c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [addCards(createHand('p1'), cardsByIds('c39', 'c40', 'c41'))], p2: [p2MeldZone] },
+      layoffs: [{ id: 'layoff-0', playerId: 'p1', targetPlayerId: 'p2', targetMeldIndex: 0, cards: cardsByIds('c7') }],
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c8'] })
+  })
+
+  it('lays down a new meld before laying off — Case 3 keeps priority', () => {
+    // p1 has 5♣6♣7♣ (c4,c5,c6) down and holds A♣2♣3♣ (c0,c1,c2) — a NEW meld — plus
+    // 8♣ (c7) which would extend the existing run. The new meld must come first.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c0', 'c1', 'c2', 'c7', 'c51'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+  })
+})
+
+// ── tests: obligation lay-off fallback ───────────────────────
+
+describe('rummyBotStrategy obligation lay-off fallback', () => {
+  it('lays the obligated card off onto the opponent\'s meld when no from-hand meld exists', () => {
+    // p1 owns A♠2♠3♠ (c39,c40,c41); p2 has 5♣6♣7♣ (c4,c5,c6).
+    // p1 is obligated on 8♣ (c7): no 3-subset of 8♣/K♠/2♦ melds, but 8♣ extends p2's run.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c39', 'c40', 'c41'))
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      obligatedCardId: 'c7',
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
+    })
+
+    expect(findMeld(rummy.session.privateStates['p1'].hand.cards, 'c7')).toBeNull()
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    // The single obligated card only — laid off, not discarded.
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c7'] })
+  })
+
+  it('lays the obligated card off onto its own meld', () => {
+    // Same hand/obligation as above, but p1's own meld is 5♣6♣7♣ (c4,c5,c6) and p2 has none.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      obligatedCardId: 'c7',
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: ['c7'] })
+  })
+
+  it('never lays off the obligated card without an own meld down — falls through instead', () => {
+    // p2 has 5♣6♣7♣ (c4,c5,c6); 8♣ (c7) would extend it but p1 has no meld of its own,
+    // so LAY_OFF is illegal — the fallback must not return it (it falls through to discard).
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c7', 'c51', 'c14'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      obligatedCardId: 'c7',
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action.type).not.toBe('LAY_OFF')
+    // No hand meld either, so it falls through to the discard (K♠, highest deadwood).
+    expect(action).toEqual({ type: 'DISCARD_CARD', cardId: 'c51' })
+  })
+
+  it('still prefers the from-hand meld over the lay-off fallback', () => {
+    // p1 owns 5♣6♣7♣ (c4,c5,c6) and holds A♣2♣3♣ (c0,c1,c2) plus 8♣ (c7) which could lay
+    // off — but the obligated card c2 melds from hand, so LAY_DOWN_MELD must win.
+    const p1MeldZone = addCards(createHand('p1'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c0', 'c1', 'c2', 'c7', 'c51'],
+      p2HandCardIds: ['c8', 'c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      obligatedCardId: 'c2',
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action.type).toBe('LAY_DOWN_MELD')
+    if (action.type === 'LAY_DOWN_MELD') {
+      expect(action.cardIds).toContain('c2')
+    }
+  })
+
+  it('validates the obligation lay-off against the full group including prior lay-offs', () => {
+    // p2's meld 5♣6♣7♣ (c4,c5,c6) was already extended by a laid-off 8♣ (c7). p1 is
+    // obligated on 9♣ (c8): against the original zone 5-6-7 + 9 is no run, but against
+    // the full group 5-6-7-8 + 9 it is — proving fullMeldCards drives this path too.
+    const p2MeldZone = addCards(createHand('p2'), cardsByIds('c4', 'c5', 'c6'))
+    const rummy = buildSession({
+      p1HandCardIds: ['c8', 'c51', 'c14'],
+      p2HandCardIds: ['c9', 'c10', 'c11'],
+      discardCardIds: ['c50'],
+      stockCardIds: [],
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      obligatedCardId: 'c8',
+      melds: { p1: [addCards(createHand('p1'), cardsByIds('c39', 'c40', 'c41'))], p2: [p2MeldZone] },
+      layoffs: [{ id: 'layoff-0', playerId: 'p1', targetPlayerId: 'p2', targetMeldIndex: 0, cards: cardsByIds('c7') }],
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    expect(action).toEqual({ type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c8'] })
   })
 })
 

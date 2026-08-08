@@ -213,8 +213,8 @@ describe('Rummy integration harness', () => {
     const p2Snapshot = deriveSnapshot(afterDraw.session, 'p2')
 
     // p2's private state should be exactly p2's own 10-card hand, not p1's
-    expect(p2Snapshot.privateState.hand.cards.length).toBe(10)
-    for (const card of p2Snapshot.privateState.hand.cards) {
+    expect(p2Snapshot.privateState!.hand.cards.length).toBe(10)
+    for (const card of p2Snapshot.privateState!.hand.cards) {
       expect(p2CardIds.has(card.id)).toBe(true)
       expect(p1CardIds.has(card.id)).toBe(false)
     }
@@ -1544,5 +1544,147 @@ describe('Rummy integration harness', () => {
     // p2's LAY_OFF above only succeeds because it's validated against the full 4-5-6-7 group
     // (3 is only consecutive with 4, not with the original 5-6-7 alone) — that's the chain proof.
     expect(totalCards(r2.rummy)).toBe(52)
+  })
+
+  // ── obligated-card soft-lock regression tests ────────────────
+  // Reaching into the discard obligates the reached card; a later meld that strips the card's
+  // only support must be rejected (or the turn becomes unfinishable), unless the obligated
+  // card can still be laid off onto an existing meld group.
+
+  it('obligated-card soft-lock — melding away the obligated card\'s support is rejected, session unchanged', () => {
+    // p2 holds 8♠(c46),9♠(c47),8♥(c33),8♦(c20). Discard [K♠,7♠,Q♠,K♣] — reaching for
+    // index 1 (7♠) takes 7♠,Q♠,K♣ and sets the obligation (7♠-8♠-9♠ run becomes available).
+    const p2Cards = ['c46', 'c47', 'c33', 'c20']
+    const discardCards = ['c51', 'c45', 'c50', 'c12']
+    const p1Cards = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards])
+    const stockCards = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+    })
+
+    const { rummy: afterDraw } = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 1 })
+    expect(afterDraw.session.publicState.obligatedCardId).toBe('c45')
+
+    // Laying down the 8-set consumes 8♠ — 7♠ now melds with nothing and has no table group
+    // to be laid off onto → must be rejected before it can soft-lock the turn.
+    const before = afterDraw.session
+    const result = applyRummyAction(afterDraw, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c46', 'c33', 'c20'] })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('no way to use the card you reached for')
+
+    // Session state is unchanged by the rejection.
+    expect(result.rummy.session.revision).toBe(before.revision)
+    expect(result.rummy.session.publicState).toEqual(before.publicState)
+    expect(result.rummy.session.privateStates).toEqual(before.privateStates)
+  })
+
+  it('obligated-card soft-lock — unrelated meld still allowed while the obligated card stays meldable', () => {
+    // p2 holds 8♠(c46),9♠(c47),8♥(c33),8♦(c20) plus a 2-set (c1,c14,c27). Reaching for 7♠
+    // obligates it; laying down the unrelated 2-set leaves 7♠-8♠-9♠ intact in the hand.
+    const p2Cards = ['c46', 'c47', 'c33', 'c20', 'c1', 'c14', 'c27']
+    const discardCards = ['c51', 'c45', 'c50', 'c12']
+    const p1Cards = ['c0', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10']
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards])
+    const stockCards = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+    })
+
+    const { rummy: afterDraw } = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 1 })
+    expect(afterDraw.session.publicState.obligatedCardId).toBe('c45')
+
+    const result = applyRummyAction(afterDraw, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c1', 'c14', 'c27'] })
+    expect(result.outcome.ok).toBe(true)
+    // obligation survives — 7♠-8♠-9♠ is still meldable from the remaining hand
+    expect(result.rummy.session.publicState.obligatedCardId).toBe('c45')
+    expect(result.rummy.session.publicState.melds['p2'][0].cards.map((c) => c.id).sort()).toEqual(['c1', 'c14', 'c27'].sort())
+  })
+
+  it('obligated-card soft-lock — hand-meld stripped but layoff-able onto an existing table group succeeds', () => {
+    // p1 already has 4♠5♠6♠ (c42,c43,c44) on the table. p2 holds 8♠(c46),9♠(c47),8♥(c33),
+    // 8♦(c20) and reaches for 7♠(c45). Laying down the 8-set strips the run support, but the
+    // obligated 7♠ can still be laid off onto p1's spades run → the meld is allowed.
+    const p2Cards = ['c46', 'c47', 'c33', 'c20']
+    const discardCards = ['c51', 'c45', 'c50', 'c12']
+    const p1Cards = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']
+    const p1MeldCards = [cardMap('c42'), cardMap('c43'), cardMap('c44')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards, 'c42', 'c43', 'c44'])
+    const stockCards = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const { rummy: afterDraw } = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 1 })
+    expect(afterDraw.session.publicState.obligatedCardId).toBe('c45')
+
+    const result = applyRummyAction(afterDraw, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c46', 'c33', 'c20'] })
+    expect(result.outcome.ok).toBe(true)
+    expect(result.rummy.session.publicState.obligatedCardId).toBe('c45')
+
+    // The escape hatch the check preserved is real: laying the obligated 7♠ off onto the
+    // existing 4♠5♠6♠ run is itself a legal action that clears the obligation.
+    const layoff = applyRummyAction(result.rummy, 'p2', { type: 'LAY_OFF', targetPlayerId: 'p1', meldIndex: 0, cardIds: ['c45'] })
+    expect(layoff.outcome.ok).toBe(true)
+    expect(layoff.rummy.session.publicState.obligatedCardId).toBeNull()
+    expect(layoff.rummy.session.publicState.layoffs[0]).toMatchObject({ playerId: 'p2', targetPlayerId: 'p1', targetMeldIndex: 0 })
+  })
+
+  it('obligated-card soft-lock — after rejection the turn still ends cleanly via a meld including the obligated card', () => {
+    // Same setup as the first test: reach for 7♠, the support-stripping 8-set is rejected,
+    // then melding 7♠-8♠-9♠ (which includes the obligated card) clears the obligation and
+    // the turn can be finished with a discard.
+    const p2Cards = ['c46', 'c47', 'c33', 'c20']
+    const discardCards = ['c51', 'c45', 'c50', 'c12']
+    const p1Cards = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9']
+    const used = new Set([...p2Cards, ...discardCards, ...p1Cards])
+    const stockCards = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 1,
+    })
+
+    const { rummy: afterDraw } = applyRummyAction(rummy, 'p2', { type: 'DRAW_FROM_DISCARD', index: 1 })
+    expect(afterDraw.session.publicState.obligatedCardId).toBe('c45')
+
+    const rejected = applyRummyAction(afterDraw, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c46', 'c33', 'c20'] })
+    expect(rejected.outcome.ok).toBe(false)
+
+    // The meld INCLUDING the obligated card is still available and clears the obligation.
+    const meldResult = applyRummyAction(rejected.rummy, 'p2', { type: 'LAY_DOWN_MELD', cardIds: ['c45', 'c46', 'c47'] })
+    expect(meldResult.outcome.ok).toBe(true)
+    expect(meldResult.rummy.session.publicState.obligatedCardId).toBeNull()
+
+    // And the turn ends cleanly with a discard.
+    const handAfterMeld = meldResult.rummy.session.privateStates['p2'].hand
+    const discardResult = applyRummyAction(meldResult.rummy, 'p2', { type: 'DISCARD_CARD', cardId: handAfterMeld.cards[0].id })
+    expect(discardResult.outcome.ok).toBe(true)
+    expect(currentPlayer(discardResult.rummy.session.publicState.turn)).toBe('p1')
+    expect(discardResult.rummy.session.publicState.turn.phase).toBe('draw')
   })
 })

@@ -1,5 +1,5 @@
 import type { RoomState } from '../types'
-import { scoreSelection } from '../games/farkle'
+import { scoreSelection, tookFinalTurn } from '../games/farkle'
 import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
@@ -29,6 +29,8 @@ export function FarkleTable({
   const canBank = canAct && onTable > 0 && (activeSeat && activeSeat.score > 0 ? true : onTable >= f.openingScore)
   const lastLog = f.log.length > 0 ? f.log[f.log.length - 1] : null
 
+  const trigIdx = f.finalTrigger ? room.seats.findIndex((s) => s.id === f.finalTrigger) : -1
+
   const remaining = f.dice.length - selected.length
   let rollLabel = 'Roll six'
   if (f.farkle) rollLabel = 'End turn'
@@ -36,7 +38,7 @@ export function FarkleTable({
 
   let hint = ''
   if (!isMyTurn) hint = f.farkle ? '' : `${activeSeat?.name} is thinking…`
-  else if (f.farkle) hint = ''
+  else if (f.farkle) hint = 'Hand the dice over.'
   else if (selected.length === 0) hint = f.dice.length > 0 ? 'Tap a die to set it aside.' : ''
   else if (!sel.valid) hint = "One of those doesn't score."
   else if (activeSeat?.score === 0 && onTable < f.openingScore) hint = `${f.openingScore - onTable} more to get on the board.`
@@ -68,18 +70,16 @@ export function FarkleTable({
                   {f.farkle ? 'Farkle!' : 'Keep what scores.'}
                 </div>
               </div>
-              {!f.farkle && (
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--muted-text)' }}>On the table</div>
-                  <div style={{
-                    fontSize: 'clamp(54px,8.5vw,94px)', fontWeight: 700, letterSpacing: '-0.03em',
-                    color: onTable > 0 ? 'var(--violet)' : '#c2c2d8',
-                  }}
-                  >
-                    {onTable.toLocaleString()}
-                  </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--muted-text)' }}>{f.farkle ? 'Lost' : 'On the table'}</div>
+                <div style={{
+                  fontSize: 'clamp(54px,8.5vw,94px)', fontWeight: 700, letterSpacing: '-0.03em',
+                  color: f.farkle ? 'var(--coral)' : onTable > 0 ? 'var(--violet)' : '#c2c2d8',
+                }}
+                >
+                  {f.farkle ? (f.lost > 0 ? f.lost.toLocaleString() : '—') : onTable.toLocaleString()}
                 </div>
-              )}
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 24, minHeight: 94 }}>
@@ -130,10 +130,11 @@ export function FarkleTable({
 
         <div style={{ flex: '1 1 230px', maxWidth: 330 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {room.seats.map((s) => {
+            {room.seats.map((s, i) => {
               const isActive = s.id === activeSeat?.id
               let sub = ''
               if (isActive) sub = s.id === localSeatId ? 'your throw' : 'their throw'
+              else if (f.finalRound) sub = tookFinalTurn(i, trigIdx, room.seats.length, room.turnIdx, f.finalRound) ? 'banked out' : `${(f.winningScore - s.score).toLocaleString()} to go`
               else if (s.score === 0) sub = 'not open yet'
               return (
                 <div

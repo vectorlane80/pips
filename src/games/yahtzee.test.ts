@@ -1,0 +1,216 @@
+import { describe, it, expect } from 'vitest'
+import { grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal } from './yahtzee'
+
+describe('isFiveKind', () => {
+  it('five equal values → true', () => {
+    expect(isFiveKind([4, 4, 4, 4, 4])).toBe(true)
+  })
+
+  it('four equal values → false', () => {
+    expect(isFiveKind([4, 4, 4, 4, 5])).toBe(false)
+  })
+
+  it('short arrays → false', () => {
+    expect(isFiveKind([])).toBe(false)
+    expect(isFiveKind([3, 3, 3])).toBe(false)
+  })
+})
+
+describe('scoreCategory — upper section', () => {
+  it('sums only the matching face', () => {
+    // [3,3,3,2,5]: no 1s, three 3s, one 5
+    expect(scoreCategory([3, 3, 3, 2, 5], 'ones')).toBe(0)
+    expect(scoreCategory([3, 3, 3, 2, 5], 'threes')).toBe(9)
+    expect(scoreCategory([3, 3, 3, 2, 5], 'fives')).toBe(5)
+  })
+
+  it('five sixes → 30', () => {
+    expect(scoreCategory([6, 6, 6, 6, 6], 'sixes')).toBe(30)
+  })
+})
+
+describe('scoreCategory — three/four of a kind', () => {
+  it('exactly three of a kind → sum of all five dice', () => {
+    // 3+3+3+2+5 = 16; fourKind needs four equal → 0
+    expect(scoreCategory([3, 3, 3, 2, 5], 'threeKind')).toBe(16)
+    expect(scoreCategory([3, 3, 3, 2, 5], 'fourKind')).toBe(0)
+  })
+
+  it('four of a kind satisfies threeKind too → sum of all five', () => {
+    // 2+2+2+2+6 = 14 for both
+    expect(scoreCategory([2, 2, 2, 2, 6], 'threeKind')).toBe(14)
+    expect(scoreCategory([2, 2, 2, 2, 6], 'fourKind')).toBe(14)
+  })
+
+  it('no matching group → 0', () => {
+    expect(scoreCategory([1, 2, 3, 4, 5], 'threeKind')).toBe(0)
+  })
+})
+
+describe('scoreCategory — full house (empty card, joker off)', () => {
+  it('3+2 → 25', () => {
+    expect(scoreCategory([3, 3, 3, 5, 5], 'fullHouse', {})).toBe(25)
+  })
+
+  it('4+1 → 0', () => {
+    expect(scoreCategory([3, 3, 3, 3, 5], 'fullHouse', {})).toBe(0)
+  })
+
+  it('five of a kind → 0 without a filled yahtzee box', () => {
+    // Not a 3+2 split, and the joker needs card.yahtzee to be defined
+    expect(scoreCategory([2, 2, 2, 2, 2], 'fullHouse', {})).toBe(0)
+  })
+})
+
+describe('scoreCategory — straights', () => {
+  it('small straight with an extra die → 30', () => {
+    expect(scoreCategory([1, 2, 3, 4, 6], 'smallStraight')).toBe(30)
+  })
+
+  it('small straight with a duplicate → 30', () => {
+    expect(scoreCategory([2, 3, 4, 5, 5], 'smallStraight')).toBe(30)
+  })
+
+  it('no four-in-a-row → 0', () => {
+    expect(scoreCategory([1, 2, 3, 5, 6], 'smallStraight')).toBe(0)
+  })
+
+  it('large straight → 40', () => {
+    expect(scoreCategory([1, 2, 3, 4, 5], 'largeStraight')).toBe(40)
+    expect(scoreCategory([2, 3, 4, 5, 6], 'largeStraight')).toBe(40)
+  })
+
+  it('five dice missing one end → 0', () => {
+    expect(scoreCategory([1, 2, 3, 4, 6], 'largeStraight')).toBe(0)
+  })
+})
+
+describe('scoreCategory — yahtzee and chance', () => {
+  it('yahtzee → 50', () => {
+    expect(scoreCategory([5, 5, 5, 5, 5], 'yahtzee')).toBe(50)
+  })
+
+  it('four of a kind → 0', () => {
+    expect(scoreCategory([5, 5, 5, 5, 4], 'yahtzee')).toBe(0)
+  })
+
+  it('chance → sum of all five dice', () => {
+    // 1+3+4+6+6 = 20
+    expect(scoreCategory([1, 3, 4, 6, 6], 'chance')).toBe(20)
+  })
+})
+
+describe('scoreCategory — joker branch (five of a kind + filled yahtzee + filled upper box)', () => {
+  it('filled yahtzee and matching upper box → wildcard on lower boxes', () => {
+    // Four of a kind also means fours must already be filled for the joker
+    const card = { yahtzee: 50, fours: 16 }
+    expect(scoreCategory([4, 4, 4, 4, 4], 'fullHouse', card)).toBe(25)
+    expect(scoreCategory([4, 4, 4, 4, 4], 'smallStraight', card)).toBe(30)
+    expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(40)
+  })
+
+  it('zeroed yahtzee box still enables the joker (checks !== undefined)', () => {
+    // A 0 in the yahtzee box means it was filled but the first yahtzee was scored elsewhere
+    const card = { yahtzee: 0, fours: 0 }
+    expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(40)
+  })
+
+  it('matching upper box open → no wildcard', () => {
+    // yahtzee filled, but fours has no entry yet
+    const card = { yahtzee: 50 }
+    expect(scoreCategory([4, 4, 4, 4, 4], 'fullHouse', card)).toBe(0)
+    expect(scoreCategory([4, 4, 4, 4, 4], 'smallStraight', card)).toBe(0)
+    expect(scoreCategory([4, 4, 4, 4, 4], 'largeStraight', card)).toBe(0)
+  })
+
+  it('yahtzee box open → no wildcard', () => {
+    const card = { fours: 16 }
+    expect(scoreCategory([4, 4, 4, 4, 4], 'fullHouse', card)).toBe(0)
+  })
+
+  it('a different upper box being filled does not enable the joker for the actual matching box', () => {
+    // Fours rolled, but only "threes" is filled — "fours" (the matching box) is still open,
+    // so the joker must not apply even though *some* upper box has a value.
+    const card = { yahtzee: 50, threes: 9 }
+    expect(scoreCategory([4, 4, 4, 4, 4], 'fullHouse', card)).toBe(0)
+  })
+
+  it('joker never applies to non-five-of-a-kind rolls', () => {
+    const card = { yahtzee: 50, fours: 16 }
+    expect(scoreCategory([4, 4, 4, 4, 5], 'fullHouse', card)).toBe(0)
+  })
+})
+
+describe('upperTotal', () => {
+  it('sums the six upper boxes, missing ones count 0', () => {
+    // 3 + 12 + 18 = 33
+    expect(upperTotal({ ones: 3, fours: 12, sixes: 18 })).toBe(33)
+  })
+
+  it('ignores lower boxes', () => {
+    expect(upperTotal({ ones: 1, chance: 30, yahtzee: 50 })).toBe(1)
+  })
+
+  it('empty card → 0', () => {
+    expect(upperTotal({})).toBe(0)
+  })
+})
+
+describe('grandTotal', () => {
+  it('adds the 35-point upper bonus when the upper section reaches 63', () => {
+    // Upper: 3+6+9+12+15+18 = 63 → +35
+    // Lower: 5+5+25+30+0+0+40 = 105
+    const card = {
+      ones: 3, twos: 6, threes: 9, fours: 12, fives: 15, sixes: 18,
+      threeKind: 5, fourKind: 5, fullHouse: 25, smallStraight: 30,
+      largeStraight: 0, yahtzee: 0, chance: 40,
+    }
+    expect(grandTotal(card)).toBe(63 + 105 + 35)
+  })
+
+  it('no bonus when the upper section is below 63', () => {
+    // Same lower boxes; sixes dropped from 18 to 12 → upper 57
+    const card = {
+      ones: 3, twos: 6, threes: 9, fours: 12, fives: 15, sixes: 12,
+      threeKind: 5, fourKind: 5, fullHouse: 25, smallStraight: 30,
+      largeStraight: 0, yahtzee: 0, chance: 40,
+    }
+    expect(grandTotal(card)).toBe(57 + 105)
+  })
+
+  it('reads only the card — no bonuses parameter to fold into', () => {
+    // A second yahtzee bonus lives in room.yahtzee.bonuses, never in the card,
+    // so grandTotal must not change for the same card.
+    const card = { ones: 3, fours: 12, sixes: 18, yahtzee: 50 }
+    expect(grandTotal(card)).toBe(33 + 50)
+  })
+})
+
+describe('partitionDiceOrder', () => {
+  const die = (id: number, sel: boolean) => ({ id, val: 1, sel, rot: 0 })
+
+  it('all unheld → original order preserved', () => {
+    expect(partitionDiceOrder([die(0, false), die(1, false), die(2, false)])).toEqual({
+      ids: [0, 1, 2],
+      heldCount: 0,
+    })
+  })
+
+  it('all held → heldCount is 3, ids in original order', () => {
+    expect(partitionDiceOrder([die(4, true), die(2, true), die(9, true)])).toEqual({
+      ids: [4, 2, 9],
+      heldCount: 3,
+    })
+  })
+
+  it('mix preserves relative order within each group', () => {
+    expect(partitionDiceOrder([die(3, false), die(7, true), die(1, false), die(9, true), die(5, false)])).toEqual({
+      ids: [7, 9, 3, 1, 5],
+      heldCount: 2,
+    })
+  })
+
+  it('empty → empty ids, heldCount 0', () => {
+    expect(partitionDiceOrder([])).toEqual({ ids: [], heldCount: 0 })
+  })
+})

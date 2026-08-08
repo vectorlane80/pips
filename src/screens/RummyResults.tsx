@@ -8,6 +8,7 @@ export interface RummyResultsProps {
   opponentName: string
   publicState: RummyPublicState
   isHost: boolean
+  notice?: string | null
   onRematch: () => void
   onBackToShelf: () => void
 }
@@ -31,6 +32,7 @@ export function RummyResults({
   opponentName,
   publicState,
   isHost,
+  notice,
   onRematch,
   onBackToShelf,
 }: RummyResultsProps) {
@@ -60,6 +62,22 @@ export function RummyResults({
       maxWidth: 1120, margin: '0 auto',
       padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px',
     }}>
+      {notice && (
+        <div style={{
+          textAlign: 'center',
+          background: 'var(--coral)',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: 'clamp(14px, 1.8vw, 17px)',
+          padding: '10px 22px',
+          borderRadius: 999,
+          border: '3px solid var(--ink)',
+          boxShadow: '0 5px 0 var(--ink)',
+          marginBottom: 'clamp(10px, 2vw, 18px)',
+        }}>
+          {notice}
+        </div>
+      )}
       <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>
         Rummy · {publicState.target} target · round {publicState.roundNumber}
       </span>

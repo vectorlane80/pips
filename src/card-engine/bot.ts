@@ -14,6 +14,9 @@ export function runBotTurn<TPublicState, TPrivateState, TAction>(
   validate: ActionValidator<TPublicState, TPrivateState, TAction>,
 ): { session: HostSession<TPublicState, TPrivateState>; outcome: ActionOutcome<TPublicState, TPrivateState> } {
   const view = deriveSnapshot(session, playerId)
+  if (view.privateState === undefined) {
+    throw new Error(`runBotTurn: playerId "${playerId}" is not a participant in this session`)
+  }
   const action = strategy(view.publicState, view.privateState, playerId)
   return applyAction(session, playerId, action, validate)
 }

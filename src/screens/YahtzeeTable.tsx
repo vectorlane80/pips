@@ -1,5 +1,6 @@
+import { Fragment, useLayoutEffect, useState } from 'react'
 import type { RoomState, YCategory } from '../types'
-import { Y_CATEGORIES, Y_LABEL, Y_SUBLABEL, scoreCategory, upperTotal } from '../games/yahtzee'
+import { Y_CATEGORIES, Y_LABEL, Y_SUBLABEL, partitionDiceOrder, scoreCategory, upperTotal } from '../games/yahtzee'
 import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
@@ -20,6 +21,14 @@ export function YahtzeeTable({
   const isMyTurn = activeSeat?.id === localSeatId
   const displayVals = useDiceAnimation(y.dice)
   const vals = y.dice.map((d) => d.val)
+
+  const [diceOrder, setDiceOrder] = useState<{ ids: number[]; heldCount: number }>({ ids: [], heldCount: 0 })
+
+  // Re-partition only when a roll lands (or the dice are cleared) — never on a hold toggle,
+  // so holding a die doesn't make it jump; it moves left on the next roll.
+  useLayoutEffect(() => {
+    setDiceOrder(partitionDiceOrder(y.dice))
+  }, [y.rollsLeft, y.dice.length])
 
   const rollLabel = y.dice.length === 0 ? 'Roll five' : y.rollsLeft > 0 ? `Roll again (${y.rollsLeft} left)` : 'No rolls left'
   const canRoll = isMyTurn && y.rollsLeft > 0
@@ -80,31 +89,25 @@ export function YahtzeeTable({
               {y.dice.length === 0 && <span style={{ color: 'var(--faint-text)', alignSelf: 'center' }}>Five dice, ready.</span>}
               {y.dice.length > 0 && (() => {
                 const displayMap = new Map(y.dice.map((d, i) => [d.id, displayVals[i] ?? d.val]))
-                const heldDice = y.dice.filter((d) => d.sel)
-                const unheldDice = y.dice.filter((d) => !d.sel)
+                const byId = new Map(y.dice.map((d) => [d.id, d]))
                 return (
                   <>
-                    {heldDice.map((d) => (
-                      <Die
-                        key={d.id}
-                        value={displayMap.get(d.id) ?? d.val}
-                        selected={d.sel}
-                        rotation={d.rot}
-                        onClick={isMyTurn ? () => onToggleHold(d.id) : undefined}
-                      />
-                    ))}
-                    {heldDice.length > 0 && unheldDice.length > 0 && (
-                      <div style={{ width: 3, background: 'var(--grey-fill)', borderRadius: 2, alignSelf: 'stretch', margin: '6px 4px' }} />
-                    )}
-                    {unheldDice.map((d) => (
-                      <Die
-                        key={d.id}
-                        value={displayMap.get(d.id) ?? d.val}
-                        selected={d.sel}
-                        rotation={d.rot}
-                        onClick={isMyTurn ? () => onToggleHold(d.id) : undefined}
-                      />
-                    ))}
+                    {diceOrder.ids.map((id, i) => {
+                      const d = byId.get(id)!
+                      return (
+                        <Fragment key={id}>
+                          {i === diceOrder.heldCount && diceOrder.heldCount > 0 && (
+                            <div style={{ width: 3, background: 'var(--grey-fill)', borderRadius: 2, alignSelf: 'stretch', margin: '6px 4px' }} />
+                          )}
+                          <Die
+                            value={displayMap.get(d.id) ?? d.val}
+                            selected={d.sel}
+                            rotation={d.rot}
+                            onClick={isMyTurn ? () => onToggleHold(d.id) : undefined}
+                          />
+                        </Fragment>
+                      )
+                    })}
                   </>
                 )
               })()}
@@ -132,6 +135,16 @@ export function YahtzeeTable({
               {Y_CATEGORIES.map((cat, ci) => (
                 <YRow key={cat} cat={cat} room={room} activeSeat={activeSeat} isMyTurn={isMyTurn} vals={vals} onScore={onScore} injectBonus={ci === 6} />
               ))}
+
+              <div style={{ fontSize: 13, color: 'var(--faint-text)' }}>Yahtzee bonus <span style={{ display: 'block', fontSize: 11 }}>+100 each extra</span></div>
+              {room.seats.map((s) => {
+                const bonus = y.bonuses[s.id] ?? 0
+                return (
+                  <div key={s.id} style={{ textAlign: 'center', fontSize: 13, fontWeight: 600, color: bonus > 0 ? 'var(--green-text)' : '#c2c2d8' }}>
+                    {bonus > 0 ? `+${bonus}` : '·'}
+                  </div>
+                )
+              })}
 
               <div style={{ fontWeight: 700, fontSize: 15, marginTop: 4 }}>Total</div>
               {room.seats.map((s) => (
@@ -187,7 +200,7 @@ function YRow({
         }
         const live = s.id === activeSeat?.id && isMyTurn && y.dice.length > 0
         if (live) {
-          const val = scoreCategory(vals, cat)
+          const val = scoreCategory(vals, cat, y.cards[activeSeat.id] ?? {})
           return (
             <button
               key={s.id}

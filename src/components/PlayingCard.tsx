@@ -96,11 +96,9 @@ export function PlayingCard({
       case 'hand':
         return (
           <>
-            <span className="playing-card__corner">
+            <span className="playing-card__corner playing-card__corner--stacked" style={{ color }}>
               <span className="playing-card__rank">{rank}</span>
-              <span className="playing-card__suit" style={{ color }}>
-                {glyph}
-              </span>
+              <span className="playing-card__suit">{glyph}</span>
             </span>
             <span className="playing-card__bottom-suit" style={{ color }}>
               {glyph}
@@ -109,21 +107,17 @@ export function PlayingCard({
         )
       case 'meld':
         return (
-          <span className="playing-card__center">
+          <span className="playing-card__center" style={{ color }}>
             <span className="playing-card__rank">{rank}</span>
-            <span className="playing-card__suit" style={{ color }}>
-              {glyph}
-            </span>
+            <span className="playing-card__suit">{glyph}</span>
           </span>
         )
       case 'discard':
         return (
           <>
-            <span className="playing-card__corner playing-card__corner--stacked">
+            <span className="playing-card__corner playing-card__corner--stacked" style={{ color }}>
               <span className="playing-card__rank">{rank}</span>
-              <span className="playing-card__suit" style={{ color }}>
-                {glyph}
-              </span>
+              <span className="playing-card__suit">{glyph}</span>
             </span>
             <span className="playing-card__bottom-suit playing-card__bottom-suit--discard" style={{ color }}>
               {glyph}

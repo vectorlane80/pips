@@ -3,9 +3,10 @@ import type {
 } from '../types'
 import { GAME_MAX_SEATS, SEAT_PALETTE } from '../types'
 import { hasAnyScore, rollDice as rollFarkleDice, scoreSelection } from '../games/farkle'
-import { grandTotal, rollDice as rollYahtzeeDice, scoreCategory, upperTotal } from '../games/yahtzee'
+import { grandTotal, isFiveKind, rollDice as rollYahtzeeDice, scoreCategory, upperTotal } from '../games/yahtzee'
 import { checkWin, isDraw } from '../games/ttt'
 import { isWordSolved, randomWord } from '../games/hangman'
+import { randomBotName } from '../data/botNames'
 
 const CODE_WORDS = [
   'BONE', 'DICE', 'CARD', 'GAME', 'PLAY', 'STAR', 'MOON', 'LEAF', 'WAVE', 'FOX',
@@ -44,8 +45,12 @@ function initFarkle(): FarkleState {
 
 function initYahtzee(seats: Seat[]): YahtzeeState {
   const cards: YahtzeeState['cards'] = {}
-  seats.forEach((s) => { cards[s.id] = {} })
-  return { dice: [], rollsLeft: 3, cards, round: 1, rolling: false, status: 'Your roll.', lastTurn: null }
+  const bonuses: YahtzeeState['bonuses'] = {}
+  seats.forEach((s) => {
+    cards[s.id] = {}
+    bonuses[s.id] = 0
+  })
+  return { dice: [], rollsLeft: 3, cards, bonuses, round: 1, rolling: false, status: 'Your roll.', lastTurn: null }
 }
 
 function initTtt(seats: Seat[]): TttState {
@@ -79,7 +84,7 @@ export function makeRoom(code: string, game: Game, hostName: string, hostId: str
 }
 
 function withNewSeats(state: RoomState, seats: Seat[]): RoomState {
-  return { ...state, seats, yahtzee: { ...state.yahtzee, cards: reconcileCards(state.yahtzee.cards, seats) }, ttt: { ...state.ttt, wins: reconcileScores(state.ttt.wins, seats) }, hangman: { ...state.hangman, wins: reconcileScores(state.hangman.wins, seats) } }
+  return { ...state, seats, yahtzee: { ...state.yahtzee, cards: reconcileCards(state.yahtzee.cards, seats), bonuses: reconcileScores(state.yahtzee.bonuses, seats) }, ttt: { ...state.ttt, wins: reconcileScores(state.ttt.wins, seats) }, hangman: { ...state.hangman, wins: reconcileScores(state.hangman.wins, seats) } }
 }
 
 function reconcileCards(cards: YahtzeeState['cards'], seats: Seat[]): YahtzeeState['cards'] {
@@ -104,12 +109,6 @@ export function removeSeat(state: RoomState, id: string): RoomState {
   return withNewSeats(state, state.seats.filter((s) => s.id !== id))
 }
 
-function nextBotName(seats: Seat[]): string {
-  const names = ['Marguerite', 'Otis', 'Wren', 'Baxter', 'Iris', 'Cleo', 'Fenn', 'Nova']
-  const used = new Set(seats.map((s) => s.name))
-  return names.find((n) => !used.has(n)) ?? `House ${seats.length}`
-}
-
 function advanceTurn(seats: Seat[], turnIdx: number, round: number): { turnIdx: number; round: number } {
   const next = (turnIdx + 1) % seats.length
   return { turnIdx: next, round: next === 0 ? round + 1 : round }
@@ -125,7 +124,7 @@ export function applyAction(state: RoomState, action: Action, by: string): RoomS
     }
     case 'addBot': {
       if (state.seats.length >= GAME_MAX_SEATS[state.game]) return state
-      return addSeat(state, `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, nextBotName(state.seats), true)
+      return addSeat(state, `bot-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, randomBotName(state.seats.map((s) => s.name)), true)
     }
     case 'setBotDifficulty':
       return { ...state, botDifficulty: action.difficulty }
@@ -283,19 +282,21 @@ function yahtzeeScore(state: RoomState, by: string, category: YCategory): RoomSt
   if (y.dice.length === 0) return state
   if (y.cards[by]?.[category] !== undefined) return state
   const vals = y.dice.map((d) => d.val)
-  const points = scoreCategory(vals, category)
+  const bonus = isFiveKind(vals) && y.cards[by]?.yahtzee === 50 ? 100 : 0
+  const bonuses = bonus ? { ...y.bonuses, [by]: (y.bonuses[by] ?? 0) + bonus } : y.bonuses
+  const points = scoreCategory(vals, category, y.cards[by] ?? {})
   const cards = { ...y.cards, [by]: { ...y.cards[by], [category]: points } }
-  const seats = state.seats.map((s) => (s.id === by ? { ...s, score: grandTotal(cards[by]) } : s))
+  const seats = state.seats.map((s) => (s.id === by ? { ...s, score: grandTotal(cards[by]) + (bonuses[by] ?? 0) } : s))
   const allDone = seats.every((s) => Object.keys(cards[s.id] ?? {}).length >= 13)
   if (allDone) {
     const winnerId = [...seats].sort((a, b) => b.score - a.score)[0].id
-    return { ...state, seats, screen: 'results', winnerId, yahtzee: { ...y, cards } }
+    return { ...state, seats, screen: 'results', winnerId, yahtzee: { ...y, cards, bonuses } }
   }
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, y.round)
   const lastTurnSeat = state.seats.find((s) => s.id === by)!
   return {
     ...state, seats, turnIdx,
-    yahtzee: { ...y, cards, dice: [], rollsLeft: 3, round, status: 'Your roll.', lastTurn: { name: lastTurnSeat.name, color: lastTurnSeat.color, category, points } },
+    yahtzee: { ...y, cards, bonuses, dice: [], rollsLeft: 3, round, status: 'Your roll.', lastTurn: { name: lastTurnSeat.name, color: lastTurnSeat.color, category, points } },
   }
 }
 

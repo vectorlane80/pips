@@ -1,5 +1,4 @@
 import type { Card } from '../../card-engine/cards.ts'
-import type { Zone } from '../../card-engine/zones.ts'
 import { deadwoodValue } from './rank.ts'
 import { isAceHighRun } from './melds.ts'
 
@@ -22,13 +21,6 @@ export function meldValue(meldCards: Card[]): number {
 // unmelded Ace at 15 (see rank.ts).
 export function deadwood(cards: Card[]): number {
   return cards.reduce((sum, card) => sum + deadwoodValue(card.rank), 0)
-}
-
-// A player's score contribution THIS ROUND: sum of their melded cards' point values,
-// minus the deadwood penalty of whatever's left in their hand (0 for a player who went out).
-export function playerRoundScore(melds: Zone[], remainingHand: Card[]): number {
-  const meldedTotal = melds.reduce((sum, meld) => sum + meldValue(meld.cards), 0)
-  return meldedTotal - deadwood(remainingHand)
 }
 
 // Sum of point values, across every meld group on the table, for cards CONTRIBUTED by

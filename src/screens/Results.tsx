@@ -1,4 +1,4 @@
-import type { RoomState } from '../types'
+import type { RoomState, Seat } from '../types'
 import { GAME_LABEL } from '../types'
 import { upperTotal } from '../games/yahtzee'
 
@@ -23,6 +23,21 @@ function rowDetail(room: RoomState, seatId: string): string {
       return `${room.ttt.wins[seatId] ?? 0} games won`
     case 'hangman':
       return `${room.hangman.wins[seatId] ?? 0} words solved`
+  }
+}
+
+function ledeText(room: RoomState, winner: Seat): string {
+  switch (room.game) {
+    case 'farkle':
+      return `Won at ${winner.score.toLocaleString()} after ${room.farkle.round} rounds.`
+    case 'yahtzee':
+      return `Final total ${winner.score}, upper section ${upperTotal(room.yahtzee.cards[winner.id] ?? {})}.`
+    case 'ttt': {
+      const others = room.seats.filter((s) => s.id !== winner.id).map((s) => room.ttt.wins[s.id] ?? 0)
+      return `Match score ${room.ttt.wins[winner.id] ?? 0}–${Math.max(0, ...others)}.`
+    }
+    case 'hangman':
+      return `${room.hangman.wins[winner.id] ?? 0} words solved.`
   }
 }
 
@@ -51,6 +66,10 @@ export function Results({
       >
         {isMe ? 'You take it!' : `${winner.name} takes it!`}
       </h1>
+
+      <p style={{ fontSize: 'clamp(16px,1.9vw,18px)', lineHeight: 1.5, maxWidth: '46ch', margin: '0 0 8px', color: 'var(--body-text)' }}>
+        {ledeText(room, winner)}
+      </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 660, marginTop: 24 }}>
         {ranked.map((seat, i) => (

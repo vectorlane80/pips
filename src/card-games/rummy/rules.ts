@@ -1,3 +1,4 @@
+import type { Card } from '../../card-engine/cards.ts'
 import type { ActionOutcome, ActionValidator } from '../../card-engine/sync.ts'
 import { applyAction } from '../../card-engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../card-engine/bot.ts'
@@ -22,6 +23,21 @@ function allMeldGroups(
     })
   }
   return groups
+}
+
+// True iff the pending obligated card could still be used after this action: either some
+// subset of the remaining hand melds it, or it can be laid off onto some existing meld group.
+function obligationSatisfiable(
+  obligatedCard: Card,
+  remainingHand: Card[],
+  melds: Record<string, Zone[]>,
+  layoffs: RummyLayoff[],
+): boolean {
+  if (hasMeldIncluding(remainingHand, obligatedCard.id)) return true
+  for (const g of allMeldGroups(melds, layoffs)) {
+    if (classifyMeld([...g.cards, obligatedCard]).valid) return true
+  }
+  return false
 }
 
 // Who actually played a given card id — the zone owner if it's part of an original meld zone,
@@ -240,6 +256,13 @@ function makeValidator(
         ? null
         : publicState.obligatedCardId
 
+      if (newObligated) {
+        const obligCard = newHand.cards.find((c) => c.id === newObligated)!
+        if (!obligationSatisfiable(obligCard, newHand.cards, newMelds, publicState.layoffs)) {
+          return { ok: false, reason: 'that would leave no way to use the card you reached for' }
+        }
+      }
+
       if (cardCount(newHand) === 0) {
         return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, newMelds, publicState.layoffs, newObligated)
       }
@@ -277,6 +300,13 @@ function makeValidator(
       const newObligated = publicState.obligatedCardId && action.cardIds.includes(publicState.obligatedCardId)
         ? null
         : publicState.obligatedCardId
+
+      if (newObligated) {
+        const obligCard = newHand.cards.find((c) => c.id === newObligated)!
+        if (!obligationSatisfiable(obligCard, newHand.cards, publicState.melds, newLayoffs)) {
+          return { ok: false, reason: 'that would leave no way to use the card you reached for' }
+        }
+      }
 
       if (cardCount(newHand) === 0) {
         return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.melds, newLayoffs, newObligated)

@@ -32,8 +32,9 @@ export interface RummyPublicState {
   melds: Record<string, Zone[]>          // playerId -> the meld zones THEY originally laid down this round.
                                             // Never mutated by a lay-off — see `layoffs` for those.
   layoffs: RummyLayoff[]
-  obligatedCardId: string | null          // if set, the current acting player must include this card id in a
-                                            // LAY_DOWN_MELD before they may DISCARD_CARD this turn
+  obligatedCardId: string | null          // if set, the current acting player must use this card id in a
+                                            // meld action (LAY_DOWN_MELD or LAY_OFF) before they may
+                                            // DISCARD_CARD this turn
   scores: Record<string, number>          // match score per player, accumulates across rounds
   target: number                           // match target score
   roundNumber: number

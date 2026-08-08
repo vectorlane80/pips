@@ -1,5 +1,6 @@
 import type { BotStrategy } from '../../card-engine/bot.ts'
 import type { RummyPublicState, RummyPrivateState, RummyAction } from './state.ts'
+import { fullMeldCards } from './state.ts'
 import { classifyMeld, hasMeldIncluding } from './melds.ts'
 import { rankValue, deadwoodValue } from './rank.ts'
 import type { Card } from '../../card-engine/cards.ts'
@@ -163,7 +164,7 @@ export const rummyBotStrategy: BotStrategy<
   RummyPublicState,
   RummyPrivateState,
   RummyAction
-> = (publicState, privateState, _playerId) => {
+> = (publicState, privateState, playerId) => {
   // Guard: if the round is already over, the only sensible action is to
   // start the next round.  Defensive — a caller that doesn't check roundOver
   // before calling us would otherwise crash on the empty hand below.
@@ -198,14 +199,27 @@ export const rummyBotStrategy: BotStrategy<
   // ── Discard phase ───────────────────────────────────────────
   const obligated = publicState.obligatedCardId
 
-  // Case 2: obligation — must meld with that card
+  // Case 2: obligation — must use that card in a meld action
   if (obligated) {
     const meld = findMeld(hand, obligated)
     if (meld) {
       return { type: 'LAY_DOWN_MELD', cardIds: meld }
     }
-    // Shouldn't happen (validator only sets obligation when meld exists),
-    // but if it does, fall through to the general meld search below.
+    // From-hand meld failed: try laying the obligated card off onto an existing meld
+    // group instead — the validator accepts either path (see obligationSatisfiable).
+    // LAY_OFF requires an own meld already down, same as Case 3b.
+    const obligCard = hand.find((c) => c.id === obligated)
+    if (obligCard && (publicState.melds[playerId] ?? []).length > 0) {
+      for (const [ownerId, zones] of Object.entries(publicState.melds)) {
+        for (let meldIndex = 0; meldIndex < zones.length; meldIndex++) {
+          const group = fullMeldCards(publicState.melds, publicState.layoffs, ownerId, meldIndex)
+          if (classifyMeld([...group, obligCard]).valid) {
+            return { type: 'LAY_OFF', targetPlayerId: ownerId, meldIndex, cardIds: [obligCard.id] }
+          }
+        }
+      }
+    }
+    // Still unresolved — fall through to the general search below.
   }
 
   // Case 3: any meld available → lay one down (use lookahead to pick the
@@ -213,6 +227,24 @@ export const rummyBotStrategy: BotStrategy<
   const meld = bestFirstMeld(hand)
   if (meld) {
     return { type: 'LAY_DOWN_MELD', cardIds: meld }
+  }
+
+  // Case 3b: lay off any single hand card that legally extends an existing meld group —
+  // own or opponent's. One card per action; runRummyBotTurn calls us again, so multi-card
+  // extensions happen incrementally (any valid multi-card run/set extension can be ordered
+  // as a sequence of individually-valid single cards). Always beneficial: the card scores
+  // to us and stops counting as deadwood.
+  if ((publicState.melds[playerId] ?? []).length > 0) {
+    for (const [ownerId, zones] of Object.entries(publicState.melds)) {
+      for (let meldIndex = 0; meldIndex < zones.length; meldIndex++) {
+        const group = fullMeldCards(publicState.melds, publicState.layoffs, ownerId, meldIndex)
+        for (const card of hand) {
+          if (classifyMeld([...group, card]).valid) {
+            return { type: 'LAY_OFF', targetPlayerId: ownerId, meldIndex, cardIds: [card.id] }
+          }
+        }
+      }
+    }
   }
 
   // Case 4: no meld → discard least-useful card

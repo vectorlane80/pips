@@ -33,6 +33,16 @@ Standard 52-card deck, no jokers, exactly 2 players.
   consecutiveness check, not a "contains a King" shortcut (which misvalues the
   one edge case where a run is the full 13-card A-through-K sequence, valid
   entirely under the ace-low interpretation despite containing a King).
+- **Laying off**: once a player has laid down at least one meld of their own
+  this round, they may also add cards from their hand onto any existing meld
+  group — their own or the opponent's (`LAY_OFF`). Each lay-off is validated
+  against the group's *full* current cards (original meld plus every prior
+  lay-off, via `fullMeldCards`), and lay-offs chain indefinitely. Laid-off
+  cards stay attributed to whoever played them (`RummyLayoff` in `state.ts`):
+  they render on the layer's own side of the table and score to the layer,
+  not the group's owner. Laying off the reached-for obligated card satisfies
+  the reach-in obligation the same way melding it does, and emptying the hand
+  via a lay-off goes out.
 - **The discard reach-in** (the signature interaction, per the design handoff):
   a player may reach into the discard pile at any depth, not just take the top
   card. Reaching at index `i` takes `pile[i..top]` — that card and everything
@@ -61,9 +71,11 @@ Standard 52-card deck, no jokers, exactly 2 players.
   low (`A-2-3`), 15 melded high (`Q-K-A`) or in a set of aces, and a 15-point
   penalty if left unmelded (previously just 1 — raised specifically because an
   unused Ace is now a much bigger missed opportunity under the flexible-ace
-  rule). `meldedCardValue`/`meldValue`/`playerRoundScore` in `scoring.ts`
-  implement this; `finishRoundByGoingOut` in `rules.ts` applies both players'
-  deltas. Round scores (and running match totals) can legitimately go
+  rule). `meldedCardValue`/`meldValue` in `scoring.ts` value melded cards;
+  `playerContributedMeldValue` sums each player's *contributed* cards across
+  every meld group (so laid-off cards score to whoever played them);
+  `finishRoundByGoingOut` in `rules.ts` applies both players' deltas. Round
+  scores (and running match totals) can legitimately go
   negative — a player who melds nothing and holds a full hand of deadwood
   loses points that round. First to 100 wins the match and the app shows
   `RummyResults`; if both players cross 100 in the same round, the higher
@@ -81,9 +93,6 @@ Standard 52-card deck, no jokers, exactly 2 players.
 
 ### What's explicitly NOT implemented (see `CHARTER.md` Non-goals)
 
-- **Laying off** onto an existing meld (yours or the opponent's) — a player
-  can only lay down brand-new melds from their hand. The design handoff itself
-  says this "isn't in the design yet."
 - Any Rummy variant beyond the above — no jokers, no wild cards, no Gin-style
   knocking, no Contract Rummy sequencing.
 - More than 2 players.
@@ -104,7 +113,7 @@ Standard 52-card deck, no jokers, exactly 2 players.
 src/card-games/rummy/
   rank.ts       — rankValue (Ace-low, stable ordering), rankValueAceHigh, deadwoodValue
   melds.ts      — classifyMeld (ace-flexible runs), hasMeldIncluding, isAceHighRun
-  scoring.ts    — meldedCardValue, meldValue, deadwood, playerRoundScore
+  scoring.ts    — meldedCardValue, meldValue, deadwood, playerContributedMeldValue
   state.ts      — RummyPublicState/RummyPrivateState/RummyAction/RummySession, createRummyGame, dealRound
   rules.ts      — the validator: makeValidator + applyRummyAction/runRummyBotTurn
   bot.ts        — rummyBotStrategy (card-engine/bot.ts seam)
@@ -112,7 +121,11 @@ src/card-games/rummy/
 
 `RummyPublicState` (visible to both players) carries: `turn` (card-engine's
 generic `TurnState`), `discardPile`, `stockCount`, `melds` (per player, an
-array of laid-down meld `Zone`s), `obligatedCardId`, `handCounts` (per player
+array of laid-down meld `Zone`s), `layoffs` (an append-only list of
+`RummyLayoff` records — cards added onto an existing group, attributed to
+the player who laid them off; `fullMeldCards` reassembles a group's complete
+current cards from the original zone plus its lay-offs), `obligatedCardId`,
+`handCounts` (per player
 card count — lets a client show "N cards · hidden" for the opponent WITHOUT
 the opponent's actual hand ever crossing the wire; derived fresh from the
 resulting hand at every hand-mutating action rather than manually
@@ -161,6 +174,9 @@ state each time. One reasonable strategy, not tiered:
   just the single biggest meld available right now (an earlier greedy-only
   version could strand cards a second meld needed and miss a guaranteed
   round win — see the devlog for the exact repro this fixed).
+- **Lay off**: after exhausting new melds, lays off any single hand card that
+  legally extends an existing group (its own or the opponent's), one card per
+  action.
 - **Discard phase, no meld available**: discard the least-connected card
   (fewest same-rank/same-suit-within-2-ranks neighbors in hand), tie-broken
   by highest deadwood value.
@@ -275,7 +291,7 @@ invisibly without that discipline.
 |---|---|
 | `src/card-games/rummy/rank.ts` | `rankValue`, `rankValueAceHigh`, `deadwoodValue` |
 | `src/card-games/rummy/melds.ts` | `classifyMeld`, `hasMeldIncluding`, `isAceHighRun` |
-| `src/card-games/rummy/scoring.ts` | `meldedCardValue`, `meldValue`, `deadwood`, `playerRoundScore` |
+| `src/card-games/rummy/scoring.ts` | `meldedCardValue`, `meldValue`, `deadwood`, `playerContributedMeldValue` |
 | `src/card-games/rummy/state.ts` | Types, `createRummyGame`, `dealRound` |
 | `src/card-games/rummy/rules.ts` | `applyRummyAction`, `runRummyBotTurn` |
 | `src/card-games/rummy/bot.ts` | `rummyBotStrategy` |

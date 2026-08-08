@@ -1,16 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { meldedCardValue, meldValue, deadwood, playerRoundScore } from './scoring.ts'
+import { meldedCardValue, meldValue, deadwood } from './scoring.ts'
 import type { Card } from '../../card-engine/cards.ts'
-import type { Zone } from '../../card-engine/zones.ts'
-import { createHand, addCards } from '../../card-engine/zones.ts'
 
 function card(id: string, suit: Card['suit'], rank: Card['rank']): Card {
   return { id, suit, rank, deckIndex: 0 }
-}
-
-function meldZone(playerId: string, cards: Card[]): Zone {
-  const hand = createHand(playerId)
-  return addCards(hand, cards)
 }
 
 describe('meldedCardValue', () => {
@@ -89,28 +82,5 @@ describe('deadwood', () => {
     const cards = [card('c1', 'clubs', '2'), card('c6', 'clubs', '7'), card('c0', 'clubs', 'A')]
     // 2=2, 7=7, A=15 → 24
     expect(deadwood(cards)).toBe(24)
-  })
-})
-
-describe('playerRoundScore', () => {
-  it('player with one A-2-3 meld (value 10) and 2 leftover cards (7♣,8♦) → round score 10-15 = -5', () => {
-    const meld = [card('c0', 'clubs', 'A'), card('c1', 'clubs', '2'), card('c2', 'clubs', '3')]
-    const hand = [card('c6', 'clubs', '7'), card('c19', 'diamonds', '8')]
-    // meld value: 5+2+3=10, hand deadwood: 7+8=15 → -5
-    const zone = meldZone('p1', meld)
-    expect(playerRoundScore([zone], hand)).toBe(-5)
-  })
-
-  it('player who went out (empty hand) with melds totaling 45 → round score 45', () => {
-    const meld = [card('c0', 'clubs', 'A'), card('c13', 'diamonds', 'A'), card('c26', 'hearts', 'A')]
-    // 3-ace set: 15+15+15=45, empty hand → 45-0=45
-    const zone = meldZone('p1', meld)
-    expect(playerRoundScore([zone], [])).toBe(45)
-  })
-
-  it('no melds, only deadwood → negative round score', () => {
-    const hand = [card('c50', 'spades', 'Q'), card('c51', 'spades', 'K')]
-    // melds: none (0), deadwood: 10+10=20 → -20
-    expect(playerRoundScore([], hand)).toBe(-20)
   })
 })

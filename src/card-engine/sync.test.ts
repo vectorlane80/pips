@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyAction,
+  assertWireSafe,
   createHostSession,
   deriveSnapshot,
   isJsonSerializable,
@@ -423,13 +424,17 @@ describe('isJsonSerializable', () => {
     expect(isJsonSerializable(false)).toBe(true)
   })
 
-  it('returns true for NaN', () => {
-    expect(isJsonSerializable(NaN)).toBe(true)
+  it('rejects NaN', () => {
+    expect(isJsonSerializable(NaN)).toBe(false)
   })
 
-  it('returns true for Infinity', () => {
-    expect(isJsonSerializable(Infinity)).toBe(true)
-    expect(isJsonSerializable(-Infinity)).toBe(true)
+  it('rejects Infinity and -Infinity', () => {
+    expect(isJsonSerializable(Infinity)).toBe(false)
+    expect(isJsonSerializable(-Infinity)).toBe(false)
+  })
+
+  it('rejects a nested NaN', () => {
+    expect(isJsonSerializable({ a: NaN })).toBe(false)
   })
 
   it('returns true for plain empty object', () => {
@@ -543,5 +548,44 @@ describe('isJsonSerializable', () => {
     h.push('a', 'b')
 
     expect(isJsonSerializable(h)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// assertWireSafe
+// ---------------------------------------------------------------------------
+
+describe('assertWireSafe', () => {
+  it('does not throw for a plain nested object (RummyView-shaped)', () => {
+    const view = { revision: 3, publicState: { a: 1 }, privateState: { hand: ['c1'] }, opponentName: 'Bob' }
+    expect(() => assertWireSafe(view, 'HostHandle.broadcast')).not.toThrow()
+  })
+
+  it('throws for a payload containing a function', () => {
+    expect(() => assertWireSafe({ a: { fn: () => {} } }, 'HostHandle.broadcast')).toThrow()
+  })
+
+  it('throws for a payload containing a Map', () => {
+    expect(() => assertWireSafe({ a: new Map([['k', 1]]) }, 'HostHandle.broadcast')).toThrow()
+  })
+
+  it('throws for a payload containing a class instance', () => {
+    class Foo {
+      x = 1
+    }
+    expect(() => assertWireSafe({ a: new Foo() }, 'HostHandle.broadcast')).toThrow()
+  })
+
+  it('throws for a payload containing nested undefined', () => {
+    expect(() => assertWireSafe({ a: { b: undefined } }, 'HostHandle.broadcast')).toThrow()
+  })
+
+  it('throws for a payload containing NaN', () => {
+    expect(() => assertWireSafe({ score: NaN }, 'HostHandle.broadcast')).toThrow()
+  })
+
+  it('includes the provided context string in the thrown message', () => {
+    expect(() => assertWireSafe({ fn: () => {} }, 'HostHandle.broadcast')).toThrow('HostHandle.broadcast')
+    expect(() => assertWireSafe({ fn: () => {} }, 'GuestHandle.sendAction')).toThrow('GuestHandle.sendAction')
   })
 })

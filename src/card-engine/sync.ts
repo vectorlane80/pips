@@ -8,7 +8,7 @@ export interface SnapshotMessage<TPublicState, TPrivateState> {
   kind: 'snapshot'
   revision: number
   publicState: TPublicState
-  privateState: TPrivateState
+  privateState: TPrivateState | undefined
 }
 
 export interface ActionOutcome<TPublicState, TPrivateState> {
@@ -73,7 +73,7 @@ export function deriveSnapshot<TPublicState, TPrivateState>(
     publicState: session.publicState,
     privateState: Object.hasOwn(session.privateStates, playerId)
       ? session.privateStates[playerId]
-      : undefined as TPrivateState,
+      : undefined,
   }
 }
 
@@ -90,7 +90,8 @@ export function shouldAcceptUpdate(localRevision: number, incomingRevision: numb
 export function isJsonSerializable(value: unknown, seen: Set<object> = new Set()): boolean {
   if (value === null) return true
   const t = typeof value
-  if (t === 'string' || t === 'number' || t === 'boolean') return true
+  if (t === 'string' || t === 'boolean') return true
+  if (t === 'number') return Number.isFinite(value as number)
   if (t === 'undefined' || t === 'function' || t === 'symbol' || t === 'bigint') return false
   if (t === 'object') {
     const obj = value as object
@@ -105,4 +106,16 @@ export function isJsonSerializable(value: unknown, seen: Set<object> = new Set()
     return Object.values(value as Record<string, unknown>).every((v) => isJsonSerializable(v, seen))
   }
   return false
+}
+
+// Runtime guard for the wire boundary: everything sent over PeerJS must survive a lossless
+// JSON round-trip. Throws (rather than dropping the message) because a non-serializable
+// payload is a programming bug — silently dropping it would leave host and guest views
+// diverged, which is far harder to diagnose than a loud error at the send site.
+// Note: this walks the full state tree on every call — negligible at current game-state
+// sizes (~52 cards), but worth remembering before attaching much larger data to the wire state.
+export function assertWireSafe(value: unknown, context: string): void {
+  if (!isJsonSerializable(value)) {
+    throw new Error(`non-serializable data passed to ${context}`)
+  }
 }

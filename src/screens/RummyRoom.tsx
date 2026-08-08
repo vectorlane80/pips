@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
 
 export function RummyRoom({
-  code, localName, onAddHouseBot, onLeave,
+  code, localName, notice, onAddHouseBot, onLeave,
 }: {
   code: string
   localName: string
+  notice?: string | null
   onAddHouseBot: () => void
   onLeave: () => void
 }) {
@@ -31,6 +32,23 @@ export function RummyRoom({
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
         </div>
       </div>
+
+      {notice && (
+        <div style={{
+          textAlign: 'center',
+          background: 'var(--coral)',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: 'clamp(14px, 1.8vw, 17px)',
+          padding: '10px 22px',
+          borderRadius: 999,
+          border: '3px solid var(--ink)',
+          boxShadow: '0 5px 0 var(--ink)',
+          marginBottom: 'clamp(10px, 2vw, 18px)',
+        }}>
+          {notice}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 380px', maxWidth: 460 }}>

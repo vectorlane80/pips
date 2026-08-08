@@ -1,7 +1,12 @@
 import Peer, { type DataConnection } from 'peerjs'
+import { assertWireSafe } from '../card-engine/sync'
 
 type GuestToHost<TAction> = { kind: 'join'; name: string } | { kind: 'action'; action: TAction }
-type HostToGuest<TState> = { kind: 'state'; state: TState }
+type HostToGuest<TState> = { kind: 'state'; state: TState } | { kind: 'rejected'; reason: string }
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
 
 export function peerIdForCode(code: string): string {
   return `pips-${code.toLowerCase().replace(/[^a-z0-9-]/g, '')}`
@@ -16,6 +21,7 @@ export interface HostCallbacks<_TState, TAction> {
 
 export interface HostHandle<TState> {
   broadcast: (state: TState) => void
+  reject: (guestId: string, reason: string) => void
   destroy: () => void
 }
 
@@ -28,9 +34,9 @@ export function createHost<TState, TAction>(code: string, callbacks: HostCallbac
   peer.on('connection', (conn) => {
     conns.set(conn.peer, conn)
     conn.on('data', (raw) => {
-      const msg = raw as GuestToHost<TAction>
-      if (msg.kind === 'join') callbacks.onJoin(conn.peer, msg.name)
-      else if (msg.kind === 'action') callbacks.onAction(conn.peer, msg.action)
+      if (!isRecord(raw)) return
+      if (raw.kind === 'join' && typeof raw.name === 'string') callbacks.onJoin(conn.peer, raw.name)
+      else if (raw.kind === 'action' && isRecord(raw.action)) callbacks.onAction(conn.peer, raw.action as TAction)
     })
     conn.on('close', () => {
       conns.delete(conn.peer)
@@ -40,10 +46,15 @@ export function createHost<TState, TAction>(code: string, callbacks: HostCallbac
 
   return {
     broadcast(state) {
+      assertWireSafe(state, 'HostHandle.broadcast')
       const msg: HostToGuest<TState> = { kind: 'state', state }
       conns.forEach((conn) => {
         if (conn.open) conn.send(msg)
       })
+    },
+    reject(guestId, reason) {
+      const conn = conns.get(guestId)
+      if (conn?.open) conn.send({ kind: 'rejected', reason })
     },
     destroy() {
       conns.forEach((c) => c.close())
@@ -56,6 +67,7 @@ export interface GuestCallbacks<TState> {
   onState: (state: TState) => void
   onConnected?: () => void
   onDisconnected?: () => void
+  onRejected?: (reason: string) => void
   onError?: (message: string) => void
 }
 
@@ -77,8 +89,9 @@ export function joinHost<TState, TAction>(code: string, name: string, callbacks:
         callbacks.onConnected?.()
       })
       conn.on('data', (raw) => {
-        const msg = raw as HostToGuest<TState>
-        if (msg.kind === 'state') callbacks.onState(msg.state)
+        if (!isRecord(raw)) return
+        if (raw.kind === 'state' && 'state' in raw) callbacks.onState(raw.state as TState)
+        else if (raw.kind === 'rejected' && typeof raw.reason === 'string') callbacks.onRejected?.(raw.reason)
       })
       conn.on('close', () => callbacks.onDisconnected?.())
       resolve(id)
@@ -92,6 +105,7 @@ export function joinHost<TState, TAction>(code: string, name: string, callbacks:
   return {
     peerId,
     sendAction(action) {
+      assertWireSafe(action, 'GuestHandle.sendAction')
       if (conn?.open) conn.send({ kind: 'action', action } satisfies GuestToHost<TAction>)
     },
     destroy() {
