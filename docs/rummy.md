@@ -21,11 +21,18 @@ Standard 52-card deck, no jokers, exactly 2 players.
   any number of valid melds → discard exactly one card. The Discard button stays
   disabled until a draw has happened, so a turn can't be skipped.
 - **Melds**: a *set* is 3-4 cards of the same rank, all different suits; a *run*
-  is 3+ consecutive same-suit cards. Ace is always low (`A-2-3` is valid,
-  `Q-K-A` is not — no wrap-around). `src/card-games/rummy/melds.ts`'s
-  `classifyMeld` is the single source of truth for this, used both by the
-  rules engine (to validate `LAY_DOWN_MELD`) and by the screen (to decide
-  whether the "Lay down" button should be enabled).
+  is 3+ consecutive same-suit cards. Aces are flexible — a run can use an Ace
+  low (`A-2-3`) or high (`Q-K-A`), but never wrap past both ends (`K-A-2` and
+  `Q-K-A-2-3` are both invalid). `src/card-games/rummy/melds.ts`'s
+  `classifyMeld` is the single source of truth for this (it tries the ace-low
+  interpretation first, then ace-high only if that fails and an Ace is
+  present), used both by the rules engine (to validate `LAY_DOWN_MELD`) and by
+  the screen (to decide whether the "Lay down" button should be enabled).
+  `isAceHighRun(cards)` re-derives, from a meld's actual cards, whether an Ace
+  within it is being used high — by re-running the same two-pass
+  consecutiveness check, not a "contains a King" shortcut (which misvalues the
+  one edge case where a run is the full 13-card A-through-K sequence, valid
+  entirely under the ace-low interpretation despite containing a King).
 - **The discard reach-in** (the signature interaction, per the design handoff):
   a player may reach into the discard pile at any depth, not just take the top
   card. Reaching at index `i` takes `pile[i..top]` — that card and everything
@@ -46,15 +53,27 @@ Standard 52-card deck, no jokers, exactly 2 players.
   stock, via the card-engine's existing `recyclePile`). If recycling isn't
   possible either (the discard pile has 0 or 1 cards, so there's nothing to
   reshuffle), the round ends as a block — nobody goes out, no round winner.
-- **Scoring**: when a round ends by someone going out, the WINNER is awarded
-  the LOSER's deadwood (`sum(min(rankValue, 10))` over the loser's unmelded
-  hand — face cards and 10s count as 10, Ace counts as 1). That amount is
-  added to the winner's running match score. First player to reach 100 wins
-  the match and the app shows `RummyResults`. A blocked round (stock and
-  discard both exhausted) awards no points and simply deals a new round.
-  100 as the target, and "winner gets loser's deadwood" as the direction, are
-  both explicit judgment calls from `CHARTER.md`'s ambiguity resolutions —
-  the design handoff intentionally left multi-round scoring undesigned.
+- **Scoring**: symmetric, every round a round ends by someone going out — NOT
+  a transfer from loser to winner. Each player independently scores the point
+  value of what they've melded, minus a deadwood penalty for whatever's left
+  in their hand (zero for whoever went out). Face cards and 10s are worth 10,
+  other non-Ace cards their own number. Aces are context-dependent: 5 melded
+  low (`A-2-3`), 15 melded high (`Q-K-A`) or in a set of aces, and a 15-point
+  penalty if left unmelded (previously just 1 — raised specifically because an
+  unused Ace is now a much bigger missed opportunity under the flexible-ace
+  rule). `meldedCardValue`/`meldValue`/`playerRoundScore` in `scoring.ts`
+  implement this; `finishRoundByGoingOut` in `rules.ts` applies both players'
+  deltas. Round scores (and running match totals) can legitimately go
+  negative — a player who melds nothing and holds a full hand of deadwood
+  loses points that round. First to 100 wins the match and the app shows
+  `RummyResults`; if both players cross 100 in the same round, the higher
+  score wins, and an exact tie goes to whoever went out. A blocked round
+  (stock and discard both exhausted) awards no points and simply deals a new
+  round — deliberately unchanged by the scoring rewrite. 100 as the target is
+  an explicit judgment call from `CHARTER.md`'s ambiguity resolutions — the
+  design handoff intentionally left multi-round scoring undesigned; the
+  symmetric-scoring model itself (superseding the original transfer-only
+  resolution) was a later explicit product decision, not a design-doc gap.
 - **Between rounds**: `START_NEXT_ROUND` deals a fresh round (10 cards each,
   new starting discard), alternates who goes first, resets melds/obligation,
   and carries scores forward. In the live app this fires automatically
@@ -83,9 +102,9 @@ Standard 52-card deck, no jokers, exactly 2 players.
 
 ```
 src/card-games/rummy/
-  rank.ts       — rankValue (Ace-low, no wrap), deadwoodValue
-  melds.ts      — classifyMeld, hasMeldIncluding
-  scoring.ts    — deadwood(cards)
+  rank.ts       — rankValue (Ace-low, stable ordering), rankValueAceHigh, deadwoodValue
+  melds.ts      — classifyMeld (ace-flexible runs), hasMeldIncluding, isAceHighRun
+  scoring.ts    — meldedCardValue, meldValue, deadwood, playerRoundScore
   state.ts      — RummyPublicState/RummyPrivateState/RummyAction/RummySession, createRummyGame, dealRound
   rules.ts      — the validator: makeValidator + applyRummyAction/runRummyBotTurn
   bot.ts        — rummyBotStrategy (card-engine/bot.ts seam)
@@ -254,9 +273,9 @@ invisibly without that discipline.
 
 | File | Owns |
 |---|---|
-| `src/card-games/rummy/rank.ts` | `rankValue`, `deadwoodValue` |
-| `src/card-games/rummy/melds.ts` | `classifyMeld`, `hasMeldIncluding` |
-| `src/card-games/rummy/scoring.ts` | `deadwood` |
+| `src/card-games/rummy/rank.ts` | `rankValue`, `rankValueAceHigh`, `deadwoodValue` |
+| `src/card-games/rummy/melds.ts` | `classifyMeld`, `hasMeldIncluding`, `isAceHighRun` |
+| `src/card-games/rummy/scoring.ts` | `meldedCardValue`, `meldValue`, `deadwood`, `playerRoundScore` |
 | `src/card-games/rummy/state.ts` | Types, `createRummyGame`, `dealRound` |
 | `src/card-games/rummy/rules.ts` | `applyRummyAction`, `runRummyBotTurn` |
 | `src/card-games/rummy/bot.ts` | `rummyBotStrategy` |
