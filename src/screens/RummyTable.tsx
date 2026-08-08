@@ -406,7 +406,13 @@ export function RummyTable({
   }, [stockCount, discardLen, meldCount, layoffCount, publicState.roundOver, publicState.roundWinnerId, isMyTurn, notice, play])
 
   // ---- Computed ----
-  const sortedHand = useMemo(() => sortHand(hand, sortBy), [hand, sortBy])
+  const sortedHand = useMemo(() => {
+    if (!justDrawn || !hand.some((c) => c.id === justDrawn.id)) {
+      return sortHand(hand, sortBy)
+    }
+    const rest = hand.filter((c) => c.id !== justDrawn.id)
+    return [...sortHand(rest, sortBy), justDrawn]
+  }, [hand, sortBy, justDrawn])
 
   const status = useMemo(
     () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand, justDrawn),
@@ -701,17 +707,22 @@ export function RummyTable({
 
             {/* Hand cards */}
             <div className="rummy-hand-fan">
-              {sortedHand.map((card, i) => (
-                <PlayingCard
-                  key={card.id}
-                  rank={card.rank as Exclude<Rank, 'JOKER'>}
-                  suit={card.suit as Exclude<Suit, 'joker'>}
-                  size="hand"
-                  selected={selectedIds.includes(card.id)}
-                  onClick={canAct ? () => handleCardClick(card.id) : undefined}
-                  style={{ marginLeft: i === 0 ? 0 : -26 }}
-                />
-              ))}
+              {sortedHand.map((card, i) => {
+                const isLast = i === sortedHand.length - 1
+                const isSeparatedDraw = isLast && justDrawn && card.id === justDrawn.id
+                const marginLeft = i === 0 ? 0 : isSeparatedDraw ? 16 : -26
+                return (
+                  <PlayingCard
+                    key={card.id}
+                    rank={card.rank as Exclude<Rank, 'JOKER'>}
+                    suit={card.suit as Exclude<Suit, 'joker'>}
+                    size="hand"
+                    selected={selectedIds.includes(card.id)}
+                    onClick={canAct ? () => handleCardClick(card.id) : undefined}
+                    style={{ marginLeft }}
+                  />
+                )
+              })}
             </div>
 
             {/* Actions row */}

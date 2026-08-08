@@ -1130,3 +1130,34 @@ review, no escalation.
   two games). No real defects found.
 - **Continue?** Yes — M2 (drawn-card separation) and M3 (ladder
   legibility) next.
+
+## Polish cycle 2 — 2026-08-08
+
+- **Shipped:** M2 — drawn-card hand separation, in both `RummyTable.tsx`
+  and `Phase10Table.tsx`. The just-drawn card now renders at the right end
+  of the hand fan with a visible 16px gap instead of jumping into its
+  sorted position, until it's discarded — reusing the existing `justDrawn`
+  state (already tracked for the status-line message) with no new
+  lifecycle logic, just reading it in one more place.
+- **Delegation:** `deepseek-v4-flash`. Went beyond the spec's minimum bar
+  on its own initiative — set up a genuine headless-Chrome CDP session
+  (zero new dependencies, Node's built-in fetch/WebSocket) and actually
+  played a turn against the house bot in both games, capturing real
+  screenshots proving the separation renders correctly
+  (`/tmp/phase10-drawn-separated.png`, `/tmp/rummy-drawn-separated.png`)
+  rather than just asserting it from reading the code.
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm test`
+  (464 passed)/`npm run build`; read both diffs line by line against the
+  spec (identical shape in each file, as intended); personally viewed
+  both of DeepSeek's screenshots and confirmed the drawn card (Phase 10's
+  yellow "11", Rummy's "Q♣") sits visibly separated at the right with a
+  clear gap.
+- **Review:** `claude --model sonnet --effort medium` traced the guard
+  logic, React key stability, the Rummy multi-card reach-in interaction
+  (confirmed it still doesn't set `justDrawn`, so no incorrect separation
+  there), the `isLast` check, and card selection — no real defects.
+  Flagged one pre-existing, not-introduced-by-this-diff cosmetic detail
+  (a possible one-frame render before the separation snaps in, from an
+  existing effect-timing pattern already used for the status text) — not
+  worth chasing for a presentational polish pass.
+- **Continue?** Yes — M3 (ladder legibility) next, the last milestone.

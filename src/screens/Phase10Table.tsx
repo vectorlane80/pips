@@ -385,7 +385,13 @@ export function Phase10Table({
   }, [stockCount, discardLen, groupCount, hitCount, publicState.roundOver, publicState.roundWinnerId, isMyTurn, notice, play])
 
   // ---- Computed ----
-  const sortedHand = useMemo(() => sortHandForDisplay(hand), [hand])
+  const sortedHand = useMemo(() => {
+    if (!justDrawn || !hand.some((c) => c.id === justDrawn.id)) {
+      return sortHandForDisplay(hand)
+    }
+    const rest = hand.filter((c) => c.id !== justDrawn.id)
+    return [...sortHandForDisplay(rest), justDrawn]
+  }, [hand, justDrawn])
 
   const selectedCards = useMemo(
     () => selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined),
@@ -662,16 +668,21 @@ export function Phase10Table({
 
             {/* Hand cards */}
             <div className="p10-hand-fan">
-              {sortedHand.map((card, i) => (
-                <Phase10Card
-                  key={card.id}
-                  card={card}
-                  size="hand"
-                  selected={selectedIds.includes(card.id)}
-                  onClick={canAct ? () => handleCardClick(card.id) : undefined}
-                  style={{ marginLeft: i === 0 ? 0 : -26 }}
-                />
-              ))}
+              {sortedHand.map((card, i) => {
+                const isLast = i === sortedHand.length - 1
+                const isSeparatedDraw = isLast && justDrawn && card.id === justDrawn.id
+                const marginLeft = i === 0 ? 0 : isSeparatedDraw ? 16 : -26
+                return (
+                  <Phase10Card
+                    key={card.id}
+                    card={card}
+                    size="hand"
+                    selected={selectedIds.includes(card.id)}
+                    onClick={canAct ? () => handleCardClick(card.id) : undefined}
+                    style={{ marginLeft }}
+                  />
+                )
+              })}
             </div>
 
             {/* Actions row */}
