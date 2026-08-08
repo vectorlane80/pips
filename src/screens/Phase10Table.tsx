@@ -81,6 +81,26 @@ function computeStatus(
   return { pre: 'Select cards to lay your phase, hit, or discard.', card: null, post: '' }
 }
 
+// The round-over banner text. Shows for every ended round that isn't a match end —
+// including the blocked round (roundWinnerId === null), which still needs its own copy.
+function computeRoundBanner(
+  publicState: Phase10PublicState,
+  localPlayerId: string,
+  localName: string,
+  opponentName: string,
+): string {
+  if (publicState.roundWinnerId === null) {
+    return 'Round blocked — no cards left to draw. Dealing a new round…'
+  }
+  const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : opponentName
+  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  return (
+    `${winnerName} went out! ${localName}: ${publicState.scores[localPlayerId] ?? 0}` +
+    ` pts · ${opponentName}: ${publicState.scores[opponentId] ?? 0} pts. ` +
+    `Next round starts automatically.`
+  )
+}
+
 // Number cards sort by colour (runs and colour groups read as contiguous blocks),
 // then by rank; Skip/Wild (suit 'special') sort last.
 function sortHandForDisplay(cards: Card[]): Card[] {
@@ -268,7 +288,6 @@ export function Phase10Table({
   onOpenRules,
   onLeave,
 }: Phase10TableProps) {
-  void localName // preserved in props for the App wiring; unused in this presentational screen
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Derived ----
@@ -378,6 +397,12 @@ export function Phase10Table({
     [publicState, isMyTurn, opponentName, localPlayerId, justDrawn],
   )
 
+  const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId
+  const roundBannerText = useMemo(
+    () => computeRoundBanner(publicState, localPlayerId, localName, opponentName),
+    [publicState, localPlayerId, localName, opponentName],
+  )
+
   // DRAW_FROM_STOCK is always a legal attempt during the draw phase — the validator itself
   // handles an empty stock by recycling the discard pile or, if that's not possible either,
   // blocking the round. Gating this on stockCount > 0 would make the stock unclickable in
@@ -478,6 +503,7 @@ export function Phase10Table({
           <div className="p10-their-side-left">
             <div className="p10-their-name" style={{ color: opponentColor }}>{opponentName}</div>
             <div className="p10-their-count">{opponentHandCount} cards · hidden</div>
+            <div className="p10-their-score">{publicState.scores[opponentId] ?? 0} pts</div>
             {fanCount > 0 && (
               <div className="p10-their-fan">
                 {Array.from({ length: fanCount }, (_, i) => (
@@ -535,6 +561,11 @@ export function Phase10Table({
 
         {/* Centre band */}
         <div className="p10-centre">
+          {/* Round-over banner */}
+          {showRoundBanner && (
+            <div className="p10-round-banner">{roundBannerText}</div>
+          )}
+
           <div className="p10-centre-left">
             {/* Stock */}
             <div className="p10-stock-group">
@@ -614,6 +645,11 @@ export function Phase10Table({
             <span className="p10-phase-pill">
               <span className="p10-phase-pill-dot" />
               Phase {myRequirement.phase} — {myRequirement.label}
+            </span>
+
+            {/* Your score pill */}
+            <span className="p10-score-pill">
+              Your score: {publicState.scores[localPlayerId] ?? 0}
             </span>
           </div>
 

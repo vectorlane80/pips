@@ -1102,3 +1102,31 @@ why only one chip renders filled). Delegation per `/model-routing`: Codex
 still exhausted (re-probed live, same "try again at 6:51 PM" as the
 previous charter), using `deepseek-v4-flash` + `claude --model sonnet`
 review, no escalation.
+
+## Polish cycle 1 — 2026-08-08
+
+- **Shipped:** M1 — round-transition visibility. `Phase10Table.tsx`/`.css`
+  gained a persistent running-score readout for both players (visible
+  throughout play, not just at Results) and a round-over banner mirroring
+  Rummy's own established `.rummy-round-banner` pattern exactly (same CSS
+  weight, same "state cumulative score, not round delta" convention).
+  `App.tsx`'s shared `ROUND_PAUSE_MS` raised 2400ms → 4000ms (used by
+  Tic-Tac-Toe, Rummy, and Phase 10 alike — a uniform, harmless lengthening).
+- **Delegation:** `deepseek-v4-flash` per the charter (Codex re-probed live
+  at charter start, still exhausted — same quota window as before).
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm test`
+  (464 passed)/`npm run build`; read the full diff against the spec;
+  live-confirmed the score readouts render correctly in a real browser
+  session ("0 pts" for the opponent, "Your score: 0" pill on the local
+  side). The round-banner path itself (RNG-dependent to trigger a real
+  round end quickly) was verified by code reading plus the adversarial
+  review below, rather than forced through a full live round — noted
+  explicitly rather than silently skipped.
+- **Review:** `claude --model sonnet --effort medium` traced every
+  `roundOver`/`roundWinnerId`/`matchWinnerId` state combination against
+  the actual `rules.ts` state machine (confirmed atomic, no partial-update
+  race), the CSS flex-wrap layout (confirmed no overlap), and the shared
+  `ROUND_PAUSE_MS` bump's blast radius (confirmed harmless to the other
+  two games). No real defects found.
+- **Continue?** Yes — M2 (drawn-card separation) and M3 (ladder
+  legibility) next.

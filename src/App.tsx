@@ -38,7 +38,7 @@ type RummyView = { revision: number; publicState: RummyPublicState; privateState
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 
 const BASE_MS = 900
-const ROUND_PAUSE_MS = 2400
+const ROUND_PAUSE_MS = 4000
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
