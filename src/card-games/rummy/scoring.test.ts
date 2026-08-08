@@ -1,47 +1,116 @@
 import { describe, it, expect } from 'vitest'
-import { deadwood } from './scoring.ts'
+import { meldedCardValue, meldValue, deadwood, playerRoundScore } from './scoring.ts'
 import type { Card } from '../../card-engine/cards.ts'
+import type { Zone } from '../../card-engine/zones.ts'
+import { createHand, addCards } from '../../card-engine/zones.ts'
 
 function card(id: string, suit: Card['suit'], rank: Card['rank']): Card {
   return { id, suit, rank, deckIndex: 0 }
 }
 
+function meldZone(playerId: string, cards: Card[]): Zone {
+  const hand = createHand(playerId)
+  return addCards(hand, cards)
+}
+
+describe('meldedCardValue', () => {
+  it('Ace in A-2-3 run → 5', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c1', 'clubs', '2'), card('c2', 'clubs', '3')]
+    expect(meldedCardValue(meld[0], meld)).toBe(5) // Ace-low run
+  })
+
+  it('Ace in Q-K-A run → 15', () => {
+    const meld = [card('c10', 'spades', 'Q'), card('c11', 'spades', 'K'), card('c12', 'spades', 'A')]
+    expect(meldedCardValue(meld[2], meld)).toBe(15) // Ace-high run
+  })
+
+  it('Ace in a set of 3 aces → 15 (each)', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c13', 'diamonds', 'A'), card('c26', 'hearts', 'A')]
+    for (const c of meld) {
+      expect(meldedCardValue(c, meld)).toBe(15)
+    }
+  })
+
+  it('Ace in a set of 4 aces → 15 (each)', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c13', 'diamonds', 'A'), card('c26', 'hearts', 'A'), card('c39', 'spades', 'A')]
+    for (const c of meld) {
+      expect(meldedCardValue(c, meld)).toBe(15)
+    }
+  })
+
+  it('non-Ace card in a meld → its normal deadwoodValue (7♣ → 7)', () => {
+    const meld = [card('c6', 'clubs', '7'), card('c7', 'clubs', '8'), card('c8', 'clubs', '9')]
+    expect(meldedCardValue(meld[0], meld)).toBe(7)
+  })
+
+  it('face card (K♦) in a meld → 10', () => {
+    const meld = [card('c50', 'diamonds', 'Q'), card('c51', 'diamonds', 'K')]
+    // meldedCardValue doesn't require the meld to be valid — just uses it for ace context
+    expect(meldedCardValue(meld[1], meld)).toBe(10)
+  })
+})
+
+describe('meldValue', () => {
+  it('A-2-3 ace-low run → 5 + 2 + 3 = 10', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c1', 'clubs', '2'), card('c2', 'clubs', '3')]
+    expect(meldValue(meld)).toBe(10)
+  })
+
+  it('Q-K-A ace-high run → 10 + 10 + 15 = 35', () => {
+    const meld = [card('c10', 'spades', 'Q'), card('c11', 'spades', 'K'), card('c12', 'spades', 'A')]
+    expect(meldValue(meld)).toBe(35)
+  })
+
+  it('3-ace set → 15 + 15 + 15 = 45', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c13', 'diamonds', 'A'), card('c26', 'hearts', 'A')]
+    expect(meldValue(meld)).toBe(45)
+  })
+
+  it('4-King set → 10 + 10 + 10 + 10 = 40', () => {
+    const meld = [card('c11', 'clubs', 'K'), card('c24', 'diamonds', 'K'), card('c37', 'hearts', 'K'), card('c50', 'spades', 'K')]
+    expect(meldValue(meld)).toBe(40)
+  })
+})
+
 describe('deadwood', () => {
-  it('returns 0 for empty hand', () => {
-    expect(deadwood([])).toBe(0)
+  it('unmelded Ace contributes 15 (not 1)', () => {
+    const cards = [card('c0', 'clubs', 'A'), card('c17', 'diamonds', '5')]
+    // Ace=15, 5=5 → 20
+    expect(deadwood(cards)).toBe(20)
   })
 
-  it('sums deadwood values for a mixed hand', () => {
-    const hand: Card[] = [
-      card('c1', 'spades', 'A'),   // 1
-      card('c2', 'hearts', '5'),   // 5
-      card('c3', 'diamonds', 'J'), // 10
-      card('c4', 'clubs', 'Q'),    // 10
-      card('c5', 'spades', 'K'),   // 10
-    ]
-    expect(deadwood(hand)).toBe(36)
+  it('face cards and 10 contribute 10', () => {
+    const cards = [card('c49', 'spades', 'J'), card('c50', 'spades', 'Q'), card('c51', 'spades', 'K'), card('c9', 'clubs', '10')]
+    // J=10, Q=10, K=10, 10=10 → 40
+    expect(deadwood(cards)).toBe(40)
   })
 
-  it('counts each face card as 10', () => {
-    const hand: Card[] = [
-      card('c1', 'spades', 'J'),
-      card('c2', 'hearts', 'Q'),
-      card('c3', 'diamonds', 'K'),
-    ]
-    expect(deadwood(hand)).toBe(30)
+  it('pips contribute their face value', () => {
+    const cards = [card('c1', 'clubs', '2'), card('c6', 'clubs', '7'), card('c0', 'clubs', 'A')]
+    // 2=2, 7=7, A=15 → 24
+    expect(deadwood(cards)).toBe(24)
+  })
+})
+
+describe('playerRoundScore', () => {
+  it('player with one A-2-3 meld (value 10) and 2 leftover cards (7♣,8♦) → round score 10-15 = -5', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c1', 'clubs', '2'), card('c2', 'clubs', '3')]
+    const hand = [card('c6', 'clubs', '7'), card('c19', 'diamonds', '8')]
+    // meld value: 5+2+3=10, hand deadwood: 7+8=15 → -5
+    const zone = meldZone('p1', meld)
+    expect(playerRoundScore([zone], hand)).toBe(-5)
   })
 
-  it('counts 10 as 10 (not its numeric rank beyond 10)', () => {
-    const hand: Card[] = [
-      card('c1', 'spades', '10'),
-      card('c2', 'hearts', '10'),
-      card('c3', 'diamonds', 'K'),
-    ]
-    expect(deadwood(hand)).toBe(30) // 10 + 10 + 10
+  it('player who went out (empty hand) with melds totaling 45 → round score 45', () => {
+    const meld = [card('c0', 'clubs', 'A'), card('c13', 'diamonds', 'A'), card('c26', 'hearts', 'A')]
+    // 3-ace set: 15+15+15=45, empty hand → 45-0=45
+    const zone = meldZone('p1', meld)
+    expect(playerRoundScore([zone], [])).toBe(45)
   })
 
-  it('counts Ace as 1', () => {
-    const hand: Card[] = [card('c1', 'spades', 'A')]
-    expect(deadwood(hand)).toBe(1)
+  it('no melds, only deadwood → negative round score', () => {
+    const hand = [card('c50', 'spades', 'Q'), card('c51', 'spades', 'K')]
+    // melds: none (0), deadwood: 10+10=20 → -20
+    expect(playerRoundScore([], hand)).toBe(-20)
   })
 })

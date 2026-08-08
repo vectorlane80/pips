@@ -317,9 +317,9 @@ describe('rummyBotStrategy', () => {
   })
 
   it('discard phase, no obligation, no meld: tiebreak by highest deadwood', () => {
-    // p1 hand: A♣(c0, dw=1), 5♦(c17, dw=5), K♠(c51, dw=10)
+    // p1 hand: A♣(c0, dw=15), 5♦(c17, dw=5), K♠(c51, dw=10)
     // All isolated from each other (different suits, different ranks, no rank matches).
-    // Connectivity = 0 for all, bot should discard K♠ (highest deadwood).
+    // Connectivity = 0 for all, bot should discard A♣ (highest deadwood: 15 > 10 > 5).
     const rummy = buildSession({
       p1HandCardIds: ['c0', 'c17', 'c51'],
       p2HandCardIds: ['c5', 'c6', 'c7', 'c8', 'c9'],
@@ -337,8 +337,8 @@ describe('rummyBotStrategy', () => {
     const discardTop = result.rummy.session.publicState.discardPile.cards[
       result.rummy.session.publicState.discardPile.cards.length - 1
     ]
-    // K♠ has deadwood 10 (highest among 1, 5, 10) → gets discarded
-    expect(discardTop.id).toBe('c51')
+    // A♣ has deadwood 15 (highest among 15, 5, 10) → gets discarded
+    expect(discardTop.id).toBe('c0')
     expect(totalCards(result.rummy)).toBe(52)
   })
 })

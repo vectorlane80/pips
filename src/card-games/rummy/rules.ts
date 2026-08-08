@@ -5,7 +5,7 @@ import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../car
 import { moveCards, topCard, cardCount, createPlayerZone, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
 import { classifyMeld, hasMeldIncluding } from './melds.ts'
-import { deadwood } from './scoring.ts'
+import { playerRoundScore } from './scoring.ts'
 import type { RummySession, RummyPublicState, RummyPrivateState, RummyAction, RummyPhase } from './state.ts'
 import { dealRound } from './state.ts'
 
@@ -19,12 +19,32 @@ function finishRoundByGoingOut(
 ): ActionOutcome<RummyPublicState, RummyPrivateState> {
   const opponentId = publicState.turn.playerOrder.find((p) => p !== playerId)!
   const opponentHand = privateStates[opponentId].hand
-  const opponentDeadwood = deadwood(opponentHand.cards)
+
+  const playerDelta = playerRoundScore(newMeldsForPlayer, [])   // going-out player's hand is empty
+  const opponentMelds = publicState.melds[opponentId] ?? []
+  const opponentDelta = playerRoundScore(opponentMelds, opponentHand.cards)
+
   const newScores = {
     ...publicState.scores,
-    [playerId]: publicState.scores[playerId] + opponentDeadwood,
+    [playerId]: publicState.scores[playerId] + playerDelta,
+    [opponentId]: publicState.scores[opponentId] + opponentDelta,
   }
-  const matchWinnerId = newScores[playerId] >= publicState.target ? playerId : null
+
+  // Match win: either player's score may cross the target this round (their own round score
+  // could in principle be negative, but they can only WIN by being at or above target).
+  // If both are at/above target simultaneously, the player who went out (playerId) wins the
+  // tiebreak — an explicit, defined rule for an edge case that will almost never occur.
+  let matchWinnerId: string | null = null
+  const playerAtTarget = newScores[playerId] >= publicState.target
+  const opponentAtTarget = newScores[opponentId] >= publicState.target
+  if (playerAtTarget && opponentAtTarget) {
+    matchWinnerId = newScores[playerId] >= newScores[opponentId] ? playerId : opponentId
+  } else if (playerAtTarget) {
+    matchWinnerId = playerId
+  } else if (opponentAtTarget) {
+    matchWinnerId = opponentId
+  }
+
   return {
     ok: true,
     publicState: {

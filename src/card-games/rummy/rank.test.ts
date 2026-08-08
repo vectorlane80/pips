@@ -56,8 +56,8 @@ describe('rankValue', () => {
 })
 
 describe('deadwoodValue', () => {
-  it('returns raw value for Ace (1)', () => {
-    expect(deadwoodValue('A')).toBe(1)
+  it('returns 15 for an unmelded Ace (context-dependent penalty, not raw rank value)', () => {
+    expect(deadwoodValue('A')).toBe(15)
   })
 
   it('returns raw value for 2 through 9', () => {

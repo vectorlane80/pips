@@ -61,6 +61,13 @@ function findMeld(cards: Card[]): string[] | null {
   return null
 }
 
+/** Look up a Card by id from a fresh standard deck. */
+function cardMap(id: string): Card {
+  const deck = createStandardDeck()
+  const map = new Map(deck.map((c) => [c.id, c]))
+  return map.get(id)!
+}
+
 function buildSession(config: {
   p1HandCardIds: string[]
   p2HandCardIds: string[]
@@ -625,9 +632,10 @@ describe('Rummy integration harness', () => {
     expect(pub.roundWinnerId).toBe('p1')
     expect(cardCount(result.rummy.session.privateStates['p1'].hand)).toBe(0)
 
-    // p2 deadwood: c4(5♣)=5, c5(6♣)=6, c6(7♣)=7, c7(8♣)=8, c8(9♣)=9 → 35
-    expect(pub.scores['p1']).toBe(35)
-    expect(pub.scores['p2']).toBe(0)
+    // p1: A♣2♣3♣ meld value = 5+2+3=10; hand empty → delta +10
+    // p2: no melds, deadwood = 5♣(5)+6♣(6)+7♣(7)+8♣(8)+9♣(9)=35 → delta -35
+    expect(pub.scores['p1']).toBe(10)
+    expect(pub.scores['p2']).toBe(-35)
 
     expect(totalCards(result.rummy)).toBe(52)
     expect(allUniqueCardIds(result.rummy).size).toBe(52)
@@ -658,8 +666,10 @@ describe('Rummy integration harness', () => {
     expect(pub.roundWinnerId).toBe('p1')
     expect(cardCount(result.rummy.session.privateStates['p1'].hand)).toBe(0)
 
-    // p2 deadwood: c1(2♣)=2, c2(3♣)=3, c3(4♣)=4 → 9
-    expect(pub.scores['p1']).toBe(9)
+    // p1: no melds, empty hand → delta 0
+    // p2: no melds, deadwood = 2♣(2)+3♣(3)+4♣(4)=9 → delta -9
+    expect(pub.scores['p1']).toBe(0)
+    expect(pub.scores['p2']).toBe(-9)
 
     expect(totalCards(result.rummy)).toBe(52)
   })
@@ -688,7 +698,9 @@ describe('Rummy integration harness', () => {
     const pub = result.rummy.session.publicState
     expect(pub.roundOver).toBe(true)
     expect(pub.roundWinnerId).toBe('p1')
-    expect(pub.scores['p1']).toBe(130)
+    // p1 at 95, melds A♣2♣3♣ = 5+2+3=10 → 105 ≥ 100 target → match winner
+    // p2: no melds, deadwood = 5+6+7+8+9=35 → 0-35 = -35
+    expect(pub.scores['p1']).toBe(105)
     expect(pub.matchWinnerId).toBe('p1')
   })
 
@@ -1214,5 +1226,155 @@ describe('Rummy integration harness', () => {
 
     const { rummy: after } = applyRummyAction(afterRound, 'p1', { type: 'START_NEXT_ROUND' })
     expect(after.session.publicState.handCounts).toEqual({ p2: 10, p1: 10 })
+  })
+
+  // ── new symmetric scoring & ace-high tests ──────────────────
+
+  it('going out — both players score independently (loser credited for prior melds)', () => {
+    // p1 hand: 2♣(c1),2♦(c14),2♥(c27),2♠(c40) → set of 4 twos, meld value = 2+2+2+2 = 8
+    // p2 meld on table: 5♣(c4),5♦(c17),5♥(c30),5♠(c43) → set of 4 fives, value = 20
+    // p2 hand (leftover deadwood): 6♣(c5),6♦(c18) → deadwood = 6+6 = 12
+    // p1 delta = 8 - 0 = 8; p2 delta = 20 - 12 = 8
+    const p1Cards = ['c1', 'c14', 'c27', 'c40']
+    const p2HandCards = ['c5', 'c18']
+    const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30'), cardMap('c43')]
+    const used = new Set([...p1Cards, ...p2HandCards, 'c4', 'c17', 'c30', 'c43', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2HandCards,
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c1', 'c14', 'c27', 'c40'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: 2-set meld = 8; empty hand → +8
+    // p2: 5-set meld = 20; deadwood 6+6=12 → 20-12 = +8
+    expect(pub.scores['p1']).toBe(8)
+    expect(pub.scores['p2']).toBe(8)
+
+    expect(totalCards(result.rummy)).toBe(52)
+  })
+
+  it('going out via Q-K-A ace-high run — ace contributes 15 to meld value', () => {
+    // p1 hand: Q♠(c50),K♠(c51),A♠(c39) → ace-high run, meld value = 10+10+15 = 35
+    // p2 hand: 2♣(c1),3♣(c2),4♣(c3) → deadwood = 2+3+4 = 9
+    const p1Cards = ['c50', 'c51', 'c39']
+    const p2Cards = ['c1', 'c2', 'c3']
+    const used = new Set([...p1Cards, ...p2Cards, 'c0'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['c0'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c50', 'c51', 'c39'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: QKA meld = 10+10+15=35; empty hand → +35
+    // p2: no melds; deadwood 2+3+4=9 → -9
+    expect(pub.scores['p1']).toBe(35)
+    expect(pub.scores['p2']).toBe(-9)
+
+    expect(totalCards(result.rummy)).toBe(52)
+  })
+
+  it('match winner tiebreak — both cross target, opponent higher → opponent wins', () => {
+    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+2+3 = 10
+    // p2 meld: 10♣(c9),10♦(c22),10♥(c35) → set of 3 tens, value = 10+10+10 = 30
+    // p2 hand: 5♣(c4),5♦(c17) → deadwood = 5+5 = 10
+    // Start: p1=95, p2=95
+    // p1 delta = 10 → p1=105 (≥100)
+    // p2 delta = 30-10=20 → p2=115 (≥100)
+    // Both at target, p2 higher → opponent (p2) wins
+    const p1Cards = ['c0', 'c1', 'c2']
+    const p2HandCards = ['c4', 'c17']
+    const p2MeldCards = [cardMap('c9'), cardMap('c22'), cardMap('c35')]
+    const used = new Set([...p1Cards, ...p2HandCards, 'c9', 'c22', 'c35', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2HandCards,
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      scores: { p1: 95, p2: 95 },
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: 5+2+3=10 → 95+10=105; p2: 30-(5+5)=20 → 95+20=115
+    expect(pub.scores['p1']).toBe(105)
+    expect(pub.scores['p2']).toBe(115)
+    // Both ≥100, p2 higher → opponent wins the match
+    expect(pub.matchWinnerId).toBe('p2')
+  })
+
+  it('match winner tiebreak — both cross target, equal scores → player who went out wins', () => {
+    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+2+3 = 10
+    // p2 meld: 6♣(c5),7♣(c6),8♣(c7) → run, value = 6+7+8 = 21
+    // p2 hand: 5♣(c4),6♦(c18) → deadwood = 5+6 = 11
+    // Start: p1=95, p2=95
+    // p1 delta = 10 → p1=105 (≥100)
+    // p2 delta = 21-11=10 → p2=105 (≥100)
+    // Both at target with equal scores → player who went out (p1) wins
+    const p1Cards = ['c0', 'c1', 'c2']
+    const p2HandCards = ['c4', 'c18']
+    const p2MeldCards = [cardMap('c5'), cardMap('c6'), cardMap('c7')]
+    const used = new Set([...p1Cards, ...p2HandCards, 'c5', 'c6', 'c7', 'c51'])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2HandCards,
+      discardCardIds: ['c51'],
+      stockCardIds: stockCards,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      scores: { p1: 95, p2: 95 },
+      melds: { p1: [], p2: [p2MeldZone] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: 5+2+3=10 → 95+10=105; p2: (6+7+8)-(5+6)=10 → 95+10=105
+    expect(pub.scores['p1']).toBe(105)
+    expect(pub.scores['p2']).toBe(105)
+    // Equal scores, player who went out wins the tiebreak
+    expect(pub.matchWinnerId).toBe('p1')
   })
 })

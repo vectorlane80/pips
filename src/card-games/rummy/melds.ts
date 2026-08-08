@@ -1,5 +1,5 @@
 import type { Card } from '../../card-engine/cards.ts'
-import { rankValue } from './rank.ts'
+import { rankValue, rankValueAceHigh } from './rank.ts'
 
 export type MeldType = 'set' | 'run'
 
@@ -28,20 +28,47 @@ export function classifyMeld(cards: Card[]): MeldClassification {
   const firstSuit = cards[0].suit
   const allSameSuit = cards.every((c) => c.suit === firstSuit)
   if (allSameSuit) {
-    const values = cards.map((c) => rankValue(c.rank)).sort((a, b) => a - b)
-    let consecutive = true
-    for (let i = 0; i < values.length - 1; i++) {
-      if (values[i + 1] !== values[i] + 1) {
-        consecutive = false
-        break
-      }
-    }
-    if (consecutive) {
+    // Try the default (ace-low) interpretation first
+    const valuesLow = cards.map((c) => rankValue(c.rank)).sort((a, b) => a - b)
+    if (isConsecutive(valuesLow)) {
       return { valid: true, type: 'run' }
+    }
+
+    // If there's an Ace and the low interpretation failed, retry with ace-high
+    if (cards.some((c) => c.rank === 'A')) {
+      const valuesHigh = cards.map((c) => rankValueAceHigh(c.rank)).sort((a, b) => a - b)
+      if (isConsecutive(valuesHigh)) {
+        return { valid: true, type: 'run' }
+      }
     }
   }
 
   return { valid: false }
+}
+
+function isConsecutive(sortedValues: number[]): boolean {
+  for (let i = 0; i < sortedValues.length - 1; i++) {
+    if (sortedValues[i + 1] !== sortedValues[i] + 1) {
+      return false
+    }
+  }
+  return true
+}
+
+// Standalone, re-derivable: true iff `cards` (a complete meld, e.g. from a laid-down Zone)
+// is a run where the Ace (if present) is being used HIGH (e.g. Q-K-A). Re-derived by actually
+// checking consecutiveness under both interpretations, the same way classifyMeld itself
+// decides — NOT by a "contains both an Ace and a King" presence heuristic, which misfires on
+// the one edge case where a run is long enough to contain both under the ace-LOW interpretation
+// (a full 13-card A..K same-suit run: valid via ace=1, but "contains a King" would wrongly
+// suggest ace-high and overvalue the Ace by 10 points). Used by scoring and, if ever needed,
+// display-sort — neither needs classifyMeld's transient result from lay-down time.
+export function isAceHighRun(cards: Card[]): boolean {
+  if (!cards.some((c) => c.rank === 'A')) return false
+  const valuesLow = cards.map((c) => rankValue(c.rank)).sort((a, b) => a - b)
+  if (isConsecutive(valuesLow)) return false   // ace-low interpretation already validates this run
+  const valuesHigh = cards.map((c) => rankValueAceHigh(c.rank)).sort((a, b) => a - b)
+  return isConsecutive(valuesHigh)
 }
 
 // True iff some 3+ subset of `cards` that includes `requiredId` forms a valid meld

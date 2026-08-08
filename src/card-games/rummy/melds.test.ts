@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyMeld } from './melds.ts'
+import { classifyMeld, isAceHighRun } from './melds.ts'
 import type { Card } from '../../card-engine/cards.ts'
 
 function card(id: string, suit: Card['suit'], rank: Card['rank']): Card {
@@ -104,11 +104,48 @@ describe('classifyMeld', () => {
   })
 
   // --- Ace-low, no wrap ---
-  it('rejects Q-K-A (no wrap-around)', () => {
+  it('classifies Q-K-A same-suit as a valid run (ace-high)', () => {
     const result = classifyMeld([
       card('c1', 'spades', 'Q'),
       card('c2', 'spades', 'K'),
       card('c3', 'spades', 'A'),
+    ])
+    expect(result).toEqual({ valid: true, type: 'run' })
+  })
+
+  it('classifies 10-J-Q-K-A same-suit as a valid run (ace-high, longer)', () => {
+    const result = classifyMeld([
+      card('c1', 'spades', '10'),
+      card('c2', 'spades', 'J'),
+      card('c3', 'spades', 'Q'),
+      card('c4', 'spades', 'K'),
+      card('c5', 'spades', 'A'),
+    ])
+    expect(result).toEqual({ valid: true, type: 'run' })
+  })
+
+  it('rejects K-A-2 same-suit (true wraparound)', () => {
+    // rankValue: 13,1,2 → sorted [1,2,13] — gap at 2→13, invalid.
+    // rankValueAceHigh: 13,14,2 → sorted [2,13,14] — gap at 2→13, invalid.
+    // Both interpretations correctly reject it.
+    const result = classifyMeld([
+      card('c1', 'spades', 'K'),
+      card('c2', 'spades', 'A'),
+      card('c3', 'spades', '2'),
+    ])
+    expect(result).toEqual({ valid: false })
+  })
+
+  it('rejects Q-K-A-2-3 same-suit (wraparound spanning both ends)', () => {
+    // rankValue: 12,13,1,2,3 → sorted [1,2,3,12,13] — gap at 3→12, invalid.
+    // rankValueAceHigh: 12,13,14,2,3 → sorted [2,3,12,13,14] — gap at 3→12, invalid.
+    // Both interpretations correctly reject it.
+    const result = classifyMeld([
+      card('c1', 'spades', 'Q'),
+      card('c2', 'spades', 'K'),
+      card('c3', 'spades', 'A'),
+      card('c4', 'spades', '2'),
+      card('c5', 'spades', '3'),
     ])
     expect(result).toEqual({ valid: false })
   })
@@ -149,5 +186,41 @@ describe('classifyMeld', () => {
       card('c3', 'hearts', '9'),
     ])
     expect(result).toEqual({ valid: true, type: 'run' })
+  })
+})
+
+describe('isAceHighRun', () => {
+  it('returns true for a Q-K-A same-suit meld', () => {
+    expect(isAceHighRun([
+      card('c1', 'spades', 'Q'),
+      card('c2', 'spades', 'K'),
+      card('c3', 'spades', 'A'),
+    ])).toBe(true)
+  })
+
+  it('returns false for an A-2-3 same-suit meld', () => {
+    expect(isAceHighRun([
+      card('c1', 'spades', 'A'),
+      card('c2', 'spades', '2'),
+      card('c3', 'spades', '3'),
+    ])).toBe(false)
+  })
+
+  it('returns false for a set of 4 aces (no King present)', () => {
+    expect(isAceHighRun([
+      card('c1', 'spades', 'A'),
+      card('c2', 'hearts', 'A'),
+      card('c3', 'diamonds', 'A'),
+      card('c4', 'clubs', 'A'),
+    ])).toBe(false)
+  })
+
+  it('returns false for a full 13-card A-through-K same-suit run (ace-low, even though it contains a King)', () => {
+    // A presence-only heuristic ("contains an Ace and a King") would wrongly say true here —
+    // this run is valid entirely under the ace-LOW interpretation (values 1..13 consecutive),
+    // so the Ace must be scored as low (5), not high (15).
+    const ranks: Card['rank'][] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K']
+    const meld = ranks.map((rank, i) => card(`c${i}`, 'spades', rank))
+    expect(isAceHighRun(meld)).toBe(false)
   })
 })
