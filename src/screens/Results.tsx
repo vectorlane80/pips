@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import type { RoomState, Seat } from '../types'
 import { GAME_LABEL } from '../types'
 import { upperTotal } from '../games/yahtzee'
+import { useSound } from '../hooks/useSound'
 
 function pillDetail(room: RoomState): string {
   switch (room.game) {
@@ -50,6 +52,8 @@ export function Results({
   onRematch: () => void
   onBackToShelf: () => void
 }) {
+  const { play } = useSound()
+  useEffect(() => { play('game-win') }, [])
   const winner = room.seats.find((s) => s.id === room.winnerId) ?? room.seats[0]
   const ranked = [...room.seats].sort((a, b) => b.score - a.score)
   const isMe = winner.id === localSeatId

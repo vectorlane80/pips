@@ -8,7 +8,9 @@ import { deadwood } from '../card-games/rummy/scoring'
 import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
 import { Wordmark } from '../components/Wordmark'
+import { SoundToggle } from '../components/SoundToggle'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
+import { useSound } from '../hooks/useSound'
 import './RummyTable.css'
 
 // ---- Props ----
@@ -313,6 +315,7 @@ export function RummyTable({
   const theirCrossLayoffs = publicState.layoffs.filter((l) => l.playerId === opponentId && l.targetPlayerId === localPlayerId)
 
   // ---- Local state ----
+  const { play, enabled, setEnabled } = useSound()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'suit' | 'rank'>('suit')
@@ -356,6 +359,50 @@ export function RummyTable({
     }
     prevHandRef.current = hand
   }, [hand, publicState.turn.phase, publicState.obligatedCardId])
+
+  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  const meldCount = Object.values(publicState.melds).reduce(
+    (total, zones) => total + zones.reduce((n, z) => n + z.cards.length, 0),
+    0,
+  )
+  const stockCount = publicState.stockCount
+  const discardLen = publicState.discardPile.cards.length
+  const layoffCount = publicState.layoffs.length
+  const turnIndex = publicState.turn.currentIndex
+  const soundSigRef = useRef({
+    stockCount, discardLen, meldCount, layoffCount,
+    roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+  })
+  const noticeSeenRef = useRef(!!notice)
+
+  useEffect(() => {
+    const p = soundSigRef.current
+    if (stockCount > p.stockCount) {
+      play('shuffle')
+    } else if (stockCount < p.stockCount) {
+      play('card-draw')
+    } else if (discardLen < p.discardLen) {
+      play('card-draw')
+    } else if (discardLen > p.discardLen) {
+      play('card-play')
+    } else if (meldCount > p.meldCount || layoffCount > p.layoffCount) {
+      play('card-play')
+    }
+    if (!p.roundOver && publicState.roundOver && publicState.roundWinnerId !== null) {
+      play('round-win')
+    }
+    if (turnIndex !== p.turnIndex) play('turn-start')
+    if (notice && !noticeSeenRef.current) {
+      play('error')
+      noticeSeenRef.current = true
+    } else if (!notice) {
+      noticeSeenRef.current = false
+    }
+    soundSigRef.current = {
+      stockCount, discardLen, meldCount, layoffCount,
+      roundOver: publicState.roundOver, matchWinnerId: publicState.matchWinnerId, turnIndex,
+    }
+  }, [stockCount, discardLen, meldCount, layoffCount, publicState.roundOver, publicState.roundWinnerId, turnIndex, notice, play])
 
   // ---- Computed ----
   const sortedHand = useMemo(() => sortHand(hand, sortBy), [hand, sortBy])
@@ -442,6 +489,7 @@ export function RummyTable({
           </span>
         </div>
         <div className="rummy-header-actions">
+          <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
         </div>

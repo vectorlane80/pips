@@ -1,8 +1,10 @@
+import { useEffect, useRef } from 'react'
 import type { RoomState } from '../types'
 import { scoreSelection, tookFinalTurn } from '../games/farkle'
 import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
+import { useSound } from '../hooks/useSound'
 
 export function FarkleTable({
   room, localSeatId, onRoll, onToggle, onBank, onEndTurn, onOpenRules, onLeave,
@@ -17,6 +19,7 @@ export function FarkleTable({
   onLeave: () => void
 }) {
   const f = room.farkle
+  const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
   const displayVals = useDiceAnimation(f.dice)
@@ -28,6 +31,30 @@ export function FarkleTable({
   const canRoll = canAct && (f.dice.length === 0 || selected.length > 0)
   const canBank = canAct && onTable > 0 && (activeSeat && activeSeat.score > 0 ? true : onTable >= f.openingScore)
   const lastLog = f.log.length > 0 ? f.log[f.log.length - 1] : null
+
+  // Sound effects — diff room state transitions (never local clicks; host-authoritative)
+  const valuesKey = f.dice.map((d) => d.val).join(',')
+  const selKey = f.dice.map((d) => d.sel).join(',')
+  const soundSigRef = useRef({ valuesKey, selKey, logLen: f.log.length, turnIdx: room.turnIdx, keptLen: f.kept.length })
+
+  useEffect(() => {
+    const p = soundSigRef.current
+    const valuesChanged = valuesKey !== p.valuesKey
+    const hotDice = valuesChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
+    const busted = f.log.length > p.logLen && f.log[f.log.length - 1].tone === 'farkle'
+    if (valuesChanged && f.dice.length > 0 && !busted) {
+      play(hotDice ? 'hot-dice' : 'dice-roll')
+    } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+      play('die-select')
+    }
+    if (f.log.length > p.logLen) {
+      const tone = f.log[f.log.length - 1].tone
+      if (tone === 'bank') play('bank-points')
+      else if (tone === 'farkle') play('farkle-bust')
+    }
+    if (room.turnIdx !== p.turnIdx) play('turn-start')
+    soundSigRef.current = { valuesKey, selKey, logLen: f.log.length, turnIdx: room.turnIdx, keptLen: f.kept.length }
+  }, [valuesKey, selKey, room.turnIdx, f.log.length, f.kept.length, f.dice.length, play])
 
   const trigIdx = f.finalTrigger ? room.seats.findIndex((s) => s.id === f.finalTrigger) : -1
 

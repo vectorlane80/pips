@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import type { RummyPublicState } from '../card-games/rummy/state'
+import { useSound } from '../hooks/useSound'
 
 // ---- Props ----
 
@@ -36,6 +38,9 @@ export function RummyResults({
   onRematch,
   onBackToShelf,
 }: RummyResultsProps) {
+  const { play } = useSound()
+  useEffect(() => { play('game-win') }, [])
+
   // Only render when the match is over
   if (!publicState.matchWinnerId) return null
 
