@@ -277,7 +277,7 @@ describe('phase10BotStrategy', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [{ type: 'set', zone: p1GroupZone }], p2: [] },
+      groups: { p1: [{ type: 'set', zone: p1GroupZone, phaseNumber: 1 }], p2: [] },
     })
 
     const action = strategyAction(game, 'p1')
@@ -301,7 +301,7 @@ describe('phase10BotStrategy', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
     })
 
     // red 7 (p10-12) extends p2's red 4-5-6 run
@@ -328,7 +328,7 @@ describe('phase10BotStrategy', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
       hits: [{ id: 'hit-0', playerId: 'p1', targetPlayerId: 'p2', targetGroupIndex: 0, cards: cardsByIds('p10-12') }],
     })
 
@@ -354,7 +354,7 @@ describe('phase10BotStrategy', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [{ type: 'set', zone: p1GroupZone }], p2: [] },
+      groups: { p1: [{ type: 'set', zone: p1GroupZone, phaseNumber: 1 }], p2: [] },
     })
 
     const action = strategyAction(game, 'p1')

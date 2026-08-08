@@ -4,7 +4,7 @@ import { Wordmark } from '../components/Wordmark'
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -13,6 +13,7 @@ export function Landing({
   onJoin: () => void
   onPickGame: (g: Game) => void
   onPickRummy: () => void
+  onPickPhase10: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
@@ -115,6 +116,26 @@ export function Landing({
               <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Rummy</span>
               <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
                 Draw, meld, discard — go out first
+              </span>
+              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                2 players
+              </span>
+            </button>
+            <button
+              type="button"
+              className="shelf-tile"
+              disabled={!ready}
+              onClick={onPickPhase10}
+              style={{
+                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                background: ready ? '#6c4cff' : 'var(--grey-fill)',
+                color: ready ? '#fff' : 'var(--disabled-text)',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Phase 10</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                Ten phases, first to finish wins
               </span>
               <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
                 2 players

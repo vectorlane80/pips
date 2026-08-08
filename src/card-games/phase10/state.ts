@@ -14,6 +14,7 @@ export type Phase10TurnPhase = 'draw' | 'discard'
 export interface Phase10Group {
   type: import('./classify.ts').GroupType
   zone: Zone   // the cards THIS player originally laid for this group
+  phaseNumber: number   // 1-based — the phase this group was laid FOR, fixed at lay time
 }
 
 // A card (or cards) hit onto an existing group — theirs or the opponent's. Hit cards stay

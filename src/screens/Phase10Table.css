@@ -1,0 +1,478 @@
+/* ===================================================================
+   Phase10Table — five-band table layout (their side / ladder / centre /
+   your band + hand) — same shell technique as RummyTable, scoped to
+   .p10-* classes
+   =================================================================== */
+
+/* ---- Outer container ---- */
+
+.p10-table {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.p10-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.p10-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.p10-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--violet);
+}
+
+.p10-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.p10-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.p10-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.p10-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Main table card ---- */
+
+.p10-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Their side (top band) ---- */
+
+.p10-their-side {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-bottom: clamp(12px, 2vw, 20px);
+}
+
+.p10-their-side-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.p10-their-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.p10-their-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.p10-their-fan {
+  display: flex;
+  margin-top: 6px;
+}
+
+.p10-their-groups {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ---- Phase ladder band ---- */
+
+.p10-ladder-band {
+  padding: clamp(12px, 1.6vw, 18px) 0;
+}
+
+.p10-ladder {
+  display: flex;
+  flex-direction: column;
+}
+
+.p10-ladder-chips {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.p10-ladder-chip-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  cursor: default;
+}
+
+.p10-ladder-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--grey-border);
+  box-sizing: border-box;
+}
+
+.p10-ladder-chip--current {
+  background: var(--violet);
+  border-color: var(--violet);
+}
+
+.p10-ladder-chip--done {
+  background: var(--grey-fill);
+  border-color: var(--grey-fill);
+}
+
+.p10-ladder-chip--ahead {
+  background: #fff;
+  border-color: var(--grey-border);
+}
+
+.p10-ladder-dots {
+  display: flex;
+  gap: 3px;
+  min-height: 7px;
+}
+
+.p10-ladder-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--ink);
+}
+
+/* Fixed-height caption row — a non-breaking space keeps it from collapsing */
+.p10-ladder-caption {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Centre band ---- */
+
+.p10-centre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(16px, 2.4vw, 28px);
+  border-top: 3px solid var(--grey-fill);
+  border-bottom: 3px solid var(--grey-fill);
+  padding: clamp(14px, 2vw, 22px) 0;
+  position: relative;
+}
+
+.p10-centre-left {
+  flex: 1 1 380px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: clamp(12px, 2vw, 20px);
+}
+
+.p10-centre-right {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* ---- Stock ---- */
+
+.p10-stock-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.p10-stock-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 6px;
+}
+
+/* Reserve hover-lift space above the stock card, matching Rummy */
+.p10-stock-card-wrapper {
+  padding-top: 14px;
+}
+
+/* ---- Discard ---- */
+
+.p10-discard-group {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.p10-discard-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 6px;
+}
+
+/* Same top-edge alignment as the stock card */
+.p10-discard-slot {
+  padding-top: 14px;
+  min-height: 78px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.p10-discard-empty {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  padding: 8px 0;
+}
+
+/* ---- Error banner ---- */
+
+.p10-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Turn chip ---- */
+
+.p10-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+
+/* ---- Status line ---- */
+
+.p10-status {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.2;
+}
+
+.p10-status-card {
+  font-weight: 700;
+}
+
+/* ---- Group cluster ---- */
+
+.p10-group-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.p10-group-caption {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.p10-group {
+  display: flex;
+  flex: none;
+}
+
+/* A group the single selected card can validly be hit onto — matches the yellow
+   "you may act here" language used elsewhere (selected cards, drawable stock). */
+.p10-group--hittable {
+  cursor: pointer;
+  border-radius: 12px;
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
+}
+
+/* Cards hit onto the OTHER player's group — stay on the hitter's own side,
+   captioned with which group they extend. */
+.p10-group-extension {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.p10-group-extension-caption {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--faint-text);
+  white-space: nowrap;
+}
+
+/* ---- Empty group state ---- */
+
+.p10-groups-empty {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+}
+
+/* ---- Your side ---- */
+
+.p10-your-side {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.6vw, 16px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.p10-your-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.p10-your-groups {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Current phase pill ---- */
+
+.p10-phase-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 2px solid var(--grey-border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--body-text);
+  white-space: nowrap;
+}
+
+.p10-phase-pill-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--violet);
+  border: 1px solid var(--ink);
+  flex: none;
+}
+
+/* ---- Hand section ---- */
+
+.p10-hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.p10-hand-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.p10-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.p10-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+.p10-hand-fan {
+  display: flex;
+  min-height: 118px; /* room for selected lift (18px) + card height (100px) */
+  padding-top: 20px;
+  padding-bottom: 6px;
+}
+
+/* ---- Actions row ---- */
+
+.p10-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.p10-action-btn {
+  height: 56px;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+.p10-action-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+/* ---- Footnote ---- */
+
+.p10-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}

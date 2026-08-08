@@ -223,7 +223,7 @@ function makeValidator(
       const newGroupsForPlayer = [...(publicState.groups[playerId] ?? [])]
       phaseGroups.forEach((group, i) => {
         const zone = addCards(createPlayerZone(playerId, `p10group-${existingGroupCount + i}`, 'public'), group.cards)
-        newGroupsForPlayer.push({ type: group.type, zone })
+        newGroupsForPlayer.push({ type: group.type, zone, phaseNumber: requirement.phase })
       })
       const newGroups = { ...publicState.groups, [playerId]: newGroupsForPlayer }
       const newHasLaidPhase = { ...publicState.hasLaidPhase, [playerId]: true }

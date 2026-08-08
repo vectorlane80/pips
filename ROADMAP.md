@@ -5,12 +5,18 @@ Prior charters (card-engine foundation, real Rummy) are complete — see
 This roadmap is for the current charter (Phase 10) — see `CHARTER.md`.
 
 ## Next up
-- [ ] M4 — Phase10 screen + App.tsx/Landing.tsx wiring (largest remaining slice)
 - [ ] M5 — `docs/phase10.md`
 
 (M2 folded away — `peer.ts` is already generic from Rummy's charter.)
 
 ## Done (this charter)
+- [cycle 5] M4 — Phase10Table/.css/Room/Results/RulesOverlay screens +
+  full App.tsx/Landing.tsx wiring (`P10-` room codes). Two real defects
+  found by review and fixed: a `groupPhaseNumber` off-by-one (fixed by
+  adding a real `phaseNumber` field to `Phase10Group`, set at lay time)
+  and a `canDrawStock` gate that wrongly disabled the stock when empty.
+  Verified live in-browser: full host-vs-bot turn cycle, no console
+  errors, Farkle/Rummy regression-checked. 458 tests total.
 - [cycle 4] M3 — `src/components/Phase10Card.tsx`/`.css`: card-visual
   components matching the design handoff exactly. No review needed
   (presentational only, no game logic).

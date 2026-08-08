@@ -1,0 +1,617 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import type { Card } from '../card-engine/cards'
+import type { Phase10PublicState } from '../card-games/phase10/state'
+import { fullGroupCards } from '../card-games/phase10/state'
+import { currentPlayer } from '../card-engine/turn-engine'
+import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, type GroupType } from '../card-games/phase10/classify'
+import { PHASES, type PhaseRequirement } from '../card-games/phase10/phases'
+import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phase10Card'
+import { Wordmark } from '../components/Wordmark'
+import { Phase10RulesOverlay } from './Phase10RulesOverlay'
+import './Phase10Table.css'
+
+// ---- Props ----
+
+export interface Phase10TableProps {
+  code: string
+  localPlayerId: string
+  localName: string
+  opponentName: string
+  opponentColor: string
+  opponentHandCount: number
+  connection: 'connected' | 'disconnected'
+  notice?: string | null
+  publicState: Phase10PublicState
+  hand: Card[]
+  onDrawStock: () => void
+  onDrawDiscard: () => void          // top card only, no index — unlike Rummy
+  onLayPhase: (cardIds: string[]) => void
+  onHit: (targetPlayerId: string, groupIndex: number, cardIds: string[]) => void
+  onDiscard: (cardId: string) => void
+  onOpenRules: () => void
+  onLeave: () => void
+}
+
+// ---- Local helpers ----
+
+const COLOR_ORDER: Record<string, number> = { red: 0, blue: 1, green: 2, yellow: 3, special: 4 }
+
+/** The local player's seat colour — violet, matching the ladder's "you" dot. */
+const MY_COLOR = 'var(--violet)'
+
+type StatusLine = {
+  pre: string
+  card: { rank: string; suit: string } | null
+  post: string
+}
+
+function computeStatus(
+  publicState: Phase10PublicState,
+  isMyTurn: boolean,
+  opponentName: string,
+  localPlayerId: string,
+  justDrawn: Card | null,
+): StatusLine {
+  // Round over
+  if (publicState.roundOver) {
+    if (publicState.roundWinnerId === null) {
+      return { pre: 'Round blocked — no cards left to draw.', card: null, post: '' }
+    }
+    const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : opponentName
+    return { pre: `${winnerName} went out!`, card: null, post: '' }
+  }
+
+  // Not my turn
+  if (!isMyTurn) {
+    return { pre: `${opponentName}'s turn`, card: null, post: '' }
+  }
+
+  // My turn — draw phase
+  if (publicState.turn.phase === 'draw') {
+    return { pre: 'Draw from the stock, or take the top of the discard.', card: null, post: '' }
+  }
+
+  // My turn — discard phase, just drew a card
+  if (justDrawn) {
+    return { pre: 'You drew the ', card: { rank: justDrawn.rank, suit: justDrawn.suit }, post: '.' }
+  }
+
+  return { pre: 'Select cards to lay your phase, hit, or discard.', card: null, post: '' }
+}
+
+// Number cards sort by colour (runs and colour groups read as contiguous blocks),
+// then by rank; Skip/Wild (suit 'special') sort last.
+function sortHandForDisplay(cards: Card[]): Card[] {
+  return [...cards].sort((a, b) => {
+    const ca = COLOR_ORDER[a.suit] ?? 4
+    const cb = COLOR_ORDER[b.suit] ?? 4
+    if (ca !== cb) return ca - cb
+    const na = Number(a.rank)
+    const nb = Number(b.rank)
+    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb
+    if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
+    return 0
+  })
+}
+
+// Within a laid group: sets read best sorted by colour, runs and colour groups by number.
+function sortGroupForDisplay(cards: Card[], type: GroupType): Card[] {
+  if (type === 'set') {
+    return [...cards].sort((a, b) => (COLOR_ORDER[a.suit] ?? 4) - (COLOR_ORDER[b.suit] ?? 4))
+  }
+  return [...cards].sort((a, b) => Number(a.rank) - Number(b.rank))
+}
+
+function layPhaseEnabled(selectedIds: string[], hand: Card[], requirement: PhaseRequirement): boolean {
+  const cards = selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined)
+  if (cards.length !== selectedIds.length) return false
+  return classifyPhaseHand(cards, requirement).valid
+}
+
+function canHitGroup(groupCards: Card[], groupType: GroupType, selectedCard: Card): boolean {
+  const combined = [...groupCards, selectedCard]
+  return groupType === 'set' ? isValidSet(combined)
+       : groupType === 'run' ? isValidRun(combined)
+       : isValidColorGroup(combined)
+}
+
+function layPhaseHint(
+  selectedIds: string[],
+  hand: Card[],
+  requirement: PhaseRequirement,
+  isMyTurn: boolean,
+  phase: string,
+  hasLaid: boolean,
+): string {
+  if (!isMyTurn) return 'Not your turn'
+  if (phase !== 'discard') return 'Draw a card first'
+  if (hasLaid) return 'Phase already laid this hand'
+  if (selectedIds.length === 0) return 'Select cards that form your phase'
+  const cards = selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined)
+  if (cards.length !== selectedIds.length) return 'Select cards that form your phase'
+  if (!classifyPhaseHand(cards, requirement).valid) return "Those don't complete your phase"
+  return ''
+}
+
+function discardHint(selectedIds: string[], isMyTurn: boolean, phase: string): string {
+  if (!isMyTurn) return 'Not your turn'
+  if (phase !== 'discard') return 'Draw a card first'
+  if (selectedIds.length === 0) return 'Select exactly one card'
+  if (selectedIds.length > 1) return 'Select exactly one card'
+  return ''
+}
+
+// ---- Group cluster sub-component ----
+
+function GroupCluster({ cards, type, ownerColor, ownerShadow, caption, onHit }: {
+  cards: Card[]
+  type: GroupType
+  ownerColor?: string
+  ownerShadow?: string
+  /** "Phase N" caption above the group, coloured with the owner's seat colour. */
+  caption?: string
+  /** Present iff the single selected card could validly be hit onto this group. */
+  onHit?: () => void
+}) {
+  const sorted = sortGroupForDisplay(cards, type)
+  return (
+    <div className="p10-group-wrap">
+      {caption && <div className="p10-group-caption" style={{ color: ownerColor }}>{caption}</div>}
+      <div
+        className={`p10-group${onHit ? ' p10-group--hittable' : ''}`}
+        onClick={onHit}
+        role={onHit ? 'button' : undefined}
+        tabIndex={onHit ? 0 : undefined}
+      >
+        {sorted.map((card, i) => (
+          <Phase10Card
+            key={card.id}
+            card={card}
+            size="group"
+            ownerColor={ownerColor}
+            ownerShadow={ownerShadow}
+            style={{ marginLeft: i === 0 ? 0 : -8 }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---- Phase ladder sub-component ----
+
+function PhaseLadder({
+  localPhaseIdx,
+  opponentPhaseIdx,
+  opponentColor,
+}: {
+  localPhaseIdx: number
+  opponentPhaseIdx: number
+  opponentColor: string
+}) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  return (
+    <div className="p10-ladder">
+      <div className="p10-ladder-chips">
+        {PHASES.map((p, i) => {
+          const fill = i < localPhaseIdx ? 'done' : i === localPhaseIdx ? 'current' : 'ahead'
+          return (
+            <div
+              key={p.phase}
+              className="p10-ladder-chip-wrap"
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <div className={`p10-ladder-chip p10-ladder-chip--${fill}`} />
+              <div className="p10-ladder-dots">
+                {i === localPhaseIdx && <span className="p10-ladder-dot" style={{ background: 'var(--violet)' }} />}
+                {i === opponentPhaseIdx && <span className="p10-ladder-dot" style={{ background: opponentColor }} />}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="p10-ladder-caption">
+        {hovered !== null ? `Phase ${PHASES[hovered].phase} — ${PHASES[hovered].label}` : '\u00a0'}
+      </div>
+    </div>
+  )
+}
+
+// ---- Status display sub-component ----
+
+function StatusDisplay({ status }: { status: StatusLine }) {
+  return (
+    <div className="p10-status">
+      {status.pre}
+      {status.card && (
+        <span
+          className="p10-status-card"
+          style={{ color: PHASE10_COLORS[status.card.suit as 'red' | 'blue' | 'green' | 'yellow'] ?? 'var(--ink)' }}
+        >
+          {status.card.rank}
+          {status.card.suit !== 'special' ? ` ${status.card.suit}` : ''}
+        </span>
+      )}
+      {status.post}
+    </div>
+  )
+}
+
+// ---- Phase10Table ----
+
+export function Phase10Table({
+  code,
+  localPlayerId,
+  localName,
+  opponentName,
+  opponentColor,
+  opponentHandCount,
+  connection,
+  notice,
+  publicState,
+  hand,
+  onDrawStock,
+  onDrawDiscard,
+  onLayPhase,
+  onHit,
+  onDiscard,
+  onOpenRules,
+  onLeave,
+}: Phase10TableProps) {
+  void localName // preserved in props for the App wiring; unused in this presentational screen
+  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
+
+  // ---- Derived ----
+  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
+  const canAct = isMyTurn && !publicState.roundOver
+  const myPhaseIdx = publicState.phaseIdx[localPlayerId] ?? 0
+  const oppPhaseIdx = publicState.phaseIdx[opponentId] ?? 0
+  const myRequirement = PHASES[myPhaseIdx]
+  const hasLaid = publicState.hasLaidPhase[localPlayerId] ?? false
+
+  const theirGroups = publicState.groups[opponentId] ?? []
+  const myGroups = publicState.groups[localPlayerId] ?? []
+  // Hits render on the HITTER's side: self-extensions merge into the owner's own clusters,
+  // cross-hits appear as captioned mini-clusters on the hitter's side.
+  const theirOwnHits = publicState.hits.filter((h) => h.playerId === opponentId && h.targetPlayerId === opponentId)
+  const myOwnHits = publicState.hits.filter((h) => h.playerId === localPlayerId && h.targetPlayerId === localPlayerId)
+  const myCrossHits = publicState.hits.filter((h) => h.playerId === localPlayerId && h.targetPlayerId === opponentId)
+  const theirCrossHits = publicState.hits.filter((h) => h.playerId === opponentId && h.targetPlayerId === localPlayerId)
+
+  // ---- Local state ----
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [justDrawn, setJustDrawn] = useState<Card | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const prevHandRef = useRef<Card[]>(hand)
+
+  // ---- Effects ----
+  // Clear selectedIds when the hand changes in a way that invalidates the selection
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => hand.some((c) => c.id === id)))
+  }, [hand])
+
+  // Clear justDrawn on every turn boundary
+  useEffect(() => {
+    setJustDrawn(null)
+  }, [publicState.turn.turnNumber])
+
+  // Detect single-card draws for "you drew the X" feedback
+  useEffect(() => {
+    const prev = prevHandRef.current
+    const diff = hand.length - prev.length
+    if (diff === 1 && publicState.turn.phase === 'discard') {
+      const newCard = hand.find((c) => !prev.some((pc) => pc.id === c.id))
+      if (newCard) setJustDrawn(newCard)
+    } else {
+      setJustDrawn(null)
+    }
+    prevHandRef.current = hand
+  }, [hand, publicState.turn.phase])
+
+  // ---- Computed ----
+  const sortedHand = useMemo(() => sortHandForDisplay(hand), [hand])
+
+  const selectedCards = useMemo(
+    () => selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined),
+    [selectedIds, hand],
+  )
+
+  const status = useMemo(
+    () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, justDrawn),
+    [publicState, isMyTurn, opponentName, localPlayerId, justDrawn],
+  )
+
+  // DRAW_FROM_STOCK is always a legal attempt during the draw phase — the validator itself
+  // handles an empty stock by recycling the discard pile or, if that's not possible either,
+  // blocking the round. Gating this on stockCount > 0 would make the stock unclickable in
+  // exactly the states the engine is designed to resolve.
+  const canDrawStock = canAct && publicState.turn.phase === 'draw'
+  const pile = publicState.discardPile.cards
+  const discardTop = pile.length > 0 ? pile[pile.length - 1] : null
+  // Top card only, and a Skip can never be taken off the discard pile.
+  const canDrawDiscard = canAct && publicState.turn.phase === 'draw' && discardTop !== null && discardTop.meta?.kind !== 'skip'
+
+  const canLayPhase = canAct && publicState.turn.phase === 'discard' && !hasLaid
+  const lEnabled = canLayPhase && layPhaseEnabled(selectedIds, hand, myRequirement)
+  const dEnabled = selectedIds.length === 1 && publicState.turn.phase === 'discard' && isMyTurn
+
+  const lHint = lEnabled ? '' : layPhaseHint(selectedIds, hand, myRequirement, isMyTurn, publicState.turn.phase, hasLaid)
+  const dHint = dEnabled ? '' : discardHint(selectedIds, isMyTurn, publicState.turn.phase)
+
+  // True iff the single selected card could validly be hit onto the given group
+  const groupHittable = (targetPlayerId: string, groupIndex: number): boolean => {
+    if (!canAct || publicState.turn.phase !== 'discard') return false
+    if (!hasLaid || selectedCards.length !== 1) return false
+    const group = publicState.groups[targetPlayerId]?.[groupIndex]
+    if (!group) return false
+    const full = fullGroupCards(publicState.groups, publicState.hits, targetPlayerId, groupIndex)
+    return canHitGroup(full, group.type, selectedCards[0])
+  }
+
+  // ---- Handlers ----
+  const handleCardClick = useCallback(
+    (cardId: string) => {
+      if (!canAct) return
+      setSelectedIds((prev) =>
+        prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId],
+      )
+    },
+    [canAct],
+  )
+
+  const handleLayPhase = useCallback(() => {
+    onLayPhase(selectedIds)
+    setSelectedIds([])
+  }, [onLayPhase, selectedIds])
+
+  const handleHit = useCallback(
+    (targetPlayerId: string, groupIndex: number) => {
+      const card = selectedCards[0]
+      if (!card) return
+      onHit(targetPlayerId, groupIndex, [card.id])
+      setSelectedIds([])
+    },
+    [onHit, selectedCards],
+  )
+
+  const handleDiscard = useCallback(() => {
+    onDiscard(selectedIds[0])
+    setSelectedIds([])
+  }, [onDiscard, selectedIds])
+
+  // ---- Render ----
+  const fanCount = Math.min(opponentHandCount, 14)
+
+  return (
+    <div className="p10-table">
+      {/* Header */}
+      <div className="p10-header">
+        <div className="p10-header-left">
+          <Wordmark small onClick={onLeave} />
+          <span className="p10-game-label">Phase 10</span>
+          <span className="p10-peer-strip">
+            <span
+              className="p10-peer-dot"
+              style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
+            />
+            <span className="p10-peer-label">
+              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+            </span>
+          </span>
+        </div>
+        <div className="p10-header-actions">
+          <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
+          <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
+        </div>
+      </div>
+
+      {/* Code chip */}
+      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Phase 10 · {code}</span>
+      </div>
+
+      {/* Error banner */}
+      {notice && <div className="p10-error-banner">{notice}</div>}
+
+      {/* Main table card */}
+      <div className="p10-table-card">
+        {/* Their side */}
+        <div className="p10-their-side">
+          <div className="p10-their-side-left">
+            <div className="p10-their-name" style={{ color: opponentColor }}>{opponentName}</div>
+            <div className="p10-their-count">{opponentHandCount} cards · hidden</div>
+            {fanCount > 0 && (
+              <div className="p10-their-fan">
+                {Array.from({ length: fanCount }, (_, i) => (
+                  <Phase10CardBack
+                    key={i}
+                    size="fan"
+                    style={{ marginLeft: i === 0 ? 0 : -15 }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="p10-their-groups">
+            {theirGroups.length > 0 ? (
+              theirGroups.map((group, i) => {
+                const selfExt = theirOwnHits.filter((h) => h.targetGroupIndex === i).flatMap((h) => h.cards)
+                const hitTarget = groupHittable(opponentId, i)
+                return (
+                  <GroupCluster
+                    key={group.zone.id}
+                    cards={[...group.zone.cards, ...selfExt]}
+                    type={group.type}
+                    ownerColor={opponentColor}
+                    ownerShadow="var(--grey-border-3)"
+                    caption={`Phase ${group.phaseNumber}`}
+                    onHit={hitTarget ? () => handleHit(opponentId, i) : undefined}
+                  />
+                )
+              })
+            ) : (
+              <span className="p10-groups-empty">{opponentName} has laid nothing down yet</span>
+            )}
+            {theirCrossHits.map((h) => (
+              <div key={h.id} className="p10-group-extension">
+                <div className="p10-group-extension-caption">on your group</div>
+                <GroupCluster
+                  cards={h.cards}
+                  type={myGroups[h.targetGroupIndex]?.type ?? 'set'}
+                  ownerColor={opponentColor}
+                  ownerShadow="var(--grey-border-3)"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Ladder band */}
+        <div className="p10-ladder-band">
+          <PhaseLadder
+            localPhaseIdx={myPhaseIdx}
+            opponentPhaseIdx={oppPhaseIdx}
+            opponentColor={opponentColor}
+          />
+        </div>
+
+        {/* Centre band */}
+        <div className="p10-centre">
+          <div className="p10-centre-left">
+            {/* Stock */}
+            <div className="p10-stock-group">
+              <div className="p10-stock-caption">stock {publicState.stockCount}</div>
+              <div className="p10-stock-card-wrapper">
+                <Phase10CardBack
+                  size="stock"
+                  canDraw={canDrawStock}
+                  onClick={canDrawStock ? onDrawStock : undefined}
+                />
+              </div>
+            </div>
+
+            {/* Discard — top card only, no reach-in */}
+            <div className="p10-discard-group">
+              <div className="p10-discard-caption">Discard · {pile.length} {pile.length === 1 ? 'card' : 'cards'}</div>
+              <div className="p10-discard-slot">
+                {discardTop ? (
+                  <Phase10Card
+                    card={discardTop}
+                    size="discard"
+                    onClick={canDrawDiscard ? onDrawDiscard : undefined}
+                  />
+                ) : (
+                  <span className="p10-discard-empty">Discard pile empty</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right group: turn chip + status */}
+          <div className="p10-centre-right">
+            <span
+              className="p10-turn-chip"
+              style={{ background: isMyTurn ? 'var(--green-text)' : opponentColor }}
+            >
+              {isMyTurn ? 'Your turn' : `${opponentName}'s turn`}
+            </span>
+            <StatusDisplay status={status} />
+          </div>
+        </div>
+
+        {/* Your side */}
+        <div className="p10-your-side">
+          <div className="p10-your-band">
+            <div className="p10-your-groups">
+              {myGroups.length > 0 ? (
+                myGroups.map((group, i) => {
+                  const selfExt = myOwnHits.filter((h) => h.targetGroupIndex === i).flatMap((h) => h.cards)
+                  const hitTarget = groupHittable(localPlayerId, i)
+                  return (
+                    <GroupCluster
+                      key={group.zone.id}
+                      cards={[...group.zone.cards, ...selfExt]}
+                      type={group.type}
+                      ownerColor={MY_COLOR}
+                      caption={`Phase ${group.phaseNumber}`}
+                      onHit={hitTarget ? () => handleHit(localPlayerId, i) : undefined}
+                    />
+                  )
+                })
+              ) : (
+                <span className="p10-groups-empty">You have laid nothing down yet</span>
+              )}
+              {myCrossHits.map((h) => {
+                const targetType = theirGroups[h.targetGroupIndex]?.type ?? 'set'
+                return (
+                  <div key={h.id} className="p10-group-extension">
+                    <div className="p10-group-extension-caption">on {opponentName}'s group</div>
+                    <GroupCluster cards={h.cards} type={targetType} ownerColor={MY_COLOR} />
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Current phase pill */}
+            <span className="p10-phase-pill">
+              <span className="p10-phase-pill-dot" />
+              Phase {myRequirement.phase} — {myRequirement.label}
+            </span>
+          </div>
+
+          <div className="p10-hand-section">
+            {/* Hand header */}
+            <div className="p10-hand-header">
+              <span className="p10-hand-label">Your hand</span>
+              <span className="p10-hand-stats">{hand.length} cards</span>
+            </div>
+
+            {/* Hand cards */}
+            <div className="p10-hand-fan">
+              {sortedHand.map((card, i) => (
+                <Phase10Card
+                  key={card.id}
+                  card={card}
+                  size="hand"
+                  selected={selectedIds.includes(card.id)}
+                  onClick={canAct ? () => handleCardClick(card.id) : undefined}
+                  style={{ marginLeft: i === 0 ? 0 : -26 }}
+                />
+              ))}
+            </div>
+
+            {/* Actions row */}
+            {!publicState.roundOver && (
+              <div className="p10-actions">
+                <button
+                  type="button"
+                  className="btn p10-action-btn"
+                  disabled={!lEnabled}
+                  onClick={handleLayPhase}
+                >
+                  {hasLaid ? 'Phase laid' : `Lay phase ${myRequirement.phase}`}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-coral p10-action-btn"
+                  disabled={!dEnabled}
+                  onClick={handleDiscard}
+                >
+                  Discard
+                </button>
+                <span className="p10-action-hint">{lHint || dHint}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Footnote */}
+      <p className="p10-footnote">Your hand never leaves this device — only the play does.</p>
+
+      {rulesOpen && <Phase10RulesOverlay onClose={() => setRulesOpen(false)} />}
+    </div>
+  )
+}

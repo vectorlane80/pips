@@ -849,3 +849,64 @@ card-engine or leaking Phase-10 vocabulary into it.
   the spec.
 - **Continue?** Yes — M4 (screen + wiring, the largest remaining slice)
   next, per explicit user instruction.
+
+## Phase 10 cycle 5 — 2026-08-08
+
+- **Shipped:** M4 — the full Phase 10 screen and live-app wiring.
+  `src/screens/Phase10Table.tsx`/`.css`, `Phase10Room.tsx`,
+  `Phase10Results.tsx`, `Phase10RulesOverlay.tsx`; `App.tsx` gained a
+  third fully parallel session branch (state/refs, ref-based closure
+  discipline, `startPhase10Host`/`addPhase10HouseBot`/
+  `runPhase10Bot(sIfNeeded)`/`startPhase10Guest`/`phase10Dispatch`/
+  `phase10Rematch`, bot-trigger and round-transition effects, three-way
+  render branching) mirroring Rummy's own wiring exactly, with `P10-`
+  as the room-code prefix; `Landing.tsx` gained a sixth shelf tile and
+  an `onPickPhase10` prop.
+- **Delegation and recovery:** split into M4a (screens) and M4b
+  (wiring) dispatches, both to `deepseek-v4-flash`, mirroring the prior
+  Rummy charter's own M4a/M4b split for its largest milestone. M4a hit
+  the 25-tool-round cap one file short (`Phase10RulesOverlay.tsx`
+  missing) — written directly by the lead (small, pure content, no game
+  logic, low risk). M4b hit the same cap roughly halfway through — all
+  state/refs/helpers/effects landed correctly, but the render branches,
+  `onJoin` code-prefix routing, and all of `Landing.tsx` were still
+  missing; finished directly by the lead rather than another dispatch
+  round, since the remaining work was small and the pattern was already
+  fully understood from reading Rummy's equivalent code repeatedly
+  during spec-writing.
+- **Real defects found by review and fixed:**
+  1. `groupPhaseNumber` (a UI-side inference of which phase a laid group
+     belonged to, since `Phase10Group` didn't store its own phase
+     number) had a genuine off-by-one: a player who just completed
+     Phase 9 and a player who just completed Phase 10 land on the exact
+     same post-round `phaseIdx` value (9), so the inference couldn't
+     tell them apart and always displayed "Phase 10." Fixed at the
+     actual root cause — added `phaseNumber` to `Phase10Group`, set once
+     at `LAY_PHASE` time from the requirement being laid for, immune to
+     any later `phaseIdx` advancement — rather than patching the UI's
+     inference further. Required touching the already-committed
+     `state.ts`/`rules.ts` a second time, judged justified since it's a
+     real, confirmed, cleanly-fixable defect.
+  2. `canDrawStock` disabled the stock pile whenever `stockCount === 0`,
+     but the engine treats an empty stock as a fully legal
+     `DRAW_FROM_STOCK` trigger (recycle the discard pile, or block the
+     round) — the UI gate could leave a player with zero clickable
+     actions in a state the engine was specifically designed to
+     resolve. Fixed directly by the lead (one-line, mechanical).
+  All three findings independently re-verified (`tsc`/`test`/`build`,
+  diff read against spec) before committing.
+- **Browser smoke test:** ran the actual app (manual `vite` dev server
+  in this worktree, not the harness's default launch config — that one
+  resolved to the main repo's checkout, not this worktree, and silently
+  served stale code; caught by the Phase 10 tile simply not appearing
+  on the shelf, fixed by starting `vite` directly here on a second
+  port). Verified end to end: landing shelf tile renders in the correct
+  color, room/waiting screen with the `P10-` code, "Play the house,"
+  the live table (ladder with dots, both bands, hand fan with visibly
+  correct card colors including a wild gradient, status line, phase
+  pill), a real draw → status-line card chip → discard → bot auto-turn
+  cycle back to the player's turn. No console errors. Regression-
+  checked Farkle and Rummy in the same session — both still work,
+  confirming the M0 `Suit`/`Rank` widening and all of M4's wiring
+  changed nothing about the existing games.
+- **Continue?** Yes — M5 (documentation) is the last milestone.

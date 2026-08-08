@@ -217,6 +217,7 @@ describe('Phase 10 integration harness', () => {
     expect(pub.hasLaidPhase['p2']).toBe(false)
     expect(pub.groups['p1']).toHaveLength(2)
     expect(pub.groups['p1'].map((g) => g.type)).toEqual(['set', 'set'])
+    expect(pub.groups['p1'].map((g) => g.phaseNumber)).toEqual([1, 1])
     expect(pub.groups['p1'][0].zone.cards.map((c) => c.id).sort()).toEqual(['p10-8', 'p10-32', 'p10-56'].sort())
     expect(pub.groups['p1'][1].zone.cards.map((c) => c.id).sort()).toEqual(['p10-16', 'p10-40', 'p10-64'].sort())
     expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(4)
@@ -319,6 +320,39 @@ describe('Phase 10 integration harness', () => {
     expect(totalCards(result.game)).toBe(108)
   })
 
+  it('going out on Phase 9 — group phaseNumber is 9, not the capped phaseIdx 9 (which would read 10)', () => {
+    // Regression for the UI inference bug: a player on Phase 9 (phaseIdx 8) who lays and goes
+    // out advances to Math.min(8 + 1, 9) = 9 — numerically identical to a Phase 10 lay's
+    // post-round phaseIdx. The group must remember it was laid for Phase 9 (phaseNumber 9),
+    // not Phase 10.
+    // Phase 9 (index 8) = 1 set of 5 + 1 set of 2: five 2s + two 3s — exactly 7 cards
+    const p1Cards = ['p10-2', 'p10-3', 'p10-26', 'p10-27', 'p10-50', 'p10-4', 'p10-28']
+    const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      phaseIdx: { p1: 8, p2: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', { type: 'LAY_PHASE', cardIds: p1Cards })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.game.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // 8 + 1 capped at 9 — the SAME value a Phase 10 lay would leave behind
+    expect(pub.phaseIdx['p1']).toBe(9)
+    expect(pub.groups['p1']).toHaveLength(2)
+    expect(pub.groups['p1'].map((g) => g.phaseNumber)).toEqual([9, 9])
+    expect(pub.groups['p1'][0].zone.cards.map((c) => c.id).sort()).toEqual(['p10-2', 'p10-3', 'p10-26', 'p10-27', 'p10-50'].sort())
+    expect(pub.groups['p1'][1].zone.cards.map((c) => c.id).sort()).toEqual(['p10-4', 'p10-28'].sort())
+    expect(totalCards(result.game)).toBe(108)
+  })
+
   it('HIT rejected — player has not laid their own phase yet', () => {
     const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-8', 'p10-32', 'p10-56'].map((id) => cardMap().get(id)!))
     const p1Cards = ['p10-80', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18']
@@ -330,7 +364,7 @@ describe('Phase 10 integration harness', () => {
       stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96', 'p10-8', 'p10-32', 'p10-56']),
       phase: 'discard',
       currentPlayerIndex: 0,
-      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone, phaseNumber: 1 }] },
     })
 
     const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-80'] })
@@ -350,7 +384,7 @@ describe('Phase 10 integration harness', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [{ type: 'set', zone: p1GroupZone }], p2: [] },
+      groups: { p1: [{ type: 'set', zone: p1GroupZone, phaseNumber: 1 }], p2: [] },
     })
 
     const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p1', groupIndex: 0, cardIds: ['p10-80'] })
@@ -380,7 +414,7 @@ describe('Phase 10 integration harness', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
     })
 
     const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-12'] })
@@ -402,7 +436,7 @@ describe('Phase 10 integration harness', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone, phaseNumber: 1 }] },
     })
 
     // a red 7 (p10-12) is not a 5 — the set of 5s breaks
@@ -442,7 +476,7 @@ describe('Phase 10 integration harness', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [{ type: 'set', zone: p1GroupZone }], p2: [] },
+      groups: { p1: [{ type: 'set', zone: p1GroupZone, phaseNumber: 1 }], p2: [] },
     })
 
     const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p1', groupIndex: 0, cardIds: ['p10-80'] })
@@ -861,7 +895,7 @@ describe('Phase 10 integration harness', () => {
       phase: 'discard',
       currentPlayerIndex: 0,
       hasLaidPhase: { p1: true, p2: false },
-      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone }] },
+      groups: { p1: [], p2: [{ type: 'set', zone: p2GroupZone, phaseNumber: 1 }] },
     })
     const hitResult = applyPhase10Action(hitGame, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: null as any })
     expect(hitResult.outcome.ok).toBe(false)
