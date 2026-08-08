@@ -186,6 +186,15 @@
   width: 20%;
   height: 20%;
 }
+.die-muted {
+  border-color: var(--slate-pip-border);
+  background: var(--grey-fill);
+  box-shadow: 0 7px 0 var(--slate-pip-border);
+  cursor: default;
+}
+.die-muted .die-pip {
+  background: var(--slate-pip);
+}
 
 .overlay-backdrop {
   position: fixed;

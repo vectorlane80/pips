@@ -103,7 +103,7 @@ export function FarkleTable({
                 )
               )}
               {f.kept.map((v, i) => (
-                <Die key={`kept-${i}`} value={v} selected />
+                <Die key={`kept-${i}`} value={v} selected={!f.farkle} muted={f.farkle} />
               ))}
               {f.dice.map((d, i) => (
                 <Die

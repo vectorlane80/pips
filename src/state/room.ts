@@ -205,7 +205,7 @@ function farkleRoll(state: RoomState, by: string): RoomState {
     return {
       ...state,
       seats,
-      farkle: { ...f, dice, kept: [], turnScore: 0, farkle: true, lost: turnScore, status: 'Farkle!', log },
+      farkle: { ...f, dice, kept, turnScore: 0, farkle: true, lost: turnScore, status: 'Farkle!', log },
     }
   }
   return { ...state, farkle: { ...f, dice, kept, turnScore, farkle: false, status: 'Keep what scores.' } }
@@ -249,7 +249,7 @@ function farkleEndTurn(state: RoomState, by: string): RoomState {
   if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
   const f = state.farkle
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
-  return { ...state, turnIdx, farkle: { ...f, farkle: false, dice: [], round, status: 'Six dice, ready.' } }
+  return { ...state, turnIdx, farkle: { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.' } }
 }
 
 // ---------- Yahtzee ----------

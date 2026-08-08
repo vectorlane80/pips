@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addSeat, applyAction, makeRoom } from './room'
 import { grandTotal } from '../games/yahtzee'
 import type { RoomState, YCategory } from '../types'
@@ -85,5 +85,48 @@ describe('yahtzeeScore — +100 bonus for a second yahtzee', () => {
     // grandTotal never reads bonuses, so the 200 is added exactly once in yahtzeeScore
     const h1 = result.seats.find((s) => s.id === 'h1')!
     expect(h1.score).toBe(grandTotal(result.yahtzee.cards.h1) + 200)
+  })
+})
+
+describe('farkle — held dice survive a busted roll', () => {
+  // Cycling mock guarantees every rolled die is a 2, 3, 4, or 6 (never a 1 or 5, and no
+  // 3-of-a-kind possible), so any roll is a guaranteed bust. rollDie consumes two
+  // Math.random() calls per die (val + rot), which the cycling mock handles fine.
+  const mockVals = [0.2, 0.4, 0.6, 0.85]
+  let mockIdx = 0
+
+  beforeEach(() => {
+    mockIdx = 0
+    vi.spyOn(Math, 'random').mockImplementation(() => mockVals[mockIdx++ % mockVals.length])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function farkleRoom(): RoomState {
+    let room = makeRoom('TEST-2', 'farkle', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    // h1 is seats[0], so turnIdx 0 already points at them. Pre-populate kept/turnScore to
+    // simulate the player having already set aside two 5s earlier in the turn.
+    return { ...room, screen: 'farkle' as const, farkle: { ...room.farkle, kept: [5, 5], turnScore: 100, dice: [] } }
+  }
+
+  it('keeps already-held dice visible when the roll busts', () => {
+    const result = applyAction(farkleRoom(), { type: 'farkleRoll' }, 'h1')
+
+    expect(result.farkle.farkle).toBe(true)
+    // Previously reset to [] the moment a roll busted; the held dice must survive
+    expect(result.farkle.kept).toEqual([5, 5])
+    expect(result.farkle.lost).toBe(100)
+  })
+
+  it('clears held dice when the turn ends after a farkle', () => {
+    const room = farkleRoom()
+    const farkled = { ...room, farkle: { ...room.farkle, farkle: true, dice: [{ id: 0, val: 2, sel: false, rot: 0 }] } }
+    const result = applyAction(farkled, { type: 'farkleEndTurn' }, 'h1')
+
+    expect(result.farkle.kept).toEqual([])
+    expect(result.farkle.dice).toEqual([])
   })
 })
