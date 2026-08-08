@@ -970,7 +970,7 @@ export default function App() {
         localPlayerId={phase10LocalPlayerId}
         localName={name}
         opponentName={phase10OpponentName}
-        opponentColor="var(--violet)"
+        opponentColor="#1aa06d"
         opponentHandCount={opponentHandCount}
         connection={phase10Connection}
         notice={error}

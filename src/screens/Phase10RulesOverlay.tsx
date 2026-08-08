@@ -1,3 +1,5 @@
+import { PHASES } from '../card-games/phase10/phases'
+
 export function Phase10RulesOverlay({ onClose }: { onClose: () => void }) {
   const bullets = [
     'Deck: 108 cards — 24 each of red, blue, green and yellow numbered 1–12, 4 Skip cards, 8 Wild cards.',
@@ -31,6 +33,21 @@ export function Phase10RulesOverlay({ onClose }: { onClose: () => void }) {
             </li>
           ))}
         </ul>
+
+        <h3 style={{ margin: '20px 0 10px', fontSize: 17, fontWeight: 700, color: 'var(--violet)' }}>
+          The 10 phases
+        </h3>
+        <ol style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {PHASES.map((p) => (
+            <li
+              key={p.phase}
+              style={{ display: 'flex', gap: 10, fontSize: 15, lineHeight: 1.4, color: 'var(--body-text)' }}
+            >
+              <span style={{ fontWeight: 700, color: 'var(--violet)', width: 22 }}>{p.phase}.</span>
+              <span>{p.label}</span>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   )

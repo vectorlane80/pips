@@ -1007,3 +1007,84 @@ Crazy Eights, Hearts, Spades — Phase 10 is now built).
 **Continue?** No — charter's definition of done is met. Wrapping up.
 No push to GitHub, no merge to `main` — both need explicit user
 confirmation in a later message, per standing project policy.
+
+## Post-ship hotfix — 2026-08-08 (user-reported, Oscar-reviewed)
+
+The charter was declared complete and merged/pushed, but the user immediately
+found three real bugs in production that the prior session's shallow
+browser smoke test (draw → discard → bot-turn only — never laid a phase,
+never opened Rules, never looked closely at seat colors) completely missed.
+Per the user's explicit request, a Fable-model agent ran a full adversarial
+("Oscar") review of the entire game against the design doc and real
+playability, with instructions to actually play the game live, not just
+read code. It found and root-caused all three reported bugs, plus two more
+of its own (one of them a genuine livelock, arguably the most severe defect
+shipped this charter).
+
+**Fixed, all independently re-verified (tsc/test/build + live browser
+replay of each fix):**
+
+1. **Both players rendered the same color everywhere** (ladder dots, laid-
+   group captions/borders, opponent name, turn chip). Root cause: `App.tsx`
+   passed `opponentColor="var(--violet)"` while `Phase10Table.tsx`'s
+   `MY_COLOR` was also hardcoded to `var(--violet)` — copy-pasted from
+   Rummy's wiring without noticing Rummy's own local-player color isn't
+   violet. Fixed by giving the opponent a distinct color (`#1aa06d`, one of
+   the game's own card hues) in `App.tsx`, and fixing `Phase10Results.tsx`'s
+   separate, ALSO-inconsistent color pair (it painted "you" green while the
+   table paints you violet) to match the table's convention exactly.
+2. **The Rules dialog never showed the 10 phases**, despite the design doc
+   explicitly requiring them "in the rules dialog and ladder" (both, not
+   just the ladder). `Phase10RulesOverlay.tsx` had nine prose bullets and
+   zero phase labels. Fixed by rendering the real `PHASES` list.
+3. **"Lay phase" appeared broken for a player with valid cards.** Root
+   cause, confirmed live: `classifyPhaseHand` correctly requires an EXACT
+   card count (by design — extra matching cards go on later via a hit, once
+   the phase is down, matching real Phase 10 rules), but the UI's hint for
+   a too-large selection said "Those don't complete your phase" — reading
+   as "your cards are wrong" when the actual issue was "you selected the
+   wrong number of cards," a natural mistake for a player holding, say,
+   four of a kind. Fixed by making the hint state the exact count needed
+   vs. selected ("Select exactly 6 cards (you have 5)") before ever
+   reaching the classifier. The gating logic itself (`layPhaseEnabled` →
+   `classifyPhaseHand`) was verified correct for exact-count selections,
+   both by the review (a live successful lay) and by this session (live:
+   the corrected hint text rendering correctly at 5-of-6 selected).
+4. **A genuine bot livelock** the review found unprompted: once the stock
+   emptied, the bot's "livelock-prevention fallback" in `bot.ts` took the
+   discard pile's top card on EVERY turn regardless of pile size — but
+   `DRAW_FROM_STOCK` on an empty stock only fails when the pile has exactly
+   1 card (otherwise it legally recycles). With 2+ pile cards, two bots (or
+   a bot playing itself out a full match) could trade the same top card
+   forever and the pile would never recycle — reproduced by the review in
+   3 of 20 simulated bot-vs-bot matches (uncapped step counts). Fixed by
+   narrowing the fallback to the one state where it's actually forced
+   (`pile.length === 1`), preferring `DRAW_FROM_STOCK` (which recycles)
+   otherwise. One existing test had encoded the same wrong assumption in
+   its own comment ("DRAW_FROM_STOCK would be rejected by the validator" —
+   false when the pile has 2+ cards) and was corrected rather than just
+   made to pass; a new test covers the genuinely-forced 1-card case the
+   original fallback was actually meant for.
+5. **Results screen could highlight a "winner" ranked #2.** `Phase10Results`
+   sorted rows purely by score, but the match winner is whoever completed
+   Phase 10 — score only breaks a tie between simultaneous completers in
+   the SAME hand, it's not a general ranking metric. A winner with a
+   higher cumulative score than the loser (a real, easy-to-reach case)
+   would render self-contradictorily: highlighted as the winner while
+   listed in row 2. Fixed by always ranking the actual `matchWinnerId`
+   first.
+
+**Deferred, not fixed this pass** (both rated minor/cosmetic by the
+review, logged so they don't get silently lost): no UI acknowledgment of
+what the opponent drew/discarded (the design's three-part status-line
+pattern only fires for the local player's own draws) or that a Skip
+resolved; "You drew" vs. the design's "You took" wording on a discard
+pickup.
+
+**Process lesson, stated plainly:** "verified live in browser, no console
+errors" is not a sufficient claim unless the verification actually
+exercised the feature being claimed — a smoke test that never opens the
+Rules dialog cannot claim the Rules dialog works, and a smoke test that
+never selects a valid phase can't claim laying a phase works. Every future
+verification pass on this game must exercise lay, hit, and skip, not just
+draw/discard, before claiming success.

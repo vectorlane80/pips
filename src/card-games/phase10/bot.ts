@@ -145,13 +145,14 @@ export const phase10BotStrategy: BotStrategy<
         return { type: 'DRAW_FROM_DISCARD' }
       }
     }
-    // Livelock-prevention fallback: stock empty and a non-Skip top on the pile —
-    // take it regardless of whether it completes anything. A plain top-card take
-    // is always legal when the pile is non-empty and its top isn't a Skip, and
-    // without this the bot could propose DRAW_FROM_STOCK forever once stock is
-    // empty and the top card isn't immediately useful. If the top IS a Skip,
-    // fall through to DRAW_FROM_STOCK (never draw a Skip from discard).
-    if (publicState.stockCount === 0 && pile.length >= 1 && top!.meta?.kind !== 'skip') {
+    // Livelock-prevention fallback: stock empty, exactly ONE non-Skip card on the
+    // pile, and it doesn't complete anything — DRAW_FROM_STOCK would be REJECTED
+    // in exactly this state (rules.ts only recycles when the pile has >= 2 cards),
+    // so take the lone discard card instead; it's always legal. When the pile has
+    // 2+ cards, DRAW_FROM_STOCK is itself legal and triggers a recycle-and-draw —
+    // prefer it, since always taking the discard top here (the original bug) means
+    // two bots can loop forever trading the same card and the pile never recycles.
+    if (publicState.stockCount === 0 && pile.length === 1 && top!.meta?.kind !== 'skip') {
       return { type: 'DRAW_FROM_DISCARD' }
     }
     return { type: 'DRAW_FROM_STOCK' }

@@ -15,11 +15,12 @@ export interface Phase10ResultsProps {
 }
 
 // ---- Row colour per player ----
-// The component doesn't receive opponentColor, so we use a reasonable fixed palette:
-// local player → var(--green-text), opponent → var(--violet) (the host-shelf colour).
+// Must match Phase10Table's convention exactly (violet = you, everywhere in this
+// game) — the component doesn't receive opponentColor, so the opponent value here
+// is the same fixed value App.tsx passes as Phase10Table's opponentColor prop.
 
-const LOCAL_COLOR = 'var(--green-text)'
-const OPPONENT_COLOR = 'var(--violet)'
+const LOCAL_COLOR = 'var(--violet)'
+const OPPONENT_COLOR = '#1aa06d'
 
 function playerColor(playerId: string, localPlayerId: string): string {
   return playerId === localPlayerId ? LOCAL_COLOR : OPPONENT_COLOR
@@ -49,8 +50,12 @@ export function Phase10Results({
   // The 1-based phase number each player reached — the winner's reads 10.
   const phaseOf = (playerId: string): number => PHASES[publicState.phaseIdx[playerId] ?? 0].phase
 
-  // Build ranked rows (2 players), sorted ASCENDING by score — lower is better in this game,
-  // the opposite of Rummy's higher-wins convention.
+  // Build ranked rows (2 players). The match winner is whoever completed Phase 10 —
+  // score only breaks a tie between simultaneous completers in the SAME hand
+  // (rules.ts's finishRoundByGoingOut), it is NOT a general ranking metric across the
+  // whole match. So the winner always ranks first, never sorted purely by score —
+  // a lower-phase player can finish with a lower cumulative score than the actual
+  // winner without having won anything.
   interface RankedRow {
     id: string
     name: string
@@ -60,7 +65,11 @@ export function Phase10Results({
   const rows: RankedRow[] = [
     { id: localPlayerId, name: localName, score: publicState.scores[localPlayerId] ?? 0 },
     { id: opponentId, name: opponentName, score: publicState.scores[opponentId] ?? 0 },
-  ].sort((a, b) => a.score - b.score)
+  ].sort((a, b) => {
+    if (a.id === publicState.matchWinnerId) return -1
+    if (b.id === publicState.matchWinnerId) return 1
+    return a.score - b.score
+  })
 
   return (
     <div style={{

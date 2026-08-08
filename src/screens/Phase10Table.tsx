@@ -126,9 +126,16 @@ function layPhaseHint(
   if (!isMyTurn) return 'Not your turn'
   if (phase !== 'discard') return 'Draw a card first'
   if (hasLaid) return 'Phase already laid this hand'
-  if (selectedIds.length === 0) return 'Select cards that form your phase'
+  const total = requirement.parts.reduce((sum, p) => sum + p.count, 0)
+  if (selectedIds.length === 0) return `Select ${total} cards that form your phase`
+  // Laying a phase takes EXACTLY the required count — no more, no less. Extra matching
+  // cards (e.g. a 4th card of a kind you're using for a set of 3) go on later via a hit,
+  // once your phase is down, not into this selection. Tell the player the exact count
+  // rather than a generic "doesn't complete" — that message reads as "your cards are
+  // wrong" when the real issue is just "you selected the wrong number of cards."
+  if (selectedIds.length !== total) return `Select exactly ${total} cards (you have ${selectedIds.length})`
   const cards = selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined)
-  if (cards.length !== selectedIds.length) return 'Select cards that form your phase'
+  if (cards.length !== selectedIds.length) return `Select exactly ${total} cards (you have ${selectedIds.length})`
   if (!classifyPhaseHand(cards, requirement).valid) return "Those don't complete your phase"
   return ''
 }

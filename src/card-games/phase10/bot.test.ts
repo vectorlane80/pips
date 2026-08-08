@@ -185,15 +185,43 @@ describe('phase10BotStrategy', () => {
     expect(result.outcome.ok).toBe(true)
   })
 
-  it('draw phase: stock empty + non-Skip top that completes nothing → livelock fallback takes the top anyway', () => {
-    // p1 holds red 2-11 (every rank distinct — no set of 3 possible for Phase 1),
-    // so the green 11 on top completes nothing. Stock is empty: the fallback must
-    // still take the top card (DRAW_FROM_STOCK would be rejected by the validator).
+  it('draw phase: stock empty + pile has 2+ cards → prefers DRAW_FROM_STOCK (triggers recycle), never loops on the discard top', () => {
+    // p1 holds red 2-11 (every rank distinct — no set of 3 possible for Phase 1), so the
+    // green 11 on top completes nothing. Stock is empty, but the pile has 2 cards, so
+    // DRAW_FROM_STOCK is itself legal (rules.ts recycles the pile when it has >= 2 cards)
+    // — the bot must prefer it over always taking the discard top, or two bots would
+    // trade the same top card forever and the pile would never recycle (the actual bug
+    // this test now guards against, found by review).
     const p1Hand = ['p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18', 'p10-20']
     const game = buildSession({
       p1HandCardIds: p1Hand,
       p2HandCardIds: remainingDeckIds([...p1Hand, 'p10-94', 'p10-68']),
       discardCardIds: ['p10-94', 'p10-68'],   // bottom: yellow 12, top: green 11
+      stockCardIds: [],
+      phase: 'draw',
+      currentPlayerIndex: 0,
+    })
+
+    const action = strategyAction(game, 'p1')
+    expect(action).toEqual({ type: 'DRAW_FROM_STOCK' })
+
+    const result = runPhase10BotTurn(game, 'p1', phase10BotStrategy)
+    expect(result.outcome.ok).toBe(true)
+    // Stock recycled from the discard pile (keeping the top card, p10-68, in place) and
+    // p1 drew the freshly-recycled top — p10-94 (the only other card that was available).
+    expect(result.game.session.privateStates['p1'].hand.cards.map((c) => c.id)).toContain('p10-94')
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('draw phase: stock empty + pile has EXACTLY 1 non-Skip card that completes nothing → takes it anyway (the real livelock-prevention case)', () => {
+    // The genuinely forced case: DRAW_FROM_STOCK would be REJECTED here (rules.ts only
+    // recycles when the pile has >= 2 cards), so the lone discard card is the only legal
+    // move — the bot must take it even though it completes nothing.
+    const p1Hand = ['p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18', 'p10-20']
+    const game = buildSession({
+      p1HandCardIds: p1Hand,
+      p2HandCardIds: remainingDeckIds([...p1Hand, 'p10-68']),
+      discardCardIds: ['p10-68'],   // exactly one card: green 11 — completes nothing
       stockCardIds: [],
       phase: 'draw',
       currentPlayerIndex: 0,
