@@ -1289,3 +1289,53 @@ cosmetic-only, replaying data the client already has, never gating on or
 needing real engine internals. Pre-approved, unattended, isolated
 worktree (`.claude/worktrees/phase10-deal-intro`, branch
 `worktree-phase10-deal-intro`). Delegation per `/model-routing`.
+
+## Deal-intro cycle 1 — 2026-08-08
+
+- **Shipped:** M1 — `src/components/DealIntro.tsx` + `DealIntro.test.ts`.
+  A shared, game-agnostic component implementing the design's exact
+  choreography: empty (60ms) → shuffle (3 riffle ticks, 170ms apart,
+  `shuffle.mp3` played once via the existing `useSound` hook) → capped
+  alternating deal (`computeDealFlights`, opponent-first, max 10 total
+  flights, 130ms cadence, a single reusable flying card-back element
+  positioned via `getBoundingClientRect` deltas and a
+  `0.26s cubic-bezier(.25,.8,.35,1)` transition) → settled (`onComplete`).
+  Card-back art is injected via `renderCardBack` — the component never
+  imports Rummy's or Phase 10's real card components, staying fully
+  game-agnostic.
+- **Delegation:** `deepseek-v4-flash` per the charter (Codex re-probed
+  live, still exhausted — same quota window as every charter today).
+- **Real defects found by review and fixed** (both in `DealIntro.tsx`):
+  1. `settle()`/`onComplete` could fire while the browser tab was
+     backgrounded, before the animation had visually finished —
+     `requestAnimationFrame` is fully suspended when backgrounded, but
+     the `setTimeout` chain driving flight cadence isn't, so the two
+     could race. Fixed by moving the "schedule settle" decision from
+     synchronous code into the last flight's own `requestAnimationFrame`
+     callback — `settle` can now only ever be scheduled once that frame
+     has genuinely run, which cannot happen while backgrounded.
+  2. The rendered pile counts read a prop-reactive `flights` value
+     (recomputed via `useMemo` whenever `yourHandSize`/`opponentHandSize`
+     changed) while the actual animation sequencing ran off a one-time
+     ref snapshot — the review flagged this as a dormant risk assuming
+     callers never change these props mid-animation, but tracing through
+     the actual call sites shows it's live: if the house bot is the
+     current player when a fresh round deals, it can draw/discard while
+     the ~1.9s intro is still playing, changing `opponentHandCount`
+     mid-sequence and desyncing the rendered counts from what's actually
+     animating. Fixed by capturing `flights` once via a `useState`
+     initializer (runs once at mount, never recomputed) instead of a
+     memo — the component's own documented "these props don't change
+     mid-animation" contract, now enforced rather than assumed.
+- **Verification:** independently re-ran `tsc -b --noEmit`/`npm test`
+  (469 passed)/`npm run build` after the initial build and again after
+  the fix; read the full `DealIntro.tsx` implementation line by line
+  against the spec both times.
+- **Review:** `claude --model sonnet --effort medium` traced timer/rAF
+  cleanup (clean — every scheduled id funnels through one cleanup
+  closure), `onComplete` fire-count (exactly once per non-backgrounded
+  completion), the ref-during-render pattern (safe, matches React's own
+  `useEffectEvent` shim pattern), and `computeDealFlights`'s termination
+  (always makes forward progress, correctly bounded) — all confirmed
+  clean. The two real findings above were the only ones that survived
+  scrutiny.

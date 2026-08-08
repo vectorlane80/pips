@@ -3,12 +3,14 @@
 Charter: Deal-intro animation (Rummy + Phase 10) — see `CHARTER.md`.
 
 ## Next up
-- [ ] M1 — shared `DealIntro` component + `computeDealFlights` helper
 - [ ] M2 — wire into RummyTable.tsx
 - [ ] M3 — wire into Phase10Table.tsx
 
 ## Done (this charter)
-(none yet)
+- [cycle 1] M1 — `DealIntro` component + `computeDealFlights` helper.
+  Review found two real bugs (a backgrounded-tab timer/rAF race, and a
+  live prop-desync when the bot acts during the intro), both fixed and
+  re-verified. 469 tests total.
 
 ## Cut / deferred
 - More than 2 seats — neither current game needs it.
