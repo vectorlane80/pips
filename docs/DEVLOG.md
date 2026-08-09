@@ -1608,3 +1608,36 @@ shipping each verified charter promptly.
   audio requested from user at wrap-up.
 - **Continue?** Definition of done met minus the user-facing asks
   (commit authorization, real audio). Wrap-up.
+
+## 2026-08-09 — Battleship rule variants (specs 15/15a/15b/15c)
+
+- **Charter:** three host-selected fire modes — standard / "Make it, take
+  it" (streak) / free-for-all. deepseek:flash implemented all four specs
+  (~$0.17 total); sonnet reviewed; lead specced/verified.
+- **Design:** variant in publicState; validator owns turn legality
+  (free skips the turn check; streak = hit keeps turn via extraTurn;
+  every accepted shot bumps turnNumber in all modes → sound sigs and
+  staleness keys stay unique). Bot strategy untouched — only the App
+  loop gate changed.
+- **Course corrections:** (1) implementer made `variant` optional against
+  spec — sent back, now required (15a); (2) live testing caught free-mode
+  bot starvation: human shots reset the bot's 900ms wait via the
+  turnNumber staleness key — fixed with a stage-only key in free mode
+  (15c), re-verified live (bot held ~1s cadence through a burst of rapid
+  human shots).
+- **Live verification:** streak — "Direct hit! Fire again." observed, an
+  immediate follow-up shot accepted, "You sank their Destroyer! Fire
+  again." on a sink, miss passed the turn. Free — bot fired before the
+  human's first shot, 8 rapid human clicks all accepted turnlessly, and
+  one full FFA match ran to completion (bot 5–0 while the lead was busy
+  writing a spec). Variant picker renders and selects in the room;
+  rematch carries the variant.
+- **Concurrent-work note:** the working tree also contains a TTT
+  hand-drawn-marks change (TttTable.tsx, useSound.ts drawn-x/drawn-circle,
+  mark-place.mp3 removed) from a parallel session — NOT this charter's
+  work; excluded from its commit scope and left untouched.
+- **Reviews:** module (15) folded into the final diff review — approve, no
+  blockers; confirmed shot-sig uniqueness, free-mode authority guards,
+  write-once winnerId, streak decisions from the in-call shot (never
+  stale lastShot).
+- **State:** 523 tests / tsc / build green. Wrap-up: commit offer.

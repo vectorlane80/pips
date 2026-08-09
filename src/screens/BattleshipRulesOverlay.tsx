@@ -5,6 +5,7 @@ export function BattleshipRulesOverlay({ onClose }: { onClose: () => void }) {
     'A ship goes down when every one of its squares is hit — sinking it scores you a point and reveals its shape.',
     'Your fleet panel shows your true damage; the enemy\u2019s only lights up as you sink their ships.',
     'Sink all five enemy ships to win the match.',
+    'Three ways to play \u2014 Standard (one shot each), Make it take it (keep firing while you hit), Free-for-all (no turns; first to sink all five wins).',
   ]
 
   return (

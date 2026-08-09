@@ -136,6 +136,7 @@ export function BattleshipTable({
   void localName // preserved in props for M4b wiring; unused in this presentational milestone
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
   const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  const variant = publicState.variant
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const placing = publicState.stage === 'placing'
   const drafting = placing && !publicState.placedReady[localPlayerId]
@@ -244,7 +245,9 @@ export function BattleshipTable({
     statusText = `Waiting for ${opponentName} to place their fleet…`
     statusIsBanner = true
   } else if (!lastShot) {
-    statusText = isMyTurn ? 'Your move — fire at the enemy waters.' : `${opponentName} fires first.`
+    statusText = variant === 'free'
+      ? 'Fire at will!'
+      : isMyTurn ? 'Your move — fire at the enemy waters.' : `${opponentName} fires first.`
   } else if (lastShot.result === 'sunk') {
     const shipName = SHIPS.find((s) => s.id === lastShot.shipId)?.name ?? ''
     statusText = publicState.stage === 'over'
@@ -252,18 +255,30 @@ export function BattleshipTable({
         ? 'You sank the whole enemy fleet!'
         : `${opponentName} sank your whole fleet!`
       : lastShot.by === localPlayerId
-        ? `You sank their ${shipName}!`
+        ? variant === 'streak'
+          ? `You sank their ${shipName}! Fire again.`
+          : `You sank their ${shipName}!`
         : `${opponentName} sank your ${shipName}!`
   } else if (lastShot.result === 'hit') {
-    statusText = lastShot.by === localPlayerId ? 'Direct hit!' : `${opponentName} hit your fleet.`
+    statusText = lastShot.by === localPlayerId
+      ? variant === 'streak'
+        ? 'Direct hit! Fire again.'
+        : 'Direct hit!'
+      : `${opponentName} hit your fleet.`
   } else {
     statusText = lastShot.by === localPlayerId ? 'Miss.' : `${opponentName} missed.`
   }
 
-  const chipTitle = placing ? 'Placing fleets' : isMyTurn ? 'Your move' : `${opponentName}'s move`
-  const chipColor = placing ? BRAND : isMyTurn ? 'var(--green-text)' : opponentColor
+  const chipTitle = placing
+    ? 'Placing fleets'
+    : variant === 'free'
+      ? 'Free-for-all'
+      : isMyTurn ? 'Your move' : `${opponentName}'s move`
+  const chipColor = placing || variant === 'free' ? BRAND : isMyTurn ? 'var(--green-text)' : opponentColor
   const hint = publicState.stage === 'battle'
-    ? isMyTurn ? 'Click enemy waters to fire.' : `${opponentName} is aiming…`
+    ? variant === 'free'
+      ? 'No turns — sink all five first.'
+      : isMyTurn ? 'Click enemy waters to fire.' : `${opponentName} is aiming…`
     : ''
 
   // ---- Render ----
@@ -398,7 +413,7 @@ export function BattleshipTable({
                     const mark = enemyHits[i]
                     const view = cellView(mark, sunkCells.has(i))
                     const fired = mark !== null
-                    const clickable = publicState.stage === 'battle' && isMyTurn && !fired
+                    const clickable = publicState.stage === 'battle' && (variant === 'free' || isMyTurn) && !fired
                     return (
                       <button
                         key={i}

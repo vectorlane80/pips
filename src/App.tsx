@@ -37,7 +37,7 @@ import { Phase10Results } from './screens/Phase10Results'
 import { Phase10Room } from './screens/Phase10Room'
 
 // ---- Battleship (separate parallel session, per CHARTER.md resolution #7) ----
-import { createBattleshipGame, type BattleshipSession, type BattleshipPublicState, type BattleshipPrivateState, type BattleshipAction, type ShipId } from './board-games/battleship/state'
+import { createBattleshipGame, type BattleshipSession, type BattleshipPublicState, type BattleshipPrivateState, type BattleshipAction, type BattleshipVariant, type ShipId } from './board-games/battleship/state'
 import { applyBattleshipAction, runBattleshipBotTurn } from './board-games/battleship/rules'
 import { makeBattleshipBotStrategy } from './board-games/battleship/bot'
 import { BattleshipTable } from './screens/BattleshipTable'
@@ -93,6 +93,7 @@ export default function App() {
   const [battleshipView, setBattleshipView] = useState<BattleshipView | null>(null)
   const [battleshipConnection, setBattleshipConnection] = useState<'connected' | 'disconnected'>('connected')
   const [battleshipWaiting, setBattleshipWaiting] = useState(false)
+  const [battleshipVariant, setBattleshipVariant] = useState<BattleshipVariant>('standard')
 
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
@@ -119,6 +120,7 @@ export default function App() {
   const battleshipLocalPlayerIdRef = useRef<string | null>(null)
   const battleshipOpponentIdRef = useRef<string | null>(null)
   const battleshipOpponentNameRef = useRef('')
+  const battleshipVariantRef = useRef<BattleshipVariant>('standard')
 
   useEffect(() => {
     roomRef.current = room
@@ -268,6 +270,8 @@ export default function App() {
     setBattleshipView(null)
     setBattleshipConnection('connected')
     setBattleshipWaiting(false)
+    setBattleshipVariant('standard')
+    battleshipVariantRef.current = 'standard'
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -629,7 +633,7 @@ export default function App() {
 
   function battleshipActorKey(bs: BattleshipSession): string {
     const ps = bs.session.publicState
-    return `${ps.stage}:${ps.turn.turnNumber}`
+    return ps.variant === 'free' ? ps.stage : `${ps.stage}:${ps.turn.turnNumber}`
   }
 
   function battleshipStale(key: string) {
@@ -663,7 +667,7 @@ export default function App() {
           return
         }
         const seed = Math.floor(Math.random() * 2147483647)
-        battleshipSessionRef.current = createBattleshipGame([hostId, guestId], seed)
+        battleshipSessionRef.current = createBattleshipGame([hostId, guestId], seed, battleshipVariantRef.current)
         setBattleshipOpponentId(guestId)
         battleshipOpponentIdRef.current = guestId
         setBattleshipOpponentName(guestName)
@@ -694,7 +698,7 @@ export default function App() {
     const botId = 'bot'
     const botName = randomBotName([name.trim()])
     const seed = Math.floor(Math.random() * 2147483647)
-    const bs = createBattleshipGame([battleshipLocalPlayerId, botId], seed)
+    const bs = createBattleshipGame([battleshipLocalPlayerId, botId], seed, battleshipVariantRef.current)
     const placed = runBattleshipBotTurn(bs, 'bot', makeBattleshipBotStrategy(bs.rng))
     battleshipSessionRef.current = placed.bs
     setBattleshipOpponentId(botId)
@@ -711,7 +715,8 @@ export default function App() {
       if (battleshipStale(key)) return
       const session = battleshipSessionRef.current!
       const ps = session.session.publicState
-      if (ps.stage !== 'battle' || currentPlayer(ps.turn) !== botId) return
+      if (ps.stage !== 'battle') return
+      if (ps.variant !== 'free' && currentPlayer(ps.turn) !== botId) return
       const result = runBattleshipBotTurn(session, botId, makeBattleshipBotStrategy(session.rng))
       if (!result.outcome.ok) return
       battleshipSessionRef.current = result.bs
@@ -727,7 +732,7 @@ export default function App() {
     const ps = session.session.publicState
     if (ps.stage !== 'battle') return
     if (battleshipOpponentId !== 'bot') return
-    if (currentPlayer(ps.turn) !== 'bot') return
+    if (ps.variant !== 'free' && currentPlayer(ps.turn) !== 'bot') return
     battleshipBotBusyRef.current = true
     const key = battleshipActorKey(session)
     try {
@@ -784,9 +789,10 @@ export default function App() {
   function battleshipRematch() {
     if (battleshipRole !== 'host' || !battleshipSessionRef.current || !battleshipLocalPlayerId) return
     const prevRevision = battleshipSessionRef.current.session.revision
+    const prevVariant = battleshipSessionRef.current.session.publicState.variant
     const playerIds = battleshipSessionRef.current.session.publicState.turn.playerOrder as [string, string]
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createBattleshipGame(playerIds, seed)
+    const next = createBattleshipGame(playerIds, seed, prevVariant)
     next.session = { ...next.session, revision: prevRevision + 1 }
     battleshipSessionRef.current = next
     if (battleshipOpponentId === 'bot') {
@@ -1259,6 +1265,8 @@ export default function App() {
         code={battleshipCode}
         localName={name}
         notice={error}
+        variant={battleshipVariant}
+        onSetVariant={(v) => { setBattleshipVariant(v); battleshipVariantRef.current = v }}
         onAddHouseBot={addBattleshipHouseBot}
         onLeave={resetToEntry}
       />

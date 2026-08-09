@@ -1,7 +1,7 @@
 import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
-import { advanceTurn, currentPlayer } from '../../engine/turn-engine.ts'
+import { advanceTurn, currentPlayer, extraTurn } from '../../engine/turn-engine.ts'
 import type {
   BattleshipAction,
   BattleshipPrivateState,
@@ -38,7 +38,9 @@ export const validateBattleshipAction: ActionValidator<
 
   if (action.type === 'FIRE') {
     if (publicState.stage !== 'battle') return { ok: false, reason: 'not in battle stage' }
-    if (currentPlayer(publicState.turn) !== playerId) return { ok: false, reason: 'not your turn' }
+    if (publicState.variant !== 'free' && currentPlayer(publicState.turn) !== playerId) {
+      return { ok: false, reason: 'not your turn' }
+    }
     if (!Number.isInteger(action.cell) || action.cell < 0 || action.cell >= BOARD_CELLS) {
       return { ok: false, reason: 'invalid cell' }
     }
@@ -83,11 +85,19 @@ export const validateBattleshipAction: ActionValidator<
         privateStates,
       }
     }
+    let turn = publicState.turn
+    if (publicState.variant === 'streak') {
+      turn = lastShot.result === 'miss' ? advanceTurn(publicState.turn, 'fire') : extraTurn(publicState.turn, 'fire')
+    } else if (publicState.variant === 'free') {
+      turn = extraTurn(publicState.turn, 'fire')
+    } else {
+      turn = advanceTurn(publicState.turn, 'fire')
+    }
     return {
       ok: true,
       publicState: {
         ...publicState,
-        turn: advanceTurn(publicState.turn, 'fire'),
+        turn,
         hits,
         sunk,
         scores,

@@ -7,6 +7,7 @@ export type ShipId = 'carrier' | 'battleship' | 'cruiser' | 'submarine' | 'destr
 export type Orientation = 'h' | 'v'
 export type CellMark = 'hit' | 'miss'
 export type BattleshipStage = 'placing' | 'battle' | 'over'
+export type BattleshipVariant = 'standard' | 'streak' | 'free'
 
 export interface ShipSpec { id: ShipId; name: string; len: number }
 export const SHIPS: ShipSpec[] = [
@@ -25,6 +26,7 @@ export interface LastShot { by: string; cell: number; result: 'hit' | 'miss' | '
 
 export interface BattleshipPublicState {
   stage: BattleshipStage
+  variant: BattleshipVariant
   turn: TurnState<'fire'>
   // hits[playerId] = marks landed ON that player's own board (opponent's shots at them)
   hits: Record<string, (CellMark | null)[]>
@@ -57,10 +59,15 @@ function emptyMarks(): (CellMark | null)[] {
   return Array.from({ length: BOARD_CELLS }, () => null)
 }
 
-export function createBattleshipGame(playerIds: [string, string], seed: number): BattleshipSession {
+export function createBattleshipGame(
+  playerIds: [string, string],
+  seed: number,
+  variant: BattleshipVariant = 'standard',
+): BattleshipSession {
   const rng = createRng(seed)
   const publicState: BattleshipPublicState = {
     stage: 'placing',
+    variant,
     turn: createTurnState<'fire'>(playerIds, 'fire'),
     hits: { [playerIds[0]]: emptyMarks(), [playerIds[1]]: emptyMarks() },
     placedReady: { [playerIds[0]]: false, [playerIds[1]]: false },

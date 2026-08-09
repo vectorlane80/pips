@@ -55,6 +55,7 @@ function buildBattle(config: {
   const turn = createTurnState<'fire'>(playerOrder, 'fire')
   const publicState: BattleshipPublicState = {
     stage: 'battle',
+    variant: 'standard',
     turn,
     hits: config.hits ?? { p1: emptyMarks(), p2: emptyMarks() },
     placedReady: { p1: true, p2: true },

@@ -6,6 +6,7 @@ import {
   type BattleshipPrivateState,
   type BattleshipPublicState,
   type BattleshipSession,
+  type BattleshipVariant,
   type CellMark,
   type ShipId,
   type SunkReveal,
@@ -64,6 +65,7 @@ function buildBattle(config: {
   sunk?: Record<string, SunkReveal[]>
   scores?: Record<string, number>
   currentPlayerIndex?: number
+  variant?: BattleshipVariant
 }): BattleshipSession {
   const playerOrder: [string, string] = ['p1', 'p2']
   const turn = createTurnState<'fire'>(playerOrder, 'fire')
@@ -73,6 +75,7 @@ function buildBattle(config: {
   }
   const publicState: BattleshipPublicState = {
     stage: 'battle',
+    variant: config.variant ?? 'standard',
     turn,
     hits: config.hits ?? { p1: emptyMarks(), p2: emptyMarks() },
     placedReady: { p1: true, p2: true },
@@ -544,5 +547,272 @@ describe('revision flow', () => {
     const rej4 = applyBattleshipAction(r5.bs, 'p2', { type: 'FIRE', cell: 100 })  // out of range
     expect(rej4.outcome.ok).toBe(false)
     expect(rej4.bs.session.revision).toBe(5)
+  })
+})
+
+describe('variants', () => {
+  it('stores the variant in public state; defaults to standard', () => {
+    const streak = createBattleshipGame(['p1', 'p2'], 1, 'streak')
+    expect(streak.session.publicState.variant).toBe('streak')
+    const standard = createBattleshipGame(['p1', 'p2'], 1)
+    expect(standard.session.publicState.variant).toBe('standard')
+  })
+
+  it('streak: a hit keeps the turn, a miss passes it', () => {
+    let bs = createBattleshipGame(['p1', 'p2'], 1, 'streak')
+    const r1 = applyBattleshipAction(bs, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(r1.outcome.ok).toBe(true)
+    bs = r1.bs
+    const r2 = applyBattleshipAction(bs, 'p2', { type: 'PLACE_FLEET', board: fleetB() })
+    expect(r2.outcome.ok).toBe(true)
+    bs = r2.bs
+    expect(bs.session.publicState.stage).toBe('battle')
+
+    // hit → the streak holder keeps the turn
+    const h1 = applyBattleshipAction(bs, 'p1', { type: 'FIRE', cell: 5 })  // p2's carrier
+    expect(h1.outcome.ok).toBe(true)
+    expect(currentPlayer(h1.bs.session.publicState.turn)).toBe('p1')
+    expect(h1.bs.session.publicState.turn.turnNumber).toBe(2)
+
+    // opponent's out-of-turn fire while the streak holder is up → rejected
+    const oot = applyBattleshipAction(h1.bs, 'p2', { type: 'FIRE', cell: 10 })
+    expect(oot.outcome.ok).toBe(false)
+    expect(oot.outcome.reason).toContain('turn')
+
+    // the same player fires again immediately and is accepted
+    const h2 = applyBattleshipAction(h1.bs, 'p1', { type: 'FIRE', cell: 6 })
+    expect(h2.outcome.ok).toBe(true)
+    expect(currentPlayer(h2.bs.session.publicState.turn)).toBe('p1')
+    expect(h2.bs.session.publicState.turn.turnNumber).toBe(3)
+
+    // miss → turn passes to the opponent
+    const m1 = applyBattleshipAction(h2.bs, 'p1', { type: 'FIRE', cell: 0 })  // empty on p2's board
+    expect(m1.outcome.ok).toBe(true)
+    expect(m1.bs.session.publicState.lastShot).toEqual({ by: 'p1', cell: 0, result: 'miss', shipId: null })
+    expect(currentPlayer(m1.bs.session.publicState.turn)).toBe('p2')
+    expect(m1.bs.session.publicState.turn.turnNumber).toBe(4)
+  })
+
+  it('streak: sinking a ship also keeps the turn', () => {
+    let bs = createBattleshipGame(['p1', 'p2'], 1, 'streak')
+    const r1 = applyBattleshipAction(bs, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(r1.outcome.ok).toBe(true)
+    bs = r1.bs
+    const r2 = applyBattleshipAction(bs, 'p2', { type: 'PLACE_FLEET', board: fleetB() })
+    expect(r2.outcome.ok).toBe(true)
+    bs = r2.bs
+
+    const h1 = applyBattleshipAction(bs, 'p1', { type: 'FIRE', cell: 82 })  // destroyer's first cell
+    expect(h1.outcome.ok).toBe(true)
+    expect(currentPlayer(h1.bs.session.publicState.turn)).toBe('p1')
+
+    const s1 = applyBattleshipAction(h1.bs, 'p1', { type: 'FIRE', cell: 83 })  // second cell → sunk
+    expect(s1.outcome.ok).toBe(true)
+    const pub = s1.bs.session.publicState
+    expect(pub.lastShot).toEqual({ by: 'p1', cell: 83, result: 'sunk', shipId: 'destroyer' })
+    expect(pub.scores['p1']).toBe(1)
+    expect(currentPlayer(pub.turn)).toBe('p1')  // sunk keeps the turn
+
+    // the same player may fire again right after a sunk
+    const h2 = applyBattleshipAction(s1.bs, 'p1', { type: 'FIRE', cell: 5 })
+    expect(h2.outcome.ok).toBe(true)
+    expect(currentPlayer(h2.bs.session.publicState.turn)).toBe('p1')
+  })
+
+  it('free: any player may fire at any time; turnNumber counts shots', () => {
+    let bs = createBattleshipGame(['p1', 'p2'], 1, 'free')
+    const r1 = applyBattleshipAction(bs, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(r1.outcome.ok).toBe(true)
+    bs = r1.bs
+    const r2 = applyBattleshipAction(bs, 'p2', { type: 'PLACE_FLEET', board: fleetB() })
+    expect(r2.outcome.ok).toBe(true)
+    bs = r2.bs
+    expect(bs.session.publicState.stage).toBe('battle')
+
+    const a1 = applyBattleshipAction(bs, 'p1', { type: 'FIRE', cell: 0 })    // miss on p2's board
+    expect(a1.outcome.ok).toBe(true)
+    const a2 = applyBattleshipAction(a1.bs, 'p1', { type: 'FIRE', cell: 10 })  // A again immediately
+    expect(a2.outcome.ok).toBe(true)
+    const b1 = applyBattleshipAction(a2.bs, 'p2', { type: 'FIRE', cell: 10 })  // B fires
+    expect(b1.outcome.ok).toBe(true)
+    const a3 = applyBattleshipAction(b1.bs, 'p1', { type: 'FIRE', cell: 5 })   // A again — hit
+    expect(a3.outcome.ok).toBe(true)
+
+    const pub = a3.bs.session.publicState
+    expect(pub.turn.turnNumber).toBe(5)  // 4 accepted shots after the initial 1
+    expect(pub.hits['p2'][0]).toBe('miss')
+    expect(pub.hits['p2'][10]).toBe('miss')
+    expect(pub.hits['p1'][10]).toBe('miss')
+    expect(pub.hits['p2'][5]).toBe('hit')
+    expect(pub.lastShot).toEqual({ by: 'p1', cell: 5, result: 'hit', shipId: null })
+  })
+
+  it('free: cell validation, repeat cells, placing stage, and double placement still reject', () => {
+    // repeat cell + out of range during battle
+    let bs = createBattleshipGame(['p1', 'p2'], 1, 'free')
+    const r1 = applyBattleshipAction(bs, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(r1.outcome.ok).toBe(true)
+    bs = r1.bs
+    const r2 = applyBattleshipAction(bs, 'p2', { type: 'PLACE_FLEET', board: fleetB() })
+    expect(r2.outcome.ok).toBe(true)
+    bs = r2.bs
+    const f1 = applyBattleshipAction(bs, 'p1', { type: 'FIRE', cell: 0 })
+    expect(f1.outcome.ok).toBe(true)
+    const f2 = applyBattleshipAction(f1.bs, 'p1', { type: 'FIRE', cell: 0 })  // repeat cell
+    expect(f2.outcome.ok).toBe(false)
+    expect(f2.outcome.reason).toContain('already fired')
+    const f3 = applyBattleshipAction(f1.bs, 'p1', { type: 'FIRE', cell: 100 })  // out of range
+    expect(f3.outcome.ok).toBe(false)
+    expect(f3.outcome.reason).toContain('invalid cell')
+
+    // firing during placing
+    const placing = createBattleshipGame(['p1', 'p2'], 1, 'free')
+    const f4 = applyBattleshipAction(placing, 'p1', { type: 'FIRE', cell: 0 })
+    expect(f4.outcome.ok).toBe(false)
+    expect(f4.outcome.reason).toContain('battle')
+
+    // PLACE_FLEET double-submit
+    const d1 = applyBattleshipAction(placing, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(d1.outcome.ok).toBe(true)
+    const d2 = applyBattleshipAction(d1.bs, 'p1', { type: 'PLACE_FLEET', board: fleetA() })
+    expect(d2.outcome.ok).toBe(false)
+    expect(d2.outcome.reason).toContain('already placed')
+  })
+
+  it('free: the shot that sinks all five ends the match; no post-game shots', () => {
+    const marks = emptyMarks()
+    for (const c of [5, 6, 7, 8, 9, 24, 25, 26, 27, 43, 44, 45, 63, 64, 65, 82]) marks[c] = 'hit'
+    const sunk: SunkReveal[] = [
+      { shipId: 'carrier', cells: [5, 6, 7, 8, 9] },
+      { shipId: 'battleship', cells: [24, 25, 26, 27] },
+      { shipId: 'cruiser', cells: [43, 44, 45] },
+      { shipId: 'submarine', cells: [63, 64, 65] },
+    ]
+    const bs = buildBattle({
+      p1Board: fleetA(),
+      p2Board: fleetB(),
+      hits: { p1: emptyMarks(), p2: marks },
+      sunk: { p1: [], p2: sunk },
+      scores: { p1: 4, p2: 0 },
+      variant: 'free',
+    })
+    const result = applyBattleshipAction(bs, 'p1', { type: 'FIRE', cell: 83 })
+    expect(result.outcome.ok).toBe(true)
+    const pub = result.bs.session.publicState
+    expect(pub.stage).toBe('over')
+    expect(pub.winnerId).toBe('p1')
+    expect(pub.scores['p1']).toBe(5)
+    expect(pub.lastShot).toEqual({ by: 'p1', cell: 83, result: 'sunk', shipId: 'destroyer' })
+
+    // no post-game shots and no tie path: both players rejected once the stage is 'over'
+    const post1 = applyBattleshipAction(result.bs, 'p1', { type: 'FIRE', cell: 10 })
+    expect(post1.outcome.ok).toBe(false)
+    expect(post1.outcome.reason).toContain('battle')
+    const post2 = applyBattleshipAction(result.bs, 'p2', { type: 'FIRE', cell: 10 })
+    expect(post2.outcome.ok).toBe(false)
+    expect(post2.outcome.reason).toContain('battle')
+  })
+
+  it('streak: full bot-vs-bot match terminates with a winner in at most 200 shots', () => {
+    let bs = createBattleshipGame(['p1', 'p2'], 7, 'streak')
+    const strategyP1 = makeBattleshipBotStrategy(createRng(11))
+    const strategyP2 = makeBattleshipBotStrategy(createRng(23))
+    for (const playerId of ['p1', 'p2'] as const) {
+      const result = runBattleshipBotTurn(bs, playerId, playerId === 'p1' ? strategyP1 : strategyP2)
+      expect(result.outcome.ok).toBe(true)
+      bs = result.bs
+    }
+    expect(bs.session.publicState.stage).toBe('battle')
+    let shots = 0
+    while (bs.session.publicState.stage !== 'over') {
+      const playerId = currentPlayer(bs.session.publicState.turn)
+      const result = runBattleshipBotTurn(bs, playerId, playerId === 'p1' ? strategyP1 : strategyP2)
+      expect(result.outcome.ok).toBe(true)
+      bs = result.bs
+      shots++
+      expect(shots).toBeLessThanOrEqual(200)
+    }
+    const pub = bs.session.publicState
+    expect(pub.winnerId).not.toBeNull()
+    expect(pub.scores[pub.winnerId!]).toBe(5)
+  })
+
+  it('free: full bot-vs-bot match with manual alternation terminates with a winner in at most 200 shots', () => {
+    let bs = createBattleshipGame(['p1', 'p2'], 7, 'free')
+    const strategyP1 = makeBattleshipBotStrategy(createRng(11))
+    const strategyP2 = makeBattleshipBotStrategy(createRng(23))
+    for (const playerId of ['p1', 'p2'] as const) {
+      const result = runBattleshipBotTurn(bs, playerId, playerId === 'p1' ? strategyP1 : strategyP2)
+      expect(result.outcome.ok).toBe(true)
+      bs = result.bs
+    }
+    expect(bs.session.publicState.stage).toBe('battle')
+    let shots = 0
+    let round = 0
+    while (bs.session.publicState.stage !== 'over') {
+      const playerId = round % 2 === 0 ? 'p1' : 'p2'
+      const result = runBattleshipBotTurn(bs, playerId, playerId === 'p1' ? strategyP1 : strategyP2)
+      expect(result.outcome.ok).toBe(true)
+      bs = result.bs
+      round++
+      shots++
+      expect(shots).toBeLessThanOrEqual(200)
+    }
+    const pub = bs.session.publicState
+    expect(pub.winnerId).not.toBeNull()
+    expect(pub.scores[pub.winnerId!]).toBe(5)
+  })
+
+  it('free: guest snapshot leaks nothing and variant round-trips through JSON', () => {
+    const game = createBattleshipGame(['p1', 'p2'], 1, 'free')
+    const hostFleet = fleetA()
+    const guestFleet = fleetB()
+
+    const r1 = applyBattleshipAction(game, 'p1', { type: 'PLACE_FLEET', board: hostFleet })
+    expect(r1.outcome.ok).toBe(true)
+    const afterHostPlace = r1.bs
+    const r2 = applyBattleshipAction(afterHostPlace, 'p2', { type: 'PLACE_FLEET', board: guestFleet })
+    expect(r2.outcome.ok).toBe(true)
+    const afterBothPlace = r2.bs
+    expect(afterBothPlace.session.publicState.stage).toBe('battle')
+
+    const snapshot = deriveSnapshot(afterBothPlace.session, 'p2')
+    expect(snapshot.privateState!.board).toEqual(guestFleet)
+    const jsonBefore = JSON.stringify(snapshot.publicState)
+    for (const ship of SHIPS) {
+      expect(jsonBefore).not.toContain(ship.id)
+    }
+    expect(JSON.parse(jsonBefore).variant).toBe('free')
+    expect(isJsonSerializable(snapshot)).toBe(true)
+
+    // interleaved shots in free mode: p1 misses, p2 hits 80, p1 misses again, p2 sinks 81
+    const f1 = applyBattleshipAction(afterBothPlace, 'p1', { type: 'FIRE', cell: 0 })
+    expect(f1.outcome.ok).toBe(true)
+    const afterMiss = f1.bs
+    const f2 = applyBattleshipAction(afterMiss, 'p2', { type: 'FIRE', cell: 80 })
+    expect(f2.outcome.ok).toBe(true)
+    const afterHit = f2.bs
+    const f3 = applyBattleshipAction(afterHit, 'p1', { type: 'FIRE', cell: 1 })
+    expect(f3.outcome.ok).toBe(true)
+    const afterMiss2 = f3.bs
+    const f4 = applyBattleshipAction(afterMiss2, 'p2', { type: 'FIRE', cell: 81 })
+    expect(f4.outcome.ok).toBe(true)
+    const afterSunk = f4.bs
+
+    const pub = afterSunk.session.publicState
+    expect(pub.sunk['p1']).toEqual([{ shipId: 'destroyer', cells: [80, 81] }])
+    expect(pub.lastShot).toEqual({ by: 'p2', cell: 81, result: 'sunk', shipId: 'destroyer' })
+
+    const snapshotAfter = deriveSnapshot(afterSunk.session, 'p2')
+    const jsonAfter = JSON.stringify(snapshotAfter.publicState)
+    for (const ship of SHIPS) {
+      if (ship.id === 'destroyer') {
+        expect(jsonAfter).toContain(ship.id)
+      } else {
+        expect(jsonAfter).not.toContain(ship.id)
+      }
+    }
+    expect(JSON.parse(jsonAfter).variant).toBe('free')
+    expect(isJsonSerializable(snapshotAfter)).toBe(true)
   })
 })

@@ -48,6 +48,25 @@ sinking reveals the ship and scores a point, all five sunk ends the single
 match (no rounds, no best-of). Bot: unresolved-hit orthogonal-neighbor
 targeting, else uniform random over unfired cells.
 
+## Rule variants (2026-08-09)
+
+Host-selected in the room screen before the match; stored as
+`publicState.variant`; rematch reuses the finished match's variant.
+
+- `standard` — "Standard turn-based": turn passes after every shot.
+- `streak` — "Make it, take it": hit or sink keeps your turn (`extraTurn`),
+  miss passes it. Status appends "Fire again." on your own hits.
+- `free` — "Free-for-all": no turns. The validator skips the turn check;
+  every accepted shot applies `extraTurn`, making `turnNumber` a pure
+  monotonic shot counter (which keeps the per-shot sound signature unique
+  and feeds the bot loop's staleness key). The house bot fires every
+  `BASE_MS` on a stage-only staleness key — deliberately coarser than the
+  turn-based key so human shots can't reset its timer and starve it
+  (live-verified defect, fixed in spec 15c).
+
+The bot *strategy* is variant-agnostic; only the App bot-loop gate and the
+validator know about modes.
+
 ## UI notes
 
 - Two-phase single screen: placement (draft board local to the table,

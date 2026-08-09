@@ -1,13 +1,23 @@
 import { useState } from 'react'
+import type { BattleshipVariant } from '../board-games/battleship/state'
 import { BattleshipRulesOverlay } from './BattleshipRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import './BattleshipTable.css'
+
+const VARIANTS: { id: BattleshipVariant; name: string; desc: string }[] = [
+  { id: 'standard', name: 'Standard turn-based', desc: 'One shot each, hit or miss.' },
+  { id: 'streak', name: 'Make it, take it', desc: 'Keep firing as long as you hit.' },
+  { id: 'free', name: 'Free-for-all', desc: 'No turns — both fleets fire at will. First to sink five wins.' },
+]
 
 export function BattleshipRoom({
-  code, localName, notice, onAddHouseBot, onLeave,
+  code, localName, notice, variant, onSetVariant, onAddHouseBot, onLeave,
 }: {
   code: string
   localName: string
   notice?: string | null
+  variant: BattleshipVariant
+  onSetVariant: (v: BattleshipVariant) => void
   onAddHouseBot: () => void
   onLeave: () => void
 }) {
@@ -69,6 +79,21 @@ export function BattleshipRoom({
             >
               Battleship
             </span>
+          </div>
+
+          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>House rules</div>
+          <div className="bs-variant-list">
+            {VARIANTS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                className={`bs-variant-option${v.id === variant ? ' bs-variant-option--selected' : ''}`}
+                onClick={() => onSetVariant(v.id)}
+              >
+                <span className="bs-variant-name">{v.name}</span>
+                <span className="bs-variant-desc">{v.desc}</span>
+              </button>
+            ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

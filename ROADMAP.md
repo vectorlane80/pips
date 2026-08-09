@@ -1,11 +1,18 @@
 # Roadmap
 
-Charter: Battleship — see `CHARTER.md`.
+Charter: Battleship rule variants — see `CHARTER.md`.
 
 ## Next up
-(none — charter complete; commit authorization requested, see REQUESTS.md)
+(none — variants charter complete; commit offered)
 
 ## Done (this charter)
+- [variants] specs 15/15a/15b/15c — standard / make-it-take-it /
+  free-for-all, host-picked in the room, validator-enforced, bot loop
+  free-mode cadence with starvation fix. 523 tests. Streak + free
+  live-verified (chain status, turnless racing, full FFA match to 5–0).
+  Review: approve, no blockers.
+
+## Done (prior charter: Battleship)
 - [cycle 1] M1 — game module (state/rules/bot + 25 tests incl. snapshot
   no-leak). Two implementer test-harness bugs lead-diagnosed, fixed via
   spec 13a. Review (sonnet, adversarial, live-repro rule): CLEAN on leaks;
