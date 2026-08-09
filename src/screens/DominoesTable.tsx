@@ -93,9 +93,9 @@ interface DominoTileBackProps {
   className?: string
 }
 
-// 46×88-proportioned rounded-rect back in #5b5bd6 with a #17173a border and a
-// centred pips-logo dot. `fan`/`stock` serve DealIntro's renderCardBack, and
-// `small` renders the opponent's hidden hand.
+// 46×88-proportioned rounded-rect back in #fff with an ink border and a centred
+// brand #5b5bd6 pips-logo dot. `fan`/`stock` serve DealIntro's renderCardBack,
+// and `small` renders the opponent's hidden hand.
 function DominoTileBack({ size, style, className }: DominoTileBackProps) {
   const cls = ['dm-tile-back', `dm-tile-back--${size}`, className].filter(Boolean).join(' ')
   return (
@@ -386,6 +386,19 @@ export function DominoesTable({
           />
         ) : (
         <>
+        {/* Their side */}
+        <div className="dm-their-side">
+          <div className="dm-their-side-left">
+            <div className="dm-their-name" style={{ color: opponentColor }}>{opponentName}</div>
+            <div className="dm-their-count">{opponentHandCount} tiles · hidden</div>
+            <div className="dm-their-backs">
+              {Array.from({ length: opponentHandCount }, (_, i) => (
+                <DominoTileBack key={i} size="small" />
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Status — two lines above the board */}
         <div className="dm-status-block">
           <div className="dm-status-event">{eventLine}</div>
@@ -424,17 +437,6 @@ export function DominoesTable({
               })}
             </>
           )}
-        </div>
-
-        {/* Their side: hidden hand */}
-        <div className="dm-opponent-row">
-          <span className="dm-opponent-name" style={{ color: opponentColor }}>{opponentName}</span>
-          <span className="dm-opponent-count">{opponentHandCount} tiles · hidden</span>
-          <div className="dm-opponent-backs">
-            {Array.from({ length: opponentHandCount }, (_, i) => (
-              <DominoTileBack key={i} size="small" />
-            ))}
-          </div>
         </div>
 
         {/* Hand + boneyard rail */}

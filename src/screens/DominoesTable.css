@@ -201,31 +201,39 @@
   }
 }
 
-/* ---- Opponent row ---- */
+/* ---- Their side (top band) ---- */
 
-.dm-opponent-row {
+.dm-their-side {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
-  padding: clamp(14px, 2vw, 20px) 0 6px;
+  gap: 16px;
+  padding-bottom: clamp(12px, 2vw, 20px);
 }
 
-.dm-opponent-name {
+.dm-their-side-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dm-their-name {
   font-size: 16px;
   font-weight: 700;
 }
 
-.dm-opponent-count {
+.dm-their-count {
   font-size: 12px;
   font-weight: 500;
   color: var(--muted-text);
 }
 
-.dm-opponent-backs {
+.dm-their-backs {
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
+  margin-top: 6px;
 }
 
 /* ---- Hand + boneyard rail ---- */
@@ -342,7 +350,7 @@
   position: relative;
   display: block;
   flex: none;
-  background: var(--dm-brand);
+  background: #fff;
   border-color: var(--ink);
   border-style: solid;
 }
@@ -355,7 +363,7 @@
   width: 22%;
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--ink);
+  background: #5b5bd6;
 }
 
 .dm-tile-back--fan {
