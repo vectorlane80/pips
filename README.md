@@ -3,10 +3,10 @@
 Little games for two people and one code. Pick a game, share a room code, play — no
 account, no sign-in, nothing to install.
 
-Eight games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
-**Rummy**, **Phase 10**, and **Battleship**. Farkle and Yahtzee support a full party
-(up to 8 players); the rest are two-player. Every game can be played solo against a
-house bot.
+Nine games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
+**Rummy**, **Phase 10**, **Battleship**, and **Dominoes**. Farkle and Yahtzee support
+a full party (up to 8 players); the rest are two-player. Every game can be played solo
+against a house bot.
 
 Rummy and Phase 10 are built on a reusable card-game engine (`src/card-engine/`),
 itself built on a game-agnostic core (`src/engine/`: seeded RNG, turn order, and

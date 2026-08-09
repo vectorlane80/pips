@@ -18,11 +18,16 @@ import error from '../assets/sounds/error.mp3'
 import shipHit from '../assets/sounds/ship-hit.mp3'
 import shipMiss from '../assets/sounds/ship-miss.mp3'
 import shipSunk from '../assets/sounds/ship-sunk.mp3'
+import dominoesShuffling from '../assets/sounds/dominoes-shuffling.mp3'
+import dominoDraw from '../assets/sounds/domino-draw.mp3'
+import dominoPlay from '../assets/sounds/domino-play.mp3'
+import knock from '../assets/sounds/knock.mp3'
 
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'drawn-x' | 'drawn-circle' | 'piece-drop' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
   | 'letter-wrong' | 'round-win' | 'game-win' | 'error' | 'ship-hit' | 'ship-miss' | 'ship-sunk'
+  | 'domino-shuffle' | 'domino-draw' | 'domino-play' | 'knock'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -44,6 +49,10 @@ const SOUND_FILES: Record<SoundName, string> = {
   'ship-hit': shipHit,
   'ship-miss': shipMiss,
   'ship-sunk': shipSunk,
+  'domino-shuffle': dominoesShuffling,
+  'domino-draw': dominoDraw,
+  'domino-play': dominoPlay,
+  'knock': knock,
 }
 
 const COOKIE_NAME = 'pips-sound'

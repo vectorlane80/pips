@@ -1,11 +1,17 @@
 # Roadmap
 
-Charter: Item-generic containers (dominoes prep) — see `CHARTER.md`.
+Charter: Dominoes (All Fives) — see `CHARTER.md`.
 
 ## Next up
-- Dominoes: awaiting the design handoff; containers are ready.
+(none — dominoes charter complete; commit offered)
 
 ## Done (this charter)
+- [dominoes] specs 17/17a–17h — module (standardized All Fives scoring,
+  common draw rule), snake layout with flush corners, screens with
+  domino-back deal intro, App wiring. 597 tests, two approve reviews,
+  live-verified vs bot through round transition. ~$0.85 implementer cost.
+
+## Done (prior charter: containers prep)
 - [containers] spec 16 — Zone/deck helpers generic over id-bearing
   items, Card default, zero call-site churn. 534 tests. Review CLEAN.
 

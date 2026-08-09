@@ -44,9 +44,18 @@ import { BattleshipTable } from './screens/BattleshipTable'
 import { BattleshipResults } from './screens/BattleshipResults'
 import { BattleshipRoom } from './screens/BattleshipRoom'
 
+// ---- Dominoes (separate parallel session, per CHARTER.md resolution #7) ----
+import { createDominoesGame, type DominoesSession, type DominoesPublicState, type DominoesPrivateState, type DominoesAction, type DominoTile, type DominoArm } from './board-games/dominoes/state'
+import { applyDominoesAction, runDominoesBotTurn } from './board-games/dominoes/rules'
+import { dominoesBotStrategy } from './board-games/dominoes/bot'
+import { DominoesTable } from './screens/DominoesTable'
+import { DominoesResults } from './screens/DominoesResults'
+import { DominoesRoom } from './screens/DominoesRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
+type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -95,6 +104,16 @@ export default function App() {
   const [battleshipWaiting, setBattleshipWaiting] = useState(false)
   const [battleshipVariant, setBattleshipVariant] = useState<BattleshipVariant>('standard')
 
+  // ---- Dominoes ----
+  const [dominoesRole, setDominoesRole] = useState<'host' | 'guest' | null>(null)
+  const [dominoesCode, setDominoesCode] = useState('')
+  const [dominoesLocalPlayerId, setDominoesLocalPlayerId] = useState<string | null>(null)
+  const [dominoesOpponentId, setDominoesOpponentId] = useState<string | null>(null)
+  const [dominoesOpponentName, setDominoesOpponentName] = useState('')
+  const [dominoesView, setDominoesView] = useState<DominoesView | null>(null)
+  const [dominoesConnection, setDominoesConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [dominoesWaiting, setDominoesWaiting] = useState(false)
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -121,6 +140,13 @@ export default function App() {
   const battleshipOpponentIdRef = useRef<string | null>(null)
   const battleshipOpponentNameRef = useRef('')
   const battleshipVariantRef = useRef<BattleshipVariant>('standard')
+  const dominoesSessionRef = useRef<DominoesSession | null>(null)
+  const dominoesHostRef = useRef<HostHandle<DominoesView> | null>(null)
+  const dominoesGuestRef = useRef<GuestHandle<DominoesAction> | null>(null)
+  const dominoesBotBusyRef = useRef(false)
+  const dominoesLocalPlayerIdRef = useRef<string | null>(null)
+  const dominoesOpponentIdRef = useRef<string | null>(null)
+  const dominoesOpponentNameRef = useRef('')
 
   useEffect(() => {
     roomRef.current = room
@@ -135,6 +161,8 @@ export default function App() {
     phase10GuestRef.current?.destroy()
     battleshipHostRef.current?.destroy()
     battleshipGuestRef.current?.destroy()
+    dominoesHostRef.current?.destroy()
+    dominoesGuestRef.current?.destroy()
   }, [])
 
   useEffect(() => {
@@ -272,6 +300,23 @@ export default function App() {
     setBattleshipWaiting(false)
     setBattleshipVariant('standard')
     battleshipVariantRef.current = 'standard'
+    // Dominoes
+    dominoesHostRef.current?.destroy()
+    dominoesHostRef.current = null
+    dominoesGuestRef.current?.destroy()
+    dominoesGuestRef.current = null
+    dominoesSessionRef.current = null
+    setDominoesRole(null)
+    setDominoesCode('')
+    setDominoesLocalPlayerId(null)
+    dominoesLocalPlayerIdRef.current = null
+    setDominoesOpponentId(null)
+    dominoesOpponentIdRef.current = null
+    setDominoesOpponentName('')
+    dominoesOpponentNameRef.current = ''
+    setDominoesView(null)
+    setDominoesConnection('connected')
+    setDominoesWaiting(false)
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -804,6 +849,173 @@ export default function App() {
 
   // ---- End Battleship helpers ----
 
+  // ---- Dominoes helpers ----
+
+  function dominoesActorKey(dm: DominoesSession): string {
+    const ps = dm.session.publicState
+    return `${ps.stage}:${ps.roundNumber}:${ps.turn.turnNumber}`
+  }
+
+  function dominoesStale(key: string) {
+    return !dominoesSessionRef.current || dominoesActorKey(dominoesSessionRef.current) !== key
+  }
+
+  function dominoesUpdateViews() {
+    const session = dominoesSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, dominoesLocalPlayerIdRef.current!)
+    setDominoesView({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: dominoesOpponentNameRef.current })
+    const opponentId = dominoesOpponentIdRef.current
+    if (opponentId && opponentId !== 'bot') {
+      const guestSnap = deriveSnapshot(session.session, opponentId)
+      dominoesHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+    }
+  }
+
+  function startDominoesHost() {
+    const code = `DM-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setDominoesRole('host')
+    setDominoesCode(code)
+    setDominoesLocalPlayerId(hostId)
+    dominoesLocalPlayerIdRef.current = hostId
+    setDominoesWaiting(true)
+    setError(null)
+    dominoesHostRef.current = createHost<DominoesView, DominoesAction>(code, {
+      onJoin(guestId, guestName) {
+        if (dominoesSessionRef.current) {
+          dominoesHostRef.current?.reject(guestId, 'That Dominoes table is already full.')
+          return
+        }
+        const seed = Math.floor(Math.random() * 2147483647)
+        dominoesSessionRef.current = createDominoesGame([hostId, guestId], seed)
+        setDominoesOpponentId(guestId)
+        dominoesOpponentIdRef.current = guestId
+        setDominoesOpponentName(guestName)
+        dominoesOpponentNameRef.current = guestName
+        setDominoesWaiting(false)
+        dominoesUpdateViews()
+      },
+      onAction(guestId, action) {
+        if (!dominoesSessionRef.current || guestId !== dominoesOpponentIdRef.current) return
+        const result = applyDominoesAction(dominoesSessionRef.current!, guestId, action)
+        if (!result.outcome.ok) return
+        dominoesSessionRef.current = result.dm
+        dominoesUpdateViews()
+      },
+      onLeave(guestId) {
+        // Guest left mid-match: match cannot continue with only 1 player.
+        if (guestId !== dominoesOpponentIdRef.current) return
+        setError('Opponent left the room.')
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addDominoesHouseBot() {
+    if (dominoesRole !== 'host' || !dominoesLocalPlayerId || !dominoesWaiting) return
+    const botId = 'bot'
+    const botName = randomBotName([name.trim()])
+    const seed = Math.floor(Math.random() * 2147483647)
+    dominoesSessionRef.current = createDominoesGame([dominoesLocalPlayerId, botId], seed)
+    setDominoesOpponentId(botId)
+    dominoesOpponentIdRef.current = botId
+    setDominoesOpponentName(botName)
+    dominoesOpponentNameRef.current = botName
+    setDominoesWaiting(false)
+    dominoesUpdateViews()
+  }
+
+  async function runDominoesBot(botId: string, key: string) {
+    while (!dominoesStale(key)) {
+      await wait(BASE_MS)
+      if (dominoesStale(key)) return
+      const session = dominoesSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play' || currentPlayer(ps.turn) !== botId) return
+      const result = runDominoesBotTurn(session, botId, dominoesBotStrategy)
+      if (!result.outcome.ok) return
+      dominoesSessionRef.current = result.dm
+      const snap = deriveSnapshot(result.dm.session, dominoesLocalPlayerId!)
+      setDominoesView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: dominoesOpponentNameRef.current })
+    }
+  }
+
+  async function runDominoesBotsIfNeeded() {
+    if (dominoesBotBusyRef.current) return
+    const session = dominoesSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    if (dominoesOpponentId !== 'bot') return
+    if (currentPlayer(ps.turn) !== 'bot') return
+    dominoesBotBusyRef.current = true
+    const key = dominoesActorKey(session)
+    try {
+      await runDominoesBot('bot', key)
+    } finally {
+      dominoesBotBusyRef.current = false
+      setTimeout(() => runDominoesBotsIfNeeded(), 50)
+    }
+  }
+
+  function startDominoesGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<DominoesView, DominoesAction>(code, name.trim(), {
+      onState(view) {
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setDominoesView(view)
+        setDominoesOpponentName(view.opponentName)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setDominoesConnection('connected')
+      },
+      onDisconnected() {
+        setDominoesConnection('disconnected')
+      },
+    })
+    dominoesGuestRef.current = handle
+    setDominoesRole('guest')
+    setDominoesCode(code)
+    handle.peerId.then((id) => { setDominoesLocalPlayerId(id); dominoesLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function dominoesDispatch(action: DominoesAction) {
+    if (dominoesRole === 'host' && dominoesLocalPlayerId) {
+      const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      dominoesSessionRef.current = result.dm
+      dominoesUpdateViews()
+    } else if (dominoesRole === 'guest') {
+      dominoesGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function dominoesRematch() {
+    if (dominoesRole !== 'host' || !dominoesSessionRef.current || !dominoesLocalPlayerId) return
+    const prevRevision = dominoesSessionRef.current.session.revision
+    const playerIds = dominoesSessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createDominoesGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    dominoesSessionRef.current = next
+    dominoesUpdateViews()
+  }
+
+  // ---- End Dominoes helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -1026,10 +1238,37 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleshipRole, battleshipView])
 
+  // ---- Dominoes effects (host-only) ----
+
+  // Bot turn trigger (draws do NOT advance the turn — the inner loop keeps acting
+  // while the actor key is unchanged; stage is part of the key so round transitions
+  // abort the loop).
+  useEffect(() => {
+    if (dominoesRole !== 'host' || !dominoesView) return
+    runDominoesBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dominoesRole, dominoesView])
+
+  // Round transition (pause then start next round)
+  useEffect(() => {
+    if (dominoesRole !== 'host' || !dominoesView) return
+    if (dominoesView.publicState.stage === 'roundEnd' && !dominoesView.publicState.matchWinnerId) {
+      const t = setTimeout(() => {
+        const result = applyDominoesAction(dominoesSessionRef.current!, dominoesLocalPlayerId!, { type: 'START_NEXT_ROUND' })
+        if (result.outcome.ok) {
+          dominoesSessionRef.current = result.dm
+          dominoesUpdateViews()
+        }
+      }, ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dominoesRole, dominoesView?.publicState.stage, dominoesView?.publicState.matchWinnerId])
+
   // ---- Render ----
 
-  // Landing: dice games, Rummy, Phase 10, and Battleship are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole) {
+  // Landing: dice games, Rummy, Phase 10, Battleship, and Dominoes are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole) {
     return (
       <Landing
         name={name}
@@ -1041,12 +1280,14 @@ export default function App() {
           if (code.startsWith('RM-')) startRummyGuest(code)
           else if (code.startsWith('P10-')) startPhase10Guest(code)
           else if (code.startsWith('BS-')) startBattleshipGuest(code)
+          else if (code.startsWith('DM-')) startDominoesGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
         onPickRummy={startRummyHost}
         onPickPhase10={startPhase10Host}
         onPickBattleship={startBattleshipHost}
+        onPickDominoes={startDominoesHost}
         error={error}
       />
     )
@@ -1304,6 +1545,60 @@ export default function App() {
         board={battleshipView.privateState.board}
         onPlaceFleet={(b: (ShipId | null)[]) => battleshipDispatch({ type: 'PLACE_FLEET', board: b })}
         onFire={(cell) => battleshipDispatch({ type: 'FIRE', cell })}
+        onOpenRules={() => {}}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Dominoes session active ----
+  // Dominoes waiting screen (host waiting for opponent) — mirrors the shared Room.tsx /
+  // RummyRoom.tsx / Phase10Room.tsx / BattleshipRoom.tsx layout so the start flow doesn't
+  // feel like a different app.
+  if (dominoesRole === 'host' && dominoesWaiting) {
+    return (
+      <DominoesRoom
+        code={dominoesCode}
+        localName={name}
+        notice={error}
+        onAddHouseBot={addDominoesHouseBot}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Dominoes match results
+  if (dominoesView && dominoesView.publicState.stage === 'over' && dominoesView.publicState.matchWinnerId) {
+    return (
+      <DominoesResults
+        localPlayerId={dominoesLocalPlayerId ?? ''}
+        localName={name}
+        opponentName={dominoesOpponentName}
+        publicState={dominoesView.publicState}
+        isHost={dominoesRole === 'host'}
+        notice={error}
+        onRematch={dominoesRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Dominoes table (active match)
+  if (dominoesView && dominoesLocalPlayerId) {
+    return (
+      <DominoesTable
+        code={dominoesCode}
+        localPlayerId={dominoesLocalPlayerId}
+        localName={name}
+        opponentName={dominoesOpponentName}
+        opponentColor="#5b5bd6"
+        connection={dominoesConnection}
+        notice={error}
+        publicState={dominoesView.publicState}
+        hand={dominoesView.privateState.hand.cards satisfies DominoTile[]}
+        onPlayTile={(tileId, arm: DominoArm | 'center') => dominoesDispatch({ type: 'PLAY_TILE', tileId, arm })}
+        onDraw={() => dominoesDispatch({ type: 'DRAW_TILE' })}
+        onPass={() => dominoesDispatch({ type: 'PASS' })}
         onOpenRules={() => {}}
         onLeave={resetToEntry}
       />

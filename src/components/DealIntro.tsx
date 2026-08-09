@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { useSound } from '../hooks/useSound'
+import { useSound, type SoundName } from '../hooks/useSound'
 
 // ---------------------------------------------------------------------------
 // Pure helper: the deal flight schedule.
@@ -89,6 +89,8 @@ export interface DealIntroProps {
   opponentHandSize: number
   renderCardBack: (props: DealIntroCardBackProps) => React.ReactNode
   onComplete: () => void
+  /** Sound played once when shuffling starts; defaults to the card shuffle. */
+  shuffleSound?: SoundName
 }
 
 /** Position of `el` (border-box top-left) relative to `root`'s padding-box top-left. */
@@ -144,6 +146,7 @@ export function DealIntro({
   opponentHandSize,
   renderCardBack,
   onComplete,
+  shuffleSound: shuffleSoundProp = 'shuffle',
 }: DealIntroProps): JSX.Element {
   const { play } = useSound()
 
@@ -167,11 +170,13 @@ export function DealIntro({
   playRef.current = play
 
   // Frozen at mount: these props don't change during one intro's lifetime
-  // (enforced now instead of just assumed), so the animation sequencing and the
-  // rendered pile counts always agree on the same flight schedule.
+  // (enforced now instead of just assumed), so the animation sequencing, the
+  // rendered pile counts, and the shuffle sound always agree with the values
+  // the mount effect captured.
   const [flights] = useState(() =>
     computeDealFlights(yourHandSize, opponentHandSize),
   )
+  const [shuffleSound] = useState(() => shuffleSoundProp)
 
   useEffect(() => {
     const cancelled = { current: false }
@@ -183,7 +188,7 @@ export function DealIntro({
     //    moment shuffling starts (not per riffle tick).
     timer(EMPTY_PHASE_DELAY_MS, () => {
       setPhase('shuffle')
-      playRef.current('shuffle')
+      playRef.current(shuffleSound)
       // 2. Three riffle ticks 170ms apart; the phase lasts 3 × 170 = 510ms.
       setShuffleTick(1)
       timer(SHUFFLE_TICK_INTERVAL_MS, () => setShuffleTick(2))

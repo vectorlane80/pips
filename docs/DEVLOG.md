@@ -1659,3 +1659,32 @@ shipping each verified charter promptly.
   predicate, and declaration-emit (moot, noEmit app).
 - **Next:** dominoes game module gets its own tile type +
   createDominoSet when the design handoff lands.
+
+## 2026-08-09 — Dominoes / All Fives (specs 17, 17a–17h)
+
+- **Charter:** from `Design Handoff/DOMINOES.md` + prototype, with user
+  orders: common draw rule (draw-until-playable) in gameplay AND rules
+  text; dominoes-visual deal intro; snake board replacing the scrolling
+  pane. Lead additionally standardized All Fives END COUNTING (5-5 lead
+  = 10 not 20; end doubles count both halves; unstarted spinner arms 0)
+  per the user's common-rules instruction pattern — flagged in charter
+  and docs, isolated in scoring.ts.
+- **Build:** 8 deepseek dispatches (module, test-id fix, layout, corner
+  fix, screens, wiring ×2, sound fix) ≈ $0.85 total. Lead diagnosed all
+  bugs before fix specs: tile-id normalization (test-side), the snake
+  corner overlap (MY spec's bend math — implementer's deviation report
+  caught it), the board-measure conditional-ref bug (live repro), the
+  DealIntro double-shuffle (review finding; resolved by parameterizing
+  DealIntro with a backward-compatible shuffleSound prop).
+- **Reviews:** module — approve (no tile ids in public state BY TYPE
+  SHAPE; 20-probe oscar.test.ts kept); UI/wiring — approve after the
+  shuffle-sound fix (wire hygiene, draw-chain loop, round-transition
+  effect, validator/UI gating parity all traced clean).
+- **Live:** deal intro with tile backs; 0-0 spinner lead; enablement +
+  target gating exact; standardized banking observed (+15 me, +20/+25
+  bot); final-play+go-out stack (+15+5 → 35); auto round transition;
+  starter alternation (Kit led round 2); Draw/Knock disabled while
+  holding a legal play; zero console errors. Full-match/draw/knock/block
+  paths: bot-vs-bot sims in suite (hidden-pane rAF throttling made the
+  round-2 intro crawl — environment artifact, documented).
+- **State:** 597 tests / tsc / build green. Commit offer next.

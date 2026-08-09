@@ -1,0 +1,500 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { DominoArm, DominoesPublicState, DominoTile } from '../board-games/dominoes/state'
+import { handHasLegalPlay, legalArms } from '../board-games/dominoes/state'
+import { layoutBoard, scaleToFit, type LaidTile } from '../board-games/dominoes/layout'
+import { currentPlayer } from '../engine/turn-engine'
+import { DealIntro, type DealIntroCardBackProps } from '../components/DealIntro'
+import { ScoreHeader } from '../components/ScoreHeader'
+import { Wordmark } from '../components/Wordmark'
+import { SoundToggle } from '../components/SoundToggle'
+import { DominoesRulesOverlay } from './DominoesRulesOverlay'
+import { useSound } from '../hooks/useSound'
+import './DominoesTable.css'
+
+// ---- Props ----
+
+export interface DominoesTableProps {
+  code: string
+  localPlayerId: string
+  localName: string
+  opponentName: string
+  opponentColor: string
+  connection: 'connected' | 'disconnected'
+  notice?: string | null
+  publicState: DominoesPublicState
+  hand: DominoTile[]              // your private hand (zone.cards)
+  onPlayTile: (tileId: string, arm: DominoArm | 'center') => void
+  onDraw: () => void
+  onPass: () => void
+  onOpenRules: () => void
+  onLeave: () => void
+}
+
+// ---- Pip art ----
+
+// Pip positions (index 0–8, row-major in a 3×3 grid) for each half value 0–6.
+const PIPS: number[][] = [
+  [], [4], [0, 8], [0, 4, 8], [0, 2, 6, 8], [0, 2, 4, 6, 8], [0, 2, 3, 5, 6, 8],
+]
+
+function TileHalf({ pips }: { pips: number }) {
+  return (
+    <div className="dm-tile-half">
+      {(PIPS[pips] ?? []).map((i) => (
+        <span
+          key={i}
+          className="dm-tile-pip"
+          style={{
+            left: `${(i % 3) * 33.333 + 16.667}%`,
+            top: `${Math.floor(i / 3) * 33.333 + 16.667}%`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// Which pip half faces back along the run: dir 'right' → inner on the LEFT
+// half; 'left' → inner right; 'up' (travel −y) → inner bottom; 'down' → inner
+// top. Doubles sit crosswise and split along their long axis — order cosmetic.
+function halfOrder(tile: LaidTile): [number, number] {
+  if (tile.isDouble) return [tile.inner, tile.outer]
+  if (tile.horizontal) {
+    return tile.dir === 'right' ? [tile.inner, tile.outer] : [tile.outer, tile.inner]
+  }
+  return tile.dir === 'up' ? [tile.outer, tile.inner] : [tile.inner, tile.outer]
+}
+
+function BoardTile({ tile, unit }: { tile: LaidTile; unit: number }) {
+  const [first, second] = halfOrder(tile)
+  return (
+    <div
+      className={`dm-tile ${tile.horizontal ? 'dm-tile--horizontal' : 'dm-tile--vertical'}`}
+      style={{
+        left: `calc(50% + ${tile.x * unit}px)`,
+        top: `calc(50% + ${tile.y * unit}px)`,
+        width: tile.w * unit,
+        height: tile.h * unit,
+      }}
+    >
+      <TileHalf pips={first} />
+      <TileHalf pips={second} />
+    </div>
+  )
+}
+
+// ---- Domino tile back (deal intro + opponent hand) ----
+
+type DominoTileBackSize = 'fan' | 'stock' | 'small'
+
+interface DominoTileBackProps {
+  size: DominoTileBackSize
+  style?: DealIntroCardBackProps['style']
+  className?: string
+}
+
+// 46×88-proportioned rounded-rect back in #5b5bd6 with a #17173a border and a
+// centred pips-logo dot. `fan`/`stock` serve DealIntro's renderCardBack, and
+// `small` renders the opponent's hidden hand.
+function DominoTileBack({ size, style, className }: DominoTileBackProps) {
+  const cls = ['dm-tile-back', `dm-tile-back--${size}`, className].filter(Boolean).join(' ')
+  return (
+    <div className={cls} style={style}>
+      <span className="dm-tile-back__dot" />
+    </div>
+  )
+}
+
+// ---- Status lines ----
+
+function actorName(actorId: string, localPlayerId: string, opponentName: string): string {
+  return actorId === localPlayerId ? 'You' : opponentName
+}
+
+// Event line: the last action (null → this round just opened).
+function computeEventLine(
+  publicState: DominoesPublicState,
+  localPlayerId: string,
+  opponentName: string,
+): string {
+  const action = publicState.lastAction
+  if (action === null) {
+    return publicState.roundStarterId === localPlayerId
+      ? 'Your lead — play any tile to open the board.'
+      : `${opponentName} opens the board…`
+  }
+  const name = actorName(action.by, localPlayerId, opponentName)
+  if (action.kind === 'lead' || action.kind === 'play') {
+    const tile = action.tile
+    const pipText = tile ? `${tile.a}·${tile.b}` : ''
+    const bank = action.scored > 0 ? ` Bank +${action.scored}!` : ''
+    return `${name} played ${pipText}.${bank}`
+  }
+  if (action.kind === 'draw') return `${name} drew from the boneyard.`
+  return `${name} knocked.`
+}
+
+// Prompt line: what to do now ('play' stage) or how the round ended (roundEnd/over).
+function computePromptLine(
+  publicState: DominoesPublicState,
+  localPlayerId: string,
+  opponentName: string,
+  noLegalPlay: boolean,
+): string {
+  if (publicState.stage === 'play') {
+    if (currentPlayer(publicState.turn) === localPlayerId) {
+      if (noLegalPlay) {
+        return publicState.boneyardCount > 0
+          ? 'No match — draw from the boneyard.'
+          : "No match, boneyard's empty — knock."
+      }
+      return 'Your move.'
+    }
+    return `${opponentName} is thinking…`
+  }
+
+  const result = publicState.roundResult
+  if (!result) return ''
+  let line: string
+  if (result.kind === 'out') {
+    const name = actorName(result.scorerId ?? '', localPlayerId, opponentName)
+    line = `${name} went out — +${result.points}.`
+  } else if (result.scorerId === null) {
+    line = 'Blocked — nobody scores.'
+  } else {
+    const name = actorName(result.scorerId, localPlayerId, opponentName)
+    const verb = result.scorerId === localPlayerId ? 'bank' : 'banks'
+    line = `Blocked — ${name} ${verb} +${result.points}.`
+  }
+  if (publicState.matchWinnerId === null) {
+    line += ' Next round coming up…'
+  }
+  return line
+}
+
+// ---- DominoesTable ----
+
+export function DominoesTable({
+  code,
+  localPlayerId,
+  localName,
+  opponentName,
+  opponentColor,
+  connection,
+  notice,
+  publicState,
+  hand,
+  onPlayTile,
+  onDraw,
+  onPass,
+  onOpenRules,
+  onLeave,
+}: DominoesTableProps) {
+  // ---- Derived ----
+  void localName // preserved in props for M4 wiring; unused in this presentational milestone
+  void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
+  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
+  const canAct = isMyTurn && publicState.stage === 'play'
+  const isMyLead = publicState.center === null && isMyTurn
+  const noLegalPlay = useMemo(() => !handHasLegalPlay(hand, publicState), [hand, publicState])
+
+  // ---- Local state ----
+  const { play, enabled, setEnabled } = useSound()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [rulesOpen, setRulesOpen] = useState(false)
+  const [paneSize, setPaneSize] = useState({ w: 0, h: 0 })
+  const boardRef = useRef<HTMLDivElement>(null)
+
+  // Fresh-round detection: show the deal intro exactly once per distinct
+  // roundNumber this component instance ever sees.
+  const introShownForRoundRef = useRef<number | null>(null)
+  const [showIntro, setShowIntro] = useState(false)
+
+  // ---- Effects ----
+  // Show the deal intro on mount and on every START_NEXT_ROUND transition
+  // (DealIntro plays the dominoes-flavoured shuffle sound at its shuffle phase).
+  useEffect(() => {
+    if (introShownForRoundRef.current !== publicState.roundNumber) {
+      introShownForRoundRef.current = publicState.roundNumber
+      setShowIntro(true)
+    }
+  }, [publicState.roundNumber])
+
+  // Clear the selection when the hand changes in a way that invalidates it
+  // (new deal, tile played) or once the round stops being live.
+  useEffect(() => {
+    setSelectedId((prev) => (prev !== null && hand.some((t) => t.id === prev) ? prev : null))
+  }, [hand])
+  useEffect(() => {
+    if (publicState.stage !== 'play') setSelectedId(null)
+  }, [publicState.stage])
+
+  // Measure the board pane (unit = 40px × scaleToFit) on mount and on resize.
+  // Deps include showIntro: while the deal intro is showing the board subtree
+  // isn't mounted (boardRef.current is null) and the effect bails, so re-run
+  // when the intro finishes and the board actually mounts.
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el) return
+    const measure = () => setPaneSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [showIntro])
+
+  // Sound effects — diff room state transitions. Every accepted action replaces
+  // lastAction (the HostSession revision lives in App, not in publicState), so
+  // lastAction identity is the per-action marker; the stage catches round ends.
+  // Both players hear everything — no wasMyTurn gate.
+  const lastActionRef = useRef(publicState.lastAction)
+  const prevStageRef = useRef(publicState.stage)
+  useEffect(() => {
+    const action = publicState.lastAction
+    if (action !== lastActionRef.current) {
+      if (action?.kind === 'lead' || action?.kind === 'play') play('domino-play')
+      else if (action?.kind === 'draw') play('domino-draw')
+      else if (action?.kind === 'pass') play('knock')
+      lastActionRef.current = action
+    }
+    if (
+      prevStageRef.current === 'play' &&
+      publicState.stage !== 'play' &&
+      publicState.roundResult !== null &&
+      publicState.roundResult.scorerId !== null
+    ) {
+      play('round-win')
+    }
+    prevStageRef.current = publicState.stage
+  }, [publicState.lastAction, publicState.stage, publicState.roundResult, play])
+
+  // ---- Board geometry ----
+  const layout = useMemo(
+    () => layoutBoard(publicState.center, publicState.isSpinner, publicState.arms),
+    [publicState.center, publicState.isSpinner, publicState.arms],
+  )
+  const scale = useMemo(
+    () => (paneSize.w > 0 && paneSize.h > 0 ? scaleToFit(layout, paneSize.w, paneSize.h, 40) : 0),
+    [layout, paneSize],
+  )
+  const unit = scale * 40
+  const boardReady = scale > 0
+
+  // ---- Selection / legal targets ----
+  const selectedTile = useMemo(() => hand.find((t) => t.id === selectedId) ?? null, [hand, selectedId])
+  const selectedLegal = useMemo(
+    () => (selectedTile ? legalArms(selectedTile, publicState) : []),
+    [selectedTile, publicState],
+  )
+  const isLiveTarget = useCallback(
+    (arm: DominoArm | 'center') => canAct && selectedTile !== null && selectedLegal.includes(arm),
+    [canAct, selectedTile, selectedLegal],
+  )
+
+  // Hand tiles: enabled while the round is live and it's your turn, and the
+  // tile has ≥1 legal arm (or it's your lead — every tile can open the board).
+  const tileCanSelect = useCallback(
+    (tile: DominoTile): boolean =>
+      canAct && (publicState.center === null || legalArms(tile, publicState).length > 0),
+    [canAct, publicState],
+  )
+
+  const handleTileClick = useCallback(
+    (tile: DominoTile) => {
+      if (!tileCanSelect(tile)) return
+      if (publicState.center === null) {
+        // Leading with an empty board: clicking a tile plays it to the center
+        // immediately (matching the prototype) — no selection state.
+        onPlayTile(tile.id, 'center')
+        setSelectedId(null)
+      } else {
+        setSelectedId((prev) => (prev === tile.id ? null : tile.id))
+      }
+    },
+    [tileCanSelect, publicState.center, onPlayTile],
+  )
+
+  // ---- Boneyard actions ----
+  const canDraw = canAct && noLegalPlay && publicState.boneyardCount > 0
+  const canKnock = canAct && noLegalPlay && publicState.boneyardCount === 0
+
+  // ---- Status ----
+  const eventLine = useMemo(
+    () => computeEventLine(publicState, localPlayerId, opponentName),
+    [publicState, localPlayerId, opponentName],
+  )
+  const promptLine = useMemo(
+    () => computePromptLine(publicState, localPlayerId, opponentName, noLegalPlay),
+    [publicState, localPlayerId, opponentName, noLegalPlay],
+  )
+
+  const opponentHandCount = publicState.handCounts[opponentId] ?? 0
+
+  // ---- Render ----
+  return (
+    <div className="dm-table">
+      {/* Header */}
+      <div className="dm-header">
+        <div className="dm-header-left">
+          <Wordmark small onClick={onLeave} />
+          <span className="dm-game-label">Dominoes</span>
+          <span className="dm-peer-strip">
+            <span
+              className="dm-peer-dot"
+              style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
+            />
+            <span className="dm-peer-label">
+              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+            </span>
+          </span>
+        </div>
+        <ScoreHeader
+          youScore={publicState.scores[localPlayerId] ?? 0}
+          youColor="var(--green-text)"
+          opponentName={opponentName}
+          opponentScore={publicState.scores[opponentId] ?? 0}
+          opponentColor={opponentColor}
+          hint={`to ${publicState.target}`}
+        />
+        <div className="dm-header-actions">
+          <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
+          <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
+          <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
+        </div>
+      </div>
+
+      {/* Code chip */}
+      <div style={{ marginBottom: 'clamp(16px, 2.4vw, 26px)' }}>
+        <span className="chip" style={{ background: 'var(--yellow)', color: 'var(--ink)' }}>Dominoes · {code}</span>
+      </div>
+
+      {/* Error banner */}
+      {notice && <div className="dm-error-banner">{notice}</div>}
+
+      {/* Main table card */}
+      <div className="dm-table-card">
+        {showIntro ? (
+          <DealIntro
+            opponentName={opponentName}
+            opponentColor={opponentColor}
+            yourHandSize={hand.length}
+            opponentHandSize={opponentHandCount}
+            shuffleSound="domino-shuffle"
+            renderCardBack={(p) => <DominoTileBack {...p} />}
+            onComplete={() => setShowIntro(false)}
+          />
+        ) : (
+        <>
+        {/* Status — two lines above the board */}
+        <div className="dm-status-block">
+          <div className="dm-status-event">{eventLine}</div>
+          <div className="dm-status-prompt">{promptLine}</div>
+        </div>
+
+        {/* Board */}
+        <div className="dm-board" ref={boardRef}>
+          {boardReady && (
+            <>
+              {layout.tiles.map((tile, i) => (
+                <BoardTile key={i} tile={tile} unit={unit} />
+              ))}
+              {layout.targets.map((target) => {
+                // The center target only shows while the board is empty and it
+                // is your lead — clicking plays the selected tile to 'center'.
+                if (target.arm === 'center' && !isMyLead) return null
+                const live = isLiveTarget(target.arm)
+                const diameter = target.r * 2 * unit
+                return (
+                  <button
+                    key={target.arm}
+                    type="button"
+                    className={`dm-target${live ? ' dm-target--live' : ''}`}
+                    style={{
+                      left: `calc(50% + ${target.x * unit}px)`,
+                      top: `calc(50% + ${target.y * unit}px)`,
+                      width: diameter,
+                      height: diameter,
+                    }}
+                    onClick={live && selectedTile ? () => onPlayTile(selectedTile.id, target.arm) : undefined}
+                    disabled={!live}
+                    aria-label={live ? 'Play selected tile here' : 'Play target'}
+                  />
+                )
+              })}
+            </>
+          )}
+        </div>
+
+        {/* Their side: hidden hand */}
+        <div className="dm-opponent-row">
+          <span className="dm-opponent-name" style={{ color: opponentColor }}>{opponentName}</span>
+          <span className="dm-opponent-count">{opponentHandCount} tiles · hidden</span>
+          <div className="dm-opponent-backs">
+            {Array.from({ length: opponentHandCount }, (_, i) => (
+              <DominoTileBack key={i} size="small" />
+            ))}
+          </div>
+        </div>
+
+        {/* Hand + boneyard rail */}
+        <div className="dm-hand-rail">
+          <div className="dm-hand">
+            <div className="dm-hand-header">
+              <span className="dm-hand-label">Your hand</span>
+              <span className="dm-hand-stats">{hand.length} tiles</span>
+            </div>
+            <div className="dm-hand-row">
+              {hand.map((tile) => {
+                const selected = selectedId === tile.id
+                const canSelect = tileCanSelect(tile)
+                return (
+                  <button
+                    key={tile.id}
+                    type="button"
+                    className={`dm-hand-tile${selected ? ' dm-hand-tile--selected' : ''}`}
+                    onClick={() => handleTileClick(tile)}
+                    disabled={!canSelect}
+                    aria-label={`Domino ${tile.a} ${tile.b}${selected ? ', selected' : ''}`}
+                  >
+                    <TileHalf pips={tile.a} />
+                    <TileHalf pips={tile.b} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="dm-boneyard">
+            <span className="dm-boneyard-label">Boneyard · {publicState.boneyardCount}</span>
+            <div className="dm-boneyard-actions">
+              <button
+                type="button"
+                className="btn dm-boneyard-btn"
+                disabled={!canDraw}
+                onClick={onDraw}
+              >
+                Draw
+              </button>
+              <button
+                type="button"
+                className="btn btn-coral dm-boneyard-btn"
+                disabled={!canKnock}
+                onClick={onPass}
+              >
+                Knock
+              </button>
+            </div>
+          </div>
+        </div>
+        </>
+        )}
+      </div>
+
+      {/* Footnote */}
+      <p className="dm-footnote">Your hand never leaves this device — only the play does.</p>
+
+      {rulesOpen && <DominoesRulesOverlay onClose={() => setRulesOpen(false)} />}
+    </div>
+  )
+}

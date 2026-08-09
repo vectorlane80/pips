@@ -1,0 +1,391 @@
+/* ===================================================================
+   DominoesTable — All Fives table: status, board pane, hand + boneyard
+   =================================================================== */
+
+.dm-table {
+  --dm-brand: #5b5bd6;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.dm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.dm-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dm-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--dm-brand);
+}
+
+.dm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.dm-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dm-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.dm-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Main table card ---- */
+
+.dm-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Error banner ---- */
+
+.dm-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Status (two lines above the board) ---- */
+
+.dm-status-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: clamp(12px, 2vw, 18px);
+}
+
+.dm-status-event {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.dm-status-prompt {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Board pane ---- */
+
+.dm-board {
+  position: relative;
+  width: 100%;
+  height: clamp(280px, 46vh, 440px);
+  overflow: hidden;
+  border-radius: 20px;
+  border: 3px solid var(--ink);
+  background: #dcdcf0;
+}
+
+/* ---- Board tiles ---- */
+
+.dm-tile {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  background: var(--surface);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 0 4px 0 rgba(23, 23, 58, 0.35);
+  overflow: hidden;
+}
+
+.dm-tile--horizontal {
+  flex-direction: row;
+}
+
+.dm-tile--vertical {
+  flex-direction: column;
+}
+
+/* Divider between the two pip halves, along the tile's long axis */
+.dm-tile--horizontal .dm-tile-half + .dm-tile-half {
+  border-left: 2px solid var(--ink);
+}
+
+.dm-tile--vertical .dm-tile-half + .dm-tile-half {
+  border-top: 2px solid var(--ink);
+}
+
+/* ---- Pip halves ---- */
+
+.dm-tile-half {
+  position: relative;
+  flex: 1;
+}
+
+.dm-tile-pip {
+  position: absolute;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ---- Targets ---- */
+
+.dm-target {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 3px dashed var(--slate-pip);
+  border-radius: 50%;
+  background: transparent;
+  opacity: 0.25;
+  cursor: default;
+  padding: 0;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.dm-target--live {
+  opacity: 1;
+  border-color: var(--dm-brand);
+  cursor: pointer;
+  animation: dm-target-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes dm-target-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+}
+
+/* ---- Opponent row ---- */
+
+.dm-opponent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: clamp(14px, 2vw, 20px) 0 6px;
+}
+
+.dm-opponent-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dm-opponent-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.dm-opponent-backs {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+/* ---- Hand + boneyard rail ---- */
+
+.dm-hand-rail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: clamp(14px, 2vw, 22px);
+  padding-top: clamp(10px, 1.6vw, 16px);
+}
+
+.dm-hand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.dm-hand-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.dm-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dm-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.dm-hand-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Hand tile button — 88 × 46, pip halves side by side with a divider */
+.dm-hand-tile {
+  display: flex;
+  flex-direction: row;
+  width: 88px;
+  height: 46px;
+  padding: 0;
+  background: var(--surface);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  box-shadow: 0 4px 0 rgba(23, 23, 58, 0.35);
+  overflow: hidden;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dm-hand-tile:disabled {
+  cursor: default;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.dm-hand-tile .dm-tile-half + .dm-tile-half {
+  border-left: 2px solid var(--ink);
+}
+
+.dm-hand-tile:hover:not(:disabled) {
+  transform: translateY(-6px);
+}
+
+.dm-hand-tile--selected,
+.dm-hand-tile--selected:hover {
+  border-color: var(--dm-brand);
+  box-shadow: 0 6px 0 var(--dm-brand);
+  transform: translateY(-10px);
+}
+
+/* ---- Boneyard ---- */
+
+.dm-boneyard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.dm-boneyard-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+.dm-boneyard-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dm-boneyard-btn {
+  height: 44px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+/* ---- Tile backs (deal intro + opponent hand) ---- */
+
+.dm-tile-back {
+  position: relative;
+  display: block;
+  flex: none;
+  background: var(--dm-brand);
+  border-color: var(--ink);
+  border-style: solid;
+}
+
+.dm-tile-back__dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.dm-tile-back--fan {
+  width: 23px;
+  height: 44px;
+  border-width: 2px;
+  border-radius: 6px;
+}
+
+.dm-tile-back--stock {
+  width: 40px;
+  height: 76px;
+  border-width: 3px;
+  border-radius: 10px;
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+.dm-tile-back--small {
+  width: 14px;
+  height: 26px;
+  border-width: 2px;
+  border-radius: 4px;
+}
+
+/* ---- Footnote ---- */
+
+.dm-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
