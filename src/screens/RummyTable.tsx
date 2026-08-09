@@ -96,8 +96,9 @@ function computeStatus(
       }
     }
 
-    // Hovering a discard card
-    if (hoverIndex !== null && publicState.discardPile.cards.length > 0) {
+    // Hovering a discard card. hoverIndex can be stale across a round boundary (clicking a
+    // pile card removes it, so onMouseLeave never fires) — ignore it if it's out of range.
+    if (hoverIndex !== null && hoverIndex < publicState.discardPile.cards.length) {
       const pile = publicState.discardPile.cards
       const n = pile.length - hoverIndex
       const reached = getReachedCard(pile, hoverIndex)
@@ -324,6 +325,7 @@ export function RummyTable({
   const [justDrawn, setJustDrawn] = useState<Card | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
   const prevHandRef = useRef<Card[]>(hand)
+  const prevDiscardIdsRef = useRef<Set<string>>(new Set(publicState.discardPile.cards.map((c) => c.id)))
 
   // Fresh-round detection: show the deal intro exactly once per distinct
   // roundNumber this component instance ever sees.
@@ -363,18 +365,31 @@ export function RummyTable({
     setJustDrawn(null)
   }, [publicState.turn.turnNumber])
 
-  // Detect single-card draws for "you drew the X" feedback
+  // Detect single-card draws for "you drew the X" feedback. A single card taken from the
+  // discard pile is also pre-selected — it's the card you reached for, same as the
+  // obligated card in a multi-card take (just without the must-meld obligation).
   useEffect(() => {
     const prev = prevHandRef.current
     const diff = hand.length - prev.length
     if (diff === 1 && publicState.turn.phase === 'discard' && !publicState.obligatedCardId) {
       const newCard = hand.find((c) => !prev.some((pc) => pc.id === c.id))
-      if (newCard) setJustDrawn(newCard)
+      if (newCard) {
+        setJustDrawn(newCard)
+        if (prevDiscardIdsRef.current.has(newCard.id)) {
+          setSelectedIds((sel) => (sel.includes(newCard.id) ? sel : [...sel, newCard.id]))
+        }
+      }
     } else {
       setJustDrawn(null)
     }
     prevHandRef.current = hand
   }, [hand, publicState.turn.phase, publicState.obligatedCardId])
+
+  // Runs after the hand-diff effect above, so that effect always sees the pile as it was
+  // BEFORE the draw that grew the hand.
+  useEffect(() => {
+    prevDiscardIdsRef.current = new Set(publicState.discardPile.cards.map((c) => c.id))
+  }, [publicState.discardPile])
 
   // Sound effects — diff room state transitions, but only for my own actions
   // (never for the opponent's turn — otherwise a fast bot spams sound).

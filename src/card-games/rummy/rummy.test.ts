@@ -612,10 +612,9 @@ describe('Rummy integration harness', () => {
     expect(discardResult.outcome.ok).toBe(true)
   })
 
-  it('going out via meld — round ends, scores update', () => {
-    // Construct: p1 has exactly 3 cards forming a meld (run A♣ 2♣ 3♣), p2 has cards for deadwood
-    // c0=A♣, c1=2♣, c2=3♣ (run), discard has c3=4♣, p2 has c4=5♣ c5=6♣ c6=7♣ c7=8♣ c8=9♣
-    // p2 deadwood = 5×5 = 25
+  it('melding your whole hand does NOT end the round — the turn just passes', () => {
+    // Going out requires a discard. p1 melds all 3 cards (run A♣ 2♣ 3♣) — hand empty, but the
+    // round continues and the turn advances to p2 with no scoring.
     const p2Cards = ['c4', 'c5', 'c6', 'c7', 'c8']
     const remaining = createStandardDeck().map(c => c.id).filter(id =>
       id !== 'c0' && id !== 'c1' && id !== 'c2' && id !== 'c3' && !p2Cards.includes(id)
@@ -634,17 +633,51 @@ describe('Rummy integration harness', () => {
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
-    expect(pub.roundOver).toBe(true)
-    expect(pub.roundWinnerId).toBe('p1')
+    expect(pub.roundOver).toBe(false)
+    expect(pub.roundWinnerId).toBe(null)
     expect(cardCount(result.rummy.session.privateStates['p1'].hand)).toBe(0)
-
-    // p1: A♣2♣3♣ meld value = 5+5+5=15; hand empty → delta +15
-    // p2: no melds, deadwood = 5♣+6♣+7♣+8♣+9♣ at 5 each = 25 → delta -25
-    expect(pub.scores['p1']).toBe(15)
-    expect(pub.scores['p2']).toBe(-25)
+    expect(pub.handCounts['p1']).toBe(0)
+    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(pub.turn.phase).toBe('draw')
+    expect(pub.scores).toEqual({ p1: 0, p2: 0 })
 
     expect(totalCards(result.rummy)).toBe(52)
     expect(allUniqueCardIds(result.rummy).size).toBe(52)
+  })
+
+  it('empty-hand player goes out on a later turn — draw then discard ends the round', () => {
+    // p1 melded out earlier (A♣2♣3♣ on the table, hand empty). On their next turn they draw
+    // from the stock and discard that card — THAT discard ends the round.
+    const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const p2Cards = ['c4', 'c5', 'c6']
+    const used = new Set(['c0', 'c1', 'c2', 'c3', ...p2Cards])
+    const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: [],
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['c3'],
+      stockCardIds: stockCards,
+      phase: 'draw',
+      currentPlayerIndex: 0,
+      melds: { p1: [p1MeldZone], p2: [] },
+    })
+
+    const drawn = applyRummyAction(rummy, 'p1', { type: 'DRAW_FROM_STOCK' })
+    expect(drawn.outcome.ok).toBe(true)
+    const drawnCard = drawn.rummy.session.privateStates['p1'].hand.cards[0]
+
+    const result = applyRummyAction(drawn.rummy, 'p1', { type: 'DISCARD_CARD', cardId: drawnCard.id })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: A♣2♣3♣ meld = 15; p2: no melds, deadwood 5♣6♣7♣ = 15 → -15
+    expect(pub.scores['p1']).toBe(15)
+    expect(pub.scores['p2']).toBe(-15)
+    expect(totalCards(result.rummy)).toBe(52)
   })
 
   it('going out via discard — round ends, scores update', () => {
@@ -682,14 +715,15 @@ describe('Rummy integration harness', () => {
 
   it('match win — score crosses 100', () => {
     // Construct: p1 at 95, going out adds ≥10 → crosses 100 → p1 wins
-    // p1 hand: cards forming a meld (c0,c1,c2 = A♣,2♣,3♣), p2 deadwood = 25
-    const p2Cards = ['c4', 'c5', 'c6', 'c7', 'c8']
+    // p1 hand: meld cards (c0,c1,c2 = A♣,2♣,3♣) plus 9♣ (c8) to discard out with; p2 deadwood = 20
+    const p2Cards = ['c4', 'c5', 'c6', 'c7']
+    const p1Cards = ['c0', 'c1', 'c2', 'c8']
     const remaining = createStandardDeck().map(c => c.id).filter(id =>
-      id !== 'c0' && id !== 'c1' && id !== 'c2' && id !== 'c3' && !p2Cards.includes(id)
+      !p1Cards.includes(id) && id !== 'c3' && !p2Cards.includes(id)
     )
 
     const rummy = buildSession({
-      p1HandCardIds: ['c0', 'c1', 'c2'],
+      p1HandCardIds: p1Cards,
       p2HandCardIds: p2Cards,
       discardCardIds: ['c3'],
       stockCardIds: remaining,
@@ -698,14 +732,16 @@ describe('Rummy integration harness', () => {
       scores: { p1: 95, p2: 0 },
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c8' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
     expect(pub.roundOver).toBe(true)
     expect(pub.roundWinnerId).toBe('p1')
-    // p1 at 95, melds A♣2♣3♣ = 5+5+5=15 → 110 ≥ 100 target → match winner
-    // p2: no melds, deadwood = 5×5=25 → 0-25 = -25
+    // p1 at 95, melds A♣2♣3♣ = 5+5+5=15, discards out → 110 ≥ 100 target → match winner
+    // p2: no melds, deadwood = 4×5=20 → 0-20 = -20
     expect(pub.scores['p1']).toBe(110)
     expect(pub.matchWinnerId).toBe('p1')
   })
@@ -1237,11 +1273,12 @@ describe('Rummy integration harness', () => {
   // ── new symmetric scoring & ace-high tests ──────────────────
 
   it('going out — both players score independently (loser credited for prior melds)', () => {
-    // p1 hand: 2♣(c1),2♦(c14),2♥(c27),2♠(c40) → set of 4 twos, meld value = 5×4 = 20
+    // p1 hand: 2♣(c1),2♦(c14),2♥(c27),2♠(c40) → set of 4 twos, meld value = 5×4 = 20,
+    // plus J♠(c49) to discard out with
     // p2 meld on table: 5♣(c4),5♦(c17),5♥(c30),5♠(c43) → set of 4 fives, value = 20
     // p2 hand (leftover deadwood): 6♣(c5),6♦(c18) → deadwood = 5+5 = 10
     // p1 delta = 20 - 0 = 20; p2 delta = 20 - 10 = 10
-    const p1Cards = ['c1', 'c14', 'c27', 'c40']
+    const p1Cards = ['c1', 'c14', 'c27', 'c40', 'c49']
     const p2HandCards = ['c5', 'c18']
     const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30'), cardMap('c43')]
     const used = new Set([...p1Cards, ...p2HandCards, 'c4', 'c17', 'c30', 'c43', 'c51'])
@@ -1259,7 +1296,9 @@ describe('Rummy integration harness', () => {
       melds: { p1: [], p2: [p2MeldZone] },
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c1', 'c14', 'c27', 'c40'] })
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c1', 'c14', 'c27', 'c40'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c49' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
@@ -1274,9 +1313,10 @@ describe('Rummy integration harness', () => {
   })
 
   it('going out via Q-K-A ace-high run — ace contributes 15 to meld value', () => {
-    // p1 hand: Q♠(c50),K♠(c51),A♠(c39) → ace-high run, meld value = 10+10+15 = 35
+    // p1 hand: Q♠(c50),K♠(c51),A♠(c39) → ace-high run, meld value = 10+10+15 = 35,
+    // plus 5♣(c4) to discard out with
     // p2 hand: 2♣(c1),3♣(c2),4♣(c3) → deadwood = 5+5+5 = 15
-    const p1Cards = ['c50', 'c51', 'c39']
+    const p1Cards = ['c50', 'c51', 'c39', 'c4']
     const p2Cards = ['c1', 'c2', 'c3']
     const used = new Set([...p1Cards, ...p2Cards, 'c0'])
     const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
@@ -1290,7 +1330,9 @@ describe('Rummy integration harness', () => {
       currentPlayerIndex: 0,
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c50', 'c51', 'c39'] })
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c50', 'c51', 'c39'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c4' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
@@ -1305,14 +1347,14 @@ describe('Rummy integration harness', () => {
   })
 
   it('match winner tiebreak — both cross target, opponent higher → opponent wins', () => {
-    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+5+5 = 15
+    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+5+5 = 15, plus 6♣(c5) to discard out with
     // p2 meld: 10♣(c9),10♦(c22),10♥(c35) → set of 3 tens, value = 10+10+10 = 30
     // p2 hand: 5♣(c4),5♦(c17) → deadwood = 5+5 = 10
     // Start: p1=95, p2=95
     // p1 delta = 15 → p1=110 (≥100)
     // p2 delta = 30-10=20 → p2=115 (≥100)
     // Both at target, p2 higher → opponent (p2) wins
-    const p1Cards = ['c0', 'c1', 'c2']
+    const p1Cards = ['c0', 'c1', 'c2', 'c5']
     const p2HandCards = ['c4', 'c17']
     const p2MeldCards = [cardMap('c9'), cardMap('c22'), cardMap('c35')]
     const used = new Set([...p1Cards, ...p2HandCards, 'c9', 'c22', 'c35', 'c51'])
@@ -1331,7 +1373,9 @@ describe('Rummy integration harness', () => {
       melds: { p1: [], p2: [p2MeldZone] },
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c5' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
@@ -1345,14 +1389,14 @@ describe('Rummy integration harness', () => {
   })
 
   it('match winner tiebreak — both cross target, equal scores → player who went out wins', () => {
-    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+5+5 = 15
+    // p1 hand: A♣(c0),2♣(c1),3♣(c2) → meld value = 5+5+5 = 15, plus 6♣(c5) to discard out with
     // p2 meld: 5♣(c4),5♦(c17),5♥(c30),5♠(c43) → set of 4 fives, value = 20
     // p2 hand: 6♦(c18) → deadwood = 5
     // Start: p1=95, p2=95
     // p1 delta = 15 → p1=110 (≥100)
     // p2 delta = 20-5=15 → p2=110 (≥100)
     // Both at target with equal scores → player who went out (p1) wins
-    const p1Cards = ['c0', 'c1', 'c2']
+    const p1Cards = ['c0', 'c1', 'c2', 'c5']
     const p2HandCards = ['c18']
     const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30'), cardMap('c43')]
     const used = new Set([...p1Cards, ...p2HandCards, 'c4', 'c17', 'c30', 'c43', 'c51'])
@@ -1371,7 +1415,9 @@ describe('Rummy integration harness', () => {
       melds: { p1: [], p2: [p2MeldZone] },
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c5' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
@@ -1419,17 +1465,17 @@ describe('Rummy integration harness', () => {
   it('LAY_OFF onto the opponent\'s meld — scores to the layer, not the meld owner', () => {
     // p1 already melded A♣,2♣,3♣ (c0,c1,c2 = value 15) earlier this round.
     // p2's meld on the table: 5♣,5♦,5♥ (c4,c17,c30 = value 15), owned by p2.
-    // p1's only remaining card is 5♠ (c43) — laying it off onto p2's set goes p1 out,
-    // and the 5♠'s value (5) should count toward p1's score, not p2's.
+    // p1 lays off 5♠ (c43) onto p2's set, then discards J♠ (c49) to go out — the 5♠'s
+    // value (5) should count toward p1's score, not p2's.
     const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2')]
     const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
     const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30')]
     const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
-    const used = new Set(['c0', 'c1', 'c2', 'c4', 'c17', 'c30', 'c43', 'c5', 'c18', 'c51'])
+    const used = new Set(['c0', 'c1', 'c2', 'c4', 'c17', 'c30', 'c43', 'c49', 'c5', 'c18', 'c51'])
     const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
 
     const rummy = buildSession({
-      p1HandCardIds: ['c43'],
+      p1HandCardIds: ['c43', 'c49'],
       p2HandCardIds: ['c5', 'c18'],   // 6♣,6♦ → deadwood 10
       discardCardIds: ['c51'],
       stockCardIds: stockCards,
@@ -1438,7 +1484,9 @@ describe('Rummy integration harness', () => {
       melds: { p1: [p1MeldZone], p2: [p2MeldZone] },
     })
 
-    const result = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c43'] })
+    const laidOff = applyRummyAction(rummy, 'p1', { type: 'LAY_OFF', targetPlayerId: 'p2', meldIndex: 0, cardIds: ['c43'] })
+    expect(laidOff.outcome.ok).toBe(true)
+    const result = applyRummyAction(laidOff.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c49' })
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.rummy.session.publicState
@@ -1510,12 +1558,12 @@ describe('Rummy integration harness', () => {
     const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
     const p2MeldCards = [cardMap('c4'), cardMap('c5'), cardMap('c6')]
     const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
-    const used = new Set(['c13', 'c14', 'c15', 'c4', 'c5', 'c6', 'c3', 'c2', 'c51'])
+    const used = new Set(['c13', 'c14', 'c15', 'c4', 'c5', 'c6', 'c3', 'c2', 'c40', 'c41', 'c51'])
     const stockCards = createStandardDeck().map(c => c.id).filter(id => !used.has(id))
 
     const rummy = buildSession({
-      p1HandCardIds: ['c3'],   // 4♣
-      p2HandCardIds: ['c2'],   // 3♣
+      p1HandCardIds: ['c3', 'c40'],   // 4♣ + 2♠ filler (an emptied hand would auto-advance the turn)
+      p2HandCardIds: ['c2', 'c41'],   // 3♣ + 3♠ filler
       discardCardIds: ['c51'],
       stockCardIds: stockCards,
       phase: 'discard',

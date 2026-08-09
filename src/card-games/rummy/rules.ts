@@ -263,12 +263,12 @@ function makeValidator(
         }
       }
 
-      if (cardCount(newHand) === 0) {
-        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, newMelds, publicState.layoffs, newObligated)
-      }
+      // Going out requires a discard — melding your last card just ends your turn (nothing
+      // left to discard), and the round continues.
+      const meldTurn = cardCount(newHand) === 0 ? advanceTurn(publicState.turn, 'draw') : publicState.turn
       return {
         ok: true,
-        publicState: { ...publicState, melds: newMelds, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
+        publicState: { ...publicState, turn: meldTurn, melds: newMelds, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
     }
@@ -308,12 +308,11 @@ function makeValidator(
         }
       }
 
-      if (cardCount(newHand) === 0) {
-        return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.melds, newLayoffs, newObligated)
-      }
+      // Same discard-to-go-out rule as LAY_DOWN_MELD: an empty hand ends the turn, not the round.
+      const layoffTurn = cardCount(newHand) === 0 ? advanceTurn(publicState.turn, 'draw') : publicState.turn
       return {
         ok: true,
-        publicState: { ...publicState, layoffs: newLayoffs, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
+        publicState: { ...publicState, turn: layoffTurn, layoffs: newLayoffs, obligatedCardId: newObligated, handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) } },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },
       }
     }

@@ -742,7 +742,7 @@ describe('bot review-fix regressions', () => {
     expect(action.type).not.toBe('START_NEXT_ROUND')
   })
 
-  it('greedy-meld fix: melds all 6 cards for the round win instead of stranding 2', () => {
+  it('greedy-meld fix: melds all 6 cards instead of stranding 2', () => {
     // A♣,2♣,3♣,4♣,A♦,A♥ — optimal play is 2♣3♣4♣ (run) + A♣A♦A♥ (set), all 6 melded.
     // The old greedy-largest strategy laid the 4-card run first and stranded A♦,A♥.
     const p1Cards = ['c0', 'c1', 'c2', 'c3', 'c13', 'c26']
@@ -760,19 +760,17 @@ describe('bot review-fix regressions', () => {
     })
 
     let r = rummy
-    let wentOut = false
-    for (let i = 0; i < 10 && !wentOut; i++) {
+    for (let i = 0; i < 10 && currentPlayer(r.session.publicState.turn) === 'p1'; i++) {
       const result = runRummyBotTurn(r, 'p1', rummyBotStrategy)
       expect(result.outcome.ok).toBe(true)
       r = result.rummy
-      if (r.session.publicState.roundOver) {
-        wentOut = true
-      }
     }
 
-    expect(wentOut).toBe(true)
-    expect(r.session.publicState.roundWinnerId).toBe('p1')
+    // All 6 cards melded — hand empty. Going out needs a discard, so the round
+    // continues and the turn passes to p2.
     expect(cardCount(r.session.privateStates['p1'].hand)).toBe(0)
+    expect(r.session.publicState.roundOver).toBe(false)
+    expect(currentPlayer(r.session.publicState.turn)).toBe('p2')
     expect(totalCards(r)).toBe(52)
   })
 })
