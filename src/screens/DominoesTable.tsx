@@ -65,14 +65,14 @@ function halfOrder(tile: LaidTile): [number, number] {
   return tile.dir === 'up' ? [tile.outer, tile.inner] : [tile.inner, tile.outer]
 }
 
-function BoardTile({ tile, unit }: { tile: LaidTile; unit: number }) {
+function BoardTile({ tile, unit, cx, cy }: { tile: LaidTile; unit: number; cx: number; cy: number }) {
   const [first, second] = halfOrder(tile)
   return (
     <div
       className={`dm-tile ${tile.horizontal ? 'dm-tile--horizontal' : 'dm-tile--vertical'}`}
       style={{
-        left: `calc(50% + ${tile.x * unit}px)`,
-        top: `calc(50% + ${tile.y * unit}px)`,
+        left: `calc(50% + ${(tile.x - cx) * unit}px)`,
+        top: `calc(50% + ${(tile.y - cy) * unit}px)`,
         width: tile.w * unit,
         height: tile.h * unit,
       }}
@@ -280,6 +280,11 @@ export function DominoesTable({
   )
   const unit = scale * 40
   const boardReady = scale > 0
+  // Content-bounds midpoint: render everything offset by this so the board
+  // centers itself as it grows (scaleToFit sizes by true bounds, so the
+  // midpoint — not the origin — must sit at the pane center).
+  const cx = (layout.minX + layout.maxX) / 2
+  const cy = (layout.minY + layout.maxY) / 2
 
   // ---- Selection / legal targets ----
   const selectedTile = useMemo(() => hand.find((t) => t.id === selectedId) ?? null, [hand, selectedId])
@@ -410,7 +415,7 @@ export function DominoesTable({
           {boardReady && (
             <>
               {layout.tiles.map((tile, i) => (
-                <BoardTile key={i} tile={tile} unit={unit} />
+                <BoardTile key={i} tile={tile} unit={unit} cx={cx} cy={cy} />
               ))}
               {layout.targets.map((target) => {
                 // The center target only shows while the board is empty and it
@@ -424,8 +429,8 @@ export function DominoesTable({
                     type="button"
                     className={`dm-target${live ? ' dm-target--live' : ''}`}
                     style={{
-                      left: `calc(50% + ${target.x * unit}px)`,
-                      top: `calc(50% + ${target.y * unit}px)`,
+                      left: `calc(50% + ${(target.x - cx) * unit}px)`,
+                      top: `calc(50% + ${(target.y - cy) * unit}px)`,
                       width: diameter,
                       height: diameter,
                     }}
