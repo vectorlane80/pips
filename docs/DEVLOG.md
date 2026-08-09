@@ -1568,3 +1568,43 @@ shipping each verified charter promptly.
   its own directory + vitest).
 - **Continue?** All requests done. Push to origin/main per approval; run
   ends.
+
+## 2026-08-09 — Battleship (single cycle, specs 13/13a/14a/14b)
+
+- **Charter:** Battleship from `Design Handoff/BATTLESHIP.md`, pre-approved
+  by the invocation. Routing: deepseek:flash implements (user order:
+  favor DeepSeek, no Codex), sonnet reviews, lead specs/verifies.
+- **Architecture:** first non-card game on `src/engine/` — hidden ship
+  boards are HostSession private state; old room.ts broadcast system
+  structurally can't host it (guests would receive the opponent board).
+  New `src/board-games/battleship/` mirrors `card-games/<game>/`.
+- **M1:** module + 25 tests. DeepSeek hit its 25-iteration cap mid-debug;
+  lead diagnosed both failures as test-harness bugs (full-fleet base
+  passed to randomFleet; placement driven by currentPlayer, which
+  placement deliberately doesn't advance) — module code was correct.
+  Fix spec 13a; DeepSeek's honest deviation note flagged MY wrong
+  projected test count. Review: CLEAN, oscar.test.ts (8 probes) kept.
+- **M2:** screens (14a) + wiring (14b), each one dispatch; both hit the
+  iteration cap AFTER writing everything, verification re-run by lead.
+- **M3 (live):** full host-vs-bot match in the browser: manual placement
+  + randomize + rotate verified; bot hunt/target observed boxing in and
+  sinking four of my ships; sunk-reveal (art at 0.32, pill flip, score)
+  exact; won 5–4; results + rematch reset clean; zero console errors.
+  UI review: approve, no blockers.
+- **Environment battles, for the record:** a stale vite from last night
+  held port 5173 (killed); the browser pane spent most of the session
+  document.hidden, which (a) freezes screenshots at stale frames,
+  (b) throttles timers, (c) silently reloads the page on recovery —
+  wasted ~a dozen tool calls until diagnosed via
+  performance.navigation type=reload + rAF starvation. Workarounds:
+  drive via a11y refs + coordinate clicks scaled by the 1.6 screenshot
+  factor, verify via DOM probes. Also: read_page truncates ~204
+  interactive elements, synthetic hover doesn't reach React delegated
+  listeners (known from Connect 4), synthetic keypress targets window
+  so document-level key listeners need a real keyboard (button path
+  verified; document dispatch verified).
+- **Sounds:** ship-hit/ship-miss/ship-sunk registered with placeholder
+  audio; piece-drop reused for placement; game-win on results. Real
+  audio requested from user at wrap-up.
+- **Continue?** Definition of done met minus the user-facing asks
+  (commit authorization, real audio). Wrap-up.

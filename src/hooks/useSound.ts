@@ -14,11 +14,14 @@ import letterWrong from '../assets/sounds/letter-wrong.mp3'
 import roundWin from '../assets/sounds/round-win.mp3'
 import gameWin from '../assets/sounds/game-win.mp3'
 import error from '../assets/sounds/error.mp3'
+import shipHit from '../assets/sounds/ship-hit.mp3'
+import shipMiss from '../assets/sounds/ship-miss.mp3'
+import shipSunk from '../assets/sounds/ship-sunk.mp3'
 
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'mark-place' | 'piece-drop' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
-  | 'letter-wrong' | 'round-win' | 'game-win' | 'error'
+  | 'letter-wrong' | 'round-win' | 'game-win' | 'error' | 'ship-hit' | 'ship-miss' | 'ship-sunk'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -36,6 +39,9 @@ const SOUND_FILES: Record<SoundName, string> = {
   'round-win': roundWin,
   'game-win': gameWin,
   'error': error,
+  'ship-hit': shipHit,
+  'ship-miss': shipMiss,
+  'ship-sunk': shipSunk,
 }
 
 const COOKIE_NAME = 'pips-sound'

@@ -4,7 +4,7 @@ import { Wordmark } from '../components/Wordmark'
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -14,6 +14,7 @@ export function Landing({
   onPickGame: (g: Game) => void
   onPickRummy: () => void
   onPickPhase10: () => void
+  onPickBattleship: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
@@ -138,6 +139,26 @@ export function Landing({
               <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Phase 10</span>
               <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
                 Ten phases, first to finish wins
+              </span>
+              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                2 players
+              </span>
+            </button>
+            <button
+              type="button"
+              className="shelf-tile"
+              disabled={!ready}
+              onClick={onPickBattleship}
+              style={{
+                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                background: ready ? '#1a6fae' : 'var(--grey-fill)',
+                color: ready ? '#fff' : 'var(--disabled-text)',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Battleship</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                Place your fleet, call your shots, sink all five.
               </span>
               <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
                 2 players

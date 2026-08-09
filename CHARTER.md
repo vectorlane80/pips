@@ -1,64 +1,104 @@
-# Charter: Engine-core promotion (src/engine/)
+# Charter: Battleship
 
 **Mode:** directed
 **Started:** 2026-08-09
-**Pre-approved:** yes — the lead investigated the grid/path-game abstraction
-question, recommended (option 1) promoting the game-agnostic modules out of
-`src/card-engine/`, and the user replied "Do number 1. Use /autonomous-dev-loop
-and /model-routing — but don't use codex at all." That reply is the charter
-approval; scope is exactly recommendation 1.
+**Pre-approved:** yes — user: "Now, implement battleship from the design
+handoff folder," with `/autonomous-dev-loop` + `/model-routing`, "favor
+deepseek over codex." Also requested: at wrap-up, a list of needed sound
+files (their guess: hit, miss, sunk — confirm or extend).
 
-**Delegation:** per `/model-routing`, with Codex excluded by user order.
-Implementation (mechanical refactor) → `deepseek:flash` (live-probed OK at
-charter start); adversarial review → `claude --model sonnet --effort medium`;
-spec authoring + loop driving + verification + docs → this session (session
-model is Fable, the designated spec-author tier — no external call needed).
+**Delegation:** implementation + tests → `deepseek:flash` (user prefers
+DeepSeek; probed OK earlier today); adversarial review → `claude --model
+sonnet --effort medium`; spec/verify/docs/git → lead (Fable session).
+Commits: the user authorized commit+push for the previous charter's wrap-up;
+this charter returns to the repo default — land verified, request commit
+authorization at wrap-up (project CLAUDE.md forbids the loop committing
+without it).
 
-**Working branch:** `main`, per this repo's established pattern. No
-`git commit` / `git push` by the loop (project CLAUDE.md); the slice lands
-verified in the working tree, commit deferred to user authorization at
-wrap-up. Single-cycle run, lead present — the hourly safety-net scheduler is
-deliberately skipped (it exists to revive long unattended runs; here it would
-only risk an orphaned cron).
+## Design source
+`Design Handoff/BATTLESHIP.md` + working prototype in
+`Design Handoff/Pips.dc.html` (logic ~1600–1790, view ~2380–2465, markup
+~415–510). Assets in `Design Handoff/assets/battleship/`. Brand `#1a6fae`.
 
-## Scope (locked)
+## Architecture decision (locked)
 
-Move the three game-agnostic modules — `sync.ts`, `turn-engine.ts`, `rng.ts`,
-each with its test file — from `src/card-engine/` to a new `src/engine/`
-directory, verbatim (no behavior change, no API change). Update every
-importer. No re-export shims. `git mv` so history survives the eventual
-commit.
+Battleship has hidden information (enemy ship positions), so it CANNOT join
+the old broadcast-everything system (`src/state/room.ts`) — a guest would
+receive the opponent's board over the wire. It is the first non-card game on
+the engine core: `src/engine/` `HostSession` with per-player private state
+(your board) and public state (shots, sunk reveals, turn), mirroring the
+Rummy/Phase 10 wiring shape (own Room/Table/Results screens, host-side
+session, action intents over PeerJS, `runBotTurn` for the house bot).
 
-Rationale (from the investigation): these three modules contain no card
-knowledge and are exactly what Battleship (hidden per-player boards =
-`HostSession` private state) and Wahoo (seeded RNG, turn engine with
-extra-turn) need. Promoting them makes the shared core real without building
-a speculative grid/path engine.
+Game logic lives in `src/board-games/battleship/` (`state.ts`, `rules.ts`,
+`bot.ts`, tests beside code) — the board-game sibling of
+`src/card-games/<game>/`. Nothing goes in `src/engine/` (no grid engine,
+per the standing investigation) and nothing card-related is touched.
+
+## Rules (locked, from prototype)
+- Fleet: Carrier 5, Battleship 4, Cruiser 3, Submarine 3, Destroyer 2.
+  10×10 board, flat 100-cell row-major array, cell = ship id | null.
+- Placement: anchor + orientation h (extends right) / v (extends down); no
+  overlap, no off-grid. Randomize-remaining available. Battle starts only
+  when both players' five ships are down.
+- Battle: one shot per turn, turn passes after every shot (hit or miss).
+  Shot marks `hit`/`miss`; a ship with all cells hit is sunk (+1 score to
+  shooter, shape revealed to the shooter). All five sunk = match over,
+  single match, no rematch series.
+- Bot: hunt/target — if any unresolved hit exists on the target board, fire
+  only at unfired orthogonal neighbors of unresolved hits; else random
+  unfired cell. Bot never reads unhit ship positions.
+- Host-authoritative: both fleets live host-side; clients see only their own
+  board plus shot outcomes. Sunk reveal sends the sunk ship's cells only.
+
+## Hidden-information contract (locked)
+- Private state per player: their own board (ship placements).
+- Public state: both players' hit/miss grids, sunk-ship reveals (ship id +
+  cells, only once sunk), fleet-status pills data (own = true state via
+  private board; enemy = sunk-only), turn state, phase, scores, status.
+- The enemy's unsunk ship positions must never appear in public state or in
+  the guest's snapshot. This is the review's #1 attack target every cycle.
+- Placement happens client-side (layout is the player's secret) and is
+  submitted as a PLACE_FLEET action; host validates legality (exact fleet,
+  no overlap, in bounds) before accepting. Randomize uses client-local
+  Math.random — layout secrecy, not fairness, is what matters; host RNG
+  (`createRng`) seeds only the bot's placement + targeting.
 
 ## Non-goals
-- **No grid engine, no path engine.** Per the investigation: grid games share
-  ~10 lines of index math; abstract only when a second game of a family
-  exists.
-- **`bot.ts` stays in `src/card-engine/`.** It is also generic (imports only
-  sync), but the approved scope named exactly three modules. Candidate for a
-  later promotion — noted in REQUESTS.md.
-- **No edits to `CLAUDE.md`** (user-owned). Its card-engine import
-  constraints implicitly extend to `src/engine/`; flagged in REQUESTS.md for
-  the user to codify if desired.
-- No Battleship work, no behavior changes, no drive-by refactors.
+- No grid engine; index math is written inline in the game module.
+- No rematch series / best-of; no round system.
+- No difficulty levels (one bot policy, like the prototype).
+- No spectators, no >2 players.
+- Placeholder sounds only if trivially reusable; the real deliverable is
+  the wrap-up sound-file list for the user (their guess: hit, miss, sunk).
+- No automated DOM tests (repo has no jsdom); UI is live-verified in the
+  browser per established practice.
 
 ## Milestones
-- M1: files moved, all importers updated, `npx tsc -b --noEmit` + `npm test`
-  (481) + `npm run build` clean, review clean, docs
-  (`docs/card-engine.md`, `README.md`) updated to the new layout.
+- M1: game module — `src/board-games/battleship/state.ts` (types, session
+  creation), `rules.ts` (ActionValidator: PLACE_FLEET, FIRE), `bot.ts`
+  (placement + hunt/target strategy) + vitest coverage incl. a
+  no-leak test asserting the guest snapshot never contains enemy ship
+  cells.
+- M2: screens + wiring — BattleshipRoom/Table/Results (or shared-results
+  reuse), placement UI (tray, hover preview, rotate incl. spacebar,
+  randomize, start), battle UI (fire, markers, ship art, fleet pills),
+  App.tsx routing + bot loop, Landing/room-picker entries, assets copied
+  to the repo's static-asset location, sounds wired where files exist.
+- M3: live browser verification of a full host-vs-bot match; review of the
+  full charter diff (leak hunt); docs (`docs/battleship.md`), README,
+  state files; sound-file list delivered in chat.
 
 ## Definition of done
-- `src/engine/` holds sync/turn-engine/rng (+tests); `src/card-engine/` holds
-  only card-specific modules (cards, deck, zones, bot) importing from
-  `../engine/`.
-- Zero references to the old paths anywhere in `src/`.
-- Typecheck, 481 tests, and build all green, re-run by the lead.
-- Working tree left uncommitted-but-staged-clean for user commit.
+- Full host-vs-bot match plays placement → battle → results in a real
+  browser with zero console errors; host-vs-guest flow code-reviewed for
+  leaks (live two-peer test if feasible in one browser pane, else
+  snapshot-level tests + review stand in).
+- `npx tsc -b --noEmit`, `npm test`, `npm run build` clean throughout.
+- Review finds no path that exposes enemy unsunk positions to a client.
+- Sound-file list (with any beyond hit/miss/sunk justified) reported.
 
 ## Run budget
-2 cycles (expect 1). Stop when the definition of done is met.
+8 cycles (expect 3). Any milestone unresolved after 3 cycles forces a
+pivot/pause decision. Single-charter attended run: no safety-net cron
+(logged deviation, same rationale as the engine-core run).

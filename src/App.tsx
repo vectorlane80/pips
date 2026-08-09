@@ -36,8 +36,17 @@ import { Phase10Table } from './screens/Phase10Table'
 import { Phase10Results } from './screens/Phase10Results'
 import { Phase10Room } from './screens/Phase10Room'
 
+// ---- Battleship (separate parallel session, per CHARTER.md resolution #7) ----
+import { createBattleshipGame, type BattleshipSession, type BattleshipPublicState, type BattleshipPrivateState, type BattleshipAction, type ShipId } from './board-games/battleship/state'
+import { applyBattleshipAction, runBattleshipBotTurn } from './board-games/battleship/rules'
+import { makeBattleshipBotStrategy } from './board-games/battleship/bot'
+import { BattleshipTable } from './screens/BattleshipTable'
+import { BattleshipResults } from './screens/BattleshipResults'
+import { BattleshipRoom } from './screens/BattleshipRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
+type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -75,6 +84,16 @@ export default function App() {
   const [phase10Connection, setPhase10Connection] = useState<'connected' | 'disconnected'>('connected')
   const [phase10Waiting, setPhase10Waiting] = useState(false)
 
+  // ---- Battleship ----
+  const [battleshipRole, setBattleshipRole] = useState<'host' | 'guest' | null>(null)
+  const [battleshipCode, setBattleshipCode] = useState('')
+  const [battleshipLocalPlayerId, setBattleshipLocalPlayerId] = useState<string | null>(null)
+  const [battleshipOpponentId, setBattleshipOpponentId] = useState<string | null>(null)
+  const [battleshipOpponentName, setBattleshipOpponentName] = useState('')
+  const [battleshipView, setBattleshipView] = useState<BattleshipView | null>(null)
+  const [battleshipConnection, setBattleshipConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [battleshipWaiting, setBattleshipWaiting] = useState(false)
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -93,6 +112,13 @@ export default function App() {
   const phase10LocalPlayerIdRef = useRef<string | null>(null)
   const phase10OpponentIdRef = useRef<string | null>(null)
   const phase10OpponentNameRef = useRef('')
+  const battleshipSessionRef = useRef<BattleshipSession | null>(null)
+  const battleshipHostRef = useRef<HostHandle<BattleshipView> | null>(null)
+  const battleshipGuestRef = useRef<GuestHandle<BattleshipAction> | null>(null)
+  const battleshipBotBusyRef = useRef(false)
+  const battleshipLocalPlayerIdRef = useRef<string | null>(null)
+  const battleshipOpponentIdRef = useRef<string | null>(null)
+  const battleshipOpponentNameRef = useRef('')
 
   useEffect(() => {
     roomRef.current = room
@@ -105,6 +131,8 @@ export default function App() {
     rummyGuestRef.current?.destroy()
     phase10HostRef.current?.destroy()
     phase10GuestRef.current?.destroy()
+    battleshipHostRef.current?.destroy()
+    battleshipGuestRef.current?.destroy()
   }, [])
 
   useEffect(() => {
@@ -223,6 +251,23 @@ export default function App() {
     setPhase10View(null)
     setPhase10Connection('connected')
     setPhase10Waiting(false)
+    // Battleship
+    battleshipHostRef.current?.destroy()
+    battleshipHostRef.current = null
+    battleshipGuestRef.current?.destroy()
+    battleshipGuestRef.current = null
+    battleshipSessionRef.current = null
+    setBattleshipRole(null)
+    setBattleshipCode('')
+    setBattleshipLocalPlayerId(null)
+    battleshipLocalPlayerIdRef.current = null
+    setBattleshipOpponentId(null)
+    battleshipOpponentIdRef.current = null
+    setBattleshipOpponentName('')
+    battleshipOpponentNameRef.current = ''
+    setBattleshipView(null)
+    setBattleshipConnection('connected')
+    setBattleshipWaiting(false)
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -580,6 +625,179 @@ export default function App() {
 
   // ---- End Phase 10 helpers ----
 
+  // ---- Battleship helpers ----
+
+  function battleshipActorKey(bs: BattleshipSession): string {
+    const ps = bs.session.publicState
+    return `${ps.stage}:${ps.turn.turnNumber}`
+  }
+
+  function battleshipStale(key: string) {
+    return !battleshipSessionRef.current || battleshipActorKey(battleshipSessionRef.current) !== key
+  }
+
+  function battleshipUpdateViews() {
+    const session = battleshipSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, battleshipLocalPlayerIdRef.current!)
+    setBattleshipView({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: battleshipOpponentNameRef.current })
+    const opponentId = battleshipOpponentIdRef.current
+    if (opponentId && opponentId !== 'bot') {
+      const guestSnap = deriveSnapshot(session.session, opponentId)
+      battleshipHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+    }
+  }
+
+  function startBattleshipHost() {
+    const code = `BS-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setBattleshipRole('host')
+    setBattleshipCode(code)
+    setBattleshipLocalPlayerId(hostId)
+    battleshipLocalPlayerIdRef.current = hostId
+    setBattleshipWaiting(true)
+    setError(null)
+    battleshipHostRef.current = createHost<BattleshipView, BattleshipAction>(code, {
+      onJoin(guestId, guestName) {
+        if (battleshipSessionRef.current) {
+          battleshipHostRef.current?.reject(guestId, 'That Battleship table is already full.')
+          return
+        }
+        const seed = Math.floor(Math.random() * 2147483647)
+        battleshipSessionRef.current = createBattleshipGame([hostId, guestId], seed)
+        setBattleshipOpponentId(guestId)
+        battleshipOpponentIdRef.current = guestId
+        setBattleshipOpponentName(guestName)
+        battleshipOpponentNameRef.current = guestName
+        setBattleshipWaiting(false)
+        battleshipUpdateViews()
+      },
+      onAction(guestId, action) {
+        if (!battleshipSessionRef.current || guestId !== battleshipOpponentIdRef.current) return
+        const result = applyBattleshipAction(battleshipSessionRef.current!, guestId, action)
+        if (!result.outcome.ok) return
+        battleshipSessionRef.current = result.bs
+        battleshipUpdateViews()
+      },
+      onLeave(guestId) {
+        // Guest left mid-match: match cannot continue with only 1 player.
+        if (guestId !== battleshipOpponentIdRef.current) return
+        setError('Opponent left the room.')
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addBattleshipHouseBot() {
+    if (battleshipRole !== 'host' || !battleshipLocalPlayerId || !battleshipWaiting) return
+    const botId = 'bot'
+    const botName = randomBotName([name.trim()])
+    const seed = Math.floor(Math.random() * 2147483647)
+    const bs = createBattleshipGame([battleshipLocalPlayerId, botId], seed)
+    const placed = runBattleshipBotTurn(bs, 'bot', makeBattleshipBotStrategy(bs.rng))
+    battleshipSessionRef.current = placed.bs
+    setBattleshipOpponentId(botId)
+    battleshipOpponentIdRef.current = botId
+    setBattleshipOpponentName(botName)
+    battleshipOpponentNameRef.current = botName
+    setBattleshipWaiting(false)
+    battleshipUpdateViews()
+  }
+
+  async function runBattleshipBot(botId: string, key: string) {
+    while (!battleshipStale(key)) {
+      await wait(BASE_MS)
+      if (battleshipStale(key)) return
+      const session = battleshipSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'battle' || currentPlayer(ps.turn) !== botId) return
+      const result = runBattleshipBotTurn(session, botId, makeBattleshipBotStrategy(session.rng))
+      if (!result.outcome.ok) return
+      battleshipSessionRef.current = result.bs
+      const snap = deriveSnapshot(result.bs.session, battleshipLocalPlayerId!)
+      setBattleshipView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: battleshipOpponentNameRef.current })
+    }
+  }
+
+  async function runBattleshipBotsIfNeeded() {
+    if (battleshipBotBusyRef.current) return
+    const session = battleshipSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'battle') return
+    if (battleshipOpponentId !== 'bot') return
+    if (currentPlayer(ps.turn) !== 'bot') return
+    battleshipBotBusyRef.current = true
+    const key = battleshipActorKey(session)
+    try {
+      await runBattleshipBot('bot', key)
+    } finally {
+      battleshipBotBusyRef.current = false
+      setTimeout(() => runBattleshipBotsIfNeeded(), 50)
+    }
+  }
+
+  function startBattleshipGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<BattleshipView, BattleshipAction>(code, name.trim(), {
+      onState(view) {
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setBattleshipView(view)
+        setBattleshipOpponentName(view.opponentName)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setBattleshipConnection('connected')
+      },
+      onDisconnected() {
+        setBattleshipConnection('disconnected')
+      },
+    })
+    battleshipGuestRef.current = handle
+    setBattleshipRole('guest')
+    setBattleshipCode(code)
+    handle.peerId.then((id) => { setBattleshipLocalPlayerId(id); battleshipLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function battleshipDispatch(action: BattleshipAction) {
+    if (battleshipRole === 'host' && battleshipLocalPlayerId) {
+      const result = applyBattleshipAction(battleshipSessionRef.current!, battleshipLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      battleshipSessionRef.current = result.bs
+      battleshipUpdateViews()
+    } else if (battleshipRole === 'guest') {
+      battleshipGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function battleshipRematch() {
+    if (battleshipRole !== 'host' || !battleshipSessionRef.current || !battleshipLocalPlayerId) return
+    const prevRevision = battleshipSessionRef.current.session.revision
+    const playerIds = battleshipSessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createBattleshipGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    battleshipSessionRef.current = next
+    if (battleshipOpponentId === 'bot') {
+      const placed = runBattleshipBotTurn(next, 'bot', makeBattleshipBotStrategy(next.rng))
+      battleshipSessionRef.current = placed.bs
+    }
+    battleshipUpdateViews()
+  }
+
+  // ---- End Battleship helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -793,10 +1011,19 @@ export default function App() {
     return phase10View.publicState.turn.playerOrder.find((id) => id !== phase10LocalPlayerId) ?? null
   }, [phase10View, phase10LocalPlayerId])
 
+  // ---- Battleship effects (host-only) ----
+
+  // Bot turn trigger (no round transition — Battleship has no rounds)
+  useEffect(() => {
+    if (battleshipRole !== 'host' || !battleshipView) return
+    runBattleshipBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battleshipRole, battleshipView])
+
   // ---- Render ----
 
-  // Landing: dice games, Rummy, and Phase 10 are all not yet in a session
-  if (!room && !rummyRole && !phase10Role) {
+  // Landing: dice games, Rummy, Phase 10, and Battleship are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole) {
     return (
       <Landing
         name={name}
@@ -807,11 +1034,13 @@ export default function App() {
           const code = joinCodeInput.trim()
           if (code.startsWith('RM-')) startRummyGuest(code)
           else if (code.startsWith('P10-')) startPhase10Guest(code)
+          else if (code.startsWith('BS-')) startBattleshipGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
         onPickRummy={startRummyHost}
         onPickPhase10={startPhase10Host}
+        onPickBattleship={startBattleshipHost}
         error={error}
       />
     )
@@ -1015,6 +1244,58 @@ export default function App() {
         onLayPhase={(cardIds) => phase10Dispatch({ type: 'LAY_PHASE', cardIds })}
         onHit={(targetPlayerId, groupIndex, cardIds) => phase10Dispatch({ type: 'HIT', targetPlayerId, groupIndex, cardIds })}
         onDiscard={(cardId) => phase10Dispatch({ type: 'DISCARD_CARD', cardId })}
+        onOpenRules={() => {}}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Battleship session active ----
+  // Battleship waiting screen (host waiting for opponent) — mirrors the shared Room.tsx /
+  // RummyRoom.tsx / Phase10Room.tsx layout so the start flow doesn't feel like a different app.
+  if (battleshipRole === 'host' && battleshipWaiting) {
+    return (
+      <BattleshipRoom
+        code={battleshipCode}
+        localName={name}
+        notice={error}
+        onAddHouseBot={addBattleshipHouseBot}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Battleship match results
+  if (battleshipView && battleshipView.publicState.stage === 'over' && battleshipView.publicState.winnerId) {
+    return (
+      <BattleshipResults
+        localPlayerId={battleshipLocalPlayerId ?? ''}
+        localName={name}
+        opponentName={battleshipOpponentName}
+        publicState={battleshipView.publicState}
+        isHost={battleshipRole === 'host'}
+        notice={error}
+        onRematch={battleshipRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Battleship table (active match)
+  if (battleshipView && battleshipLocalPlayerId) {
+    return (
+      <BattleshipTable
+        code={battleshipCode}
+        localPlayerId={battleshipLocalPlayerId}
+        localName={name}
+        opponentName={battleshipOpponentName}
+        opponentColor="#1a6fae"
+        connection={battleshipConnection}
+        notice={error}
+        publicState={battleshipView.publicState}
+        board={battleshipView.privateState.board}
+        onPlaceFleet={(b: (ShipId | null)[]) => battleshipDispatch({ type: 'PLACE_FLEET', board: b })}
+        onFire={(cell) => battleshipDispatch({ type: 'FIRE', cell })}
         onOpenRules={() => {}}
         onLeave={resetToEntry}
       />

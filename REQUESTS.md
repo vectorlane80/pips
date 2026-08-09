@@ -1,5 +1,15 @@
 # Requests for the human
 
+- [ ] 2026-08-09, Battleship wrap-up — **commit the charter**: the full
+      Battleship implementation sits verified in the working tree
+      (514 tests / tsc / build green, two clean reviews, full match
+      live-verified). Say the word and it lands as one commit on `main`
+      (+ push).
+- [x] 2026-08-09, Battleship wrap-up — real audio: done — user supplied
+      ship-hit / ship-miss / ship-destroyed mp3s; installed as
+      ship-hit / ship-miss / ship-sunk. Placement still reuses
+      `piece-drop` by design.
+
 - [x] 2026-08-09, engine-core wrap-up (done — user approved; committed 41fa325)
       was:  — **commit the charter**: the
       `src/engine/` promotion sits verified in the working tree (renames

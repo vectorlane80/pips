@@ -1,0 +1,365 @@
+/* ===================================================================
+   BattleshipTable — twin 10×10 grids, placement + battle modes
+   =================================================================== */
+
+/* ---- Outer container ---- */
+
+.bs-table {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.bs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.bs-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bs-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: #1a6fae;
+}
+
+.bs-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.bs-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bs-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.bs-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Error banner ---- */
+
+.bs-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Main table card ---- */
+
+.bs-main-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Status area (chip + status + hint, above the boards) ---- */
+
+.bs-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: clamp(14px, 2vw, 24px);
+  text-align: center;
+}
+
+.bs-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+
+.bs-status-text {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Waiting-for-placement banner */
+.bs-banner {
+  background: #1a6fae;
+  color: #fff;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+.bs-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+/* ---- Boards ---- */
+
+.bs-boards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(20px, 3vw, 40px);
+}
+
+.bs-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.bs-board-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Column letters (A–J) sit above the grid, same width as the grid */
+.bs-board-cols {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  width: clamp(280px, 36vw, 420px);
+}
+
+.bs-board-cols span {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+/* Row numbers (1–10) sit left of the grid */
+.bs-board-body {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.bs-board-rows {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+
+.bs-board-rows span {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  min-height: 0;
+}
+
+/* ---- Grid ---- */
+
+.bs-grid-wrap {
+  position: relative;
+  width: clamp(280px, 36vw, 420px);
+}
+
+.bs-grid-wrap--dimmed {
+  opacity: 0.45;
+}
+
+.bs-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
+  gap: 0;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 2px solid var(--ink);
+  background: #eafaff;
+}
+
+.bs-cell {
+  position: relative;
+  padding: 0;
+  border: 1px solid #c9c9e0;
+  background: #eafaff;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.bs-cell:disabled {
+  cursor: default;
+}
+
+.bs-marker {
+  position: absolute;
+  inset: 0;
+  background-size: 400% 100%;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.bs-ship {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ---- Fleet status pills ---- */
+
+.bs-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  max-width: clamp(280px, 36vw, 420px);
+}
+
+.bs-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 2px solid;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---- Placement tray ---- */
+
+.bs-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  margin: clamp(18px, 2.6vw, 28px) auto 0;
+}
+
+.bs-tray-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.bs-tray-row:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.bs-tray-row--selected {
+  border-color: #1a6fae;
+  background: #e3eef7;
+}
+
+.bs-tray-row--placed,
+.bs-tray-row--placed:disabled {
+  background: #f4f4fb;
+  color: #9a9ab8;
+  cursor: default;
+}
+
+.bs-tray-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bs-tray-row-name {
+  font-weight: 700;
+}
+
+.bs-tray-row-chips {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.bs-tray-chip {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 2px solid currentColor;
+}
+
+.bs-tray-row-sub {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+.bs-tray-row--placed .bs-tray-row-sub {
+  color: inherit;
+}
+
+/* ---- Placement actions ---- */
+
+.bs-placement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+/* ---- Footnote ---- */
+
+.bs-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
+
+/* ---- Responsive: boards stack below 900px ---- */
+
+@media (max-width: 899px) {
+  .bs-boards {
+    flex-direction: column;
+    align-items: center;
+  }
+}

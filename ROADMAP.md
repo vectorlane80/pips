@@ -1,26 +1,32 @@
 # Roadmap
 
-Charter: Engine-core promotion — see `CHARTER.md`.
+Charter: Battleship — see `CHARTER.md`.
 
 ## Next up
-(none — charter complete; all wrap-up requests run in cycle 2, committed and pushed)
+(none — charter complete; commit authorization requested, see REQUESTS.md)
 
 ## Done (this charter)
-- [cycle 1] M1 — `src/engine/` created; sync/turn-engine/rng (+tests) moved
-  via `git mv` (pure renames, zero content change); 15 importers updated;
-  `docs/card-engine.md` + README refreshed. tsc/481 tests/build clean,
-  re-run independently by the lead. Review (sonnet, diff-scoped): CLEAN —
-  no stale references, no config/alias assumptions on the old layout.
-  Implementer: deepseek:flash (~$0.19), spec followed verbatim, report
-  accurate on re-verification. Spec: `specs/11-engine-core-promotion.md`.
+- [cycle 1] M1 — game module (state/rules/bot + 25 tests incl. snapshot
+  no-leak). Two implementer test-harness bugs lead-diagnosed, fixed via
+  spec 13a. Review (sonnet, adversarial, live-repro rule): CLEAN on leaks;
+  8-test oscar.test.ts kept in suite; one informational finding
+  (playerId membership is the wiring layer's guard) carried into spec 14b.
+- [cycle 1] M2 — screens (spec 14a: Room/Table/Results/RulesOverlay + CSS,
+  ship-hit/miss/sunk sound registry) + App/Landing wiring (spec 14b: BS-
+  prefix, bot loop, guest snapshot broadcast, onAction peer guard).
+- [cycle 1] M3 — full host-vs-bot match live-verified in the browser
+  (placement manual + randomize, rotate, hunt/target bot, sunk reveals,
+  pills, 5–4 win, results, rematch reset; zero console errors). UI/wiring
+  review (sonnet): approve, no blockers; 320px nit measured and accepted.
+  docs/battleship.md + README updated. 514 tests / tsc / build green.
 
 ## Cut / deferred
-- Grid engine / path engine — investigated and rejected for now; abstract
-  when a second game of each family exists (Battleship builds directly on
-  `src/engine/` sync; Wahoo on rng + turn-engine).
-- `bot.ts` promotion to `src/engine/` — generic (imports only sync) but
-  outside the approved scope; promote when a non-card game wants it.
+- Grid engine — still no; index math lives in the game module.
+- Real hit/miss/sunk audio — placeholders shipped; list delivered to user.
+- Two-browser guest session live test — snapshot-level tests + review
+  stand in (established repo practice); the wire path is byte-identical
+  to Rummy's.
 
 ## Done (prior charters)
-- Connect 4 (2026-08-08): rules, bot, table, wiring — committed.
-- Card engine + Rummy + Phase 10 (2026-08-05..07) — committed.
+- Engine-core promotion (2026-08-09) — committed 41fa325/12e3d22, pushed.
+- Connect 4 (2026-08-08); Card engine + Rummy + Phase 10 (08-05..07).
