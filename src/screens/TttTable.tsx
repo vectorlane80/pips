@@ -4,6 +4,9 @@ import { TTT_MARKS } from '../games/ttt'
 import { TableHeader } from '../components/TableHeader'
 import { useSound } from '../hooks/useSound'
 
+// Small fixed per-cell rotation so the hand-drawn marks don't line up too neatly.
+const CELL_ROT = [-4, 3, -2, 4, -3, 2, -4, 3, -2]
+
 export function TttTable({
   room, localSeatId, onPlay, onOpenRules, onLeave,
 }: {
@@ -17,6 +20,7 @@ export function TttTable({
   const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const mySeatIdx = room.seats.findIndex((s) => s.id === localSeatId)
   const roundWinner = t.roundOver && t.winLine.length > 0 ? room.seats[t.board[t.winLine[0]]!] : null
   const roundStatus = t.roundOver
     ? roundWinner
@@ -32,7 +36,7 @@ export function TttTable({
   useEffect(() => {
     const p = soundSigRef.current
     if (p.wasMyTurn && markCount > p.markCount) {
-      play('mark-place')
+      play(mySeatIdx === 1 ? 'drawn-circle' : 'drawn-x')
     }
     if (!p.roundOver && t.roundOver) {
       play('round-win')
@@ -74,9 +78,19 @@ export function TttTable({
                       fontSize: 'clamp(38px,6vw,58px)', fontWeight: 700,
                       color: isWin ? 'var(--ink)' : owner?.color ?? 'var(--ink)',
                       cursor: !isMyTurn || cell !== null ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}
                   >
-                    {cell !== null ? TTT_MARKS[cell] : ''}
+                    {cell === 0 ? (
+                      <svg viewBox="0 0 100 100" style={{ width: '56%', height: '56%', transform: `rotate(${CELL_ROT[i]}deg)`, display: 'block' }}>
+                        <path d="M22 20 C33 36,45 50,58 64 C66 73,73 79,81 85" fill="none" stroke="currentColor" strokeWidth={10} strokeLinecap="round" />
+                        <path d="M80 17 C68 33,55 49,43 62 C35 70,27 78,19 84" fill="none" stroke="currentColor" strokeWidth={10} strokeLinecap="round" />
+                      </svg>
+                    ) : cell === 1 ? (
+                      <svg viewBox="0 0 100 100" style={{ width: '56%', height: '56%', transform: `rotate(${CELL_ROT[i]}deg)`, display: 'block' }}>
+                        <path d="M54 14 C76 17,89 34,85 55 C82 76,64 90,45 86 C27 82,13 66,17 47 C21 30,35 15,52 16 C55 16,50 13,44 19" fill="none" stroke="currentColor" strokeWidth={10} strokeLinecap="round" />
+                      </svg>
+                    ) : cell !== null ? TTT_MARKS[cell] : null}
                   </button>
                 )
               })}

@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
 import diceRoll from '../assets/sounds/dice-roll.mp3'
 import dieSelect from '../assets/sounds/die-select.mp3'
-import markPlace from '../assets/sounds/mark-place.mp3'
+import drawnX from '../assets/sounds/drawn-x.mp3'
+import drawnCircle from '../assets/sounds/drawn-circle.mp3'
 import pieceDrop from '../assets/sounds/piece-drop.mp3'
 import farkleBust from '../assets/sounds/farkle-bust.mp3'
 import bankPoints from '../assets/sounds/bank-points.mp3'
@@ -19,14 +20,15 @@ import shipMiss from '../assets/sounds/ship-miss.mp3'
 import shipSunk from '../assets/sounds/ship-sunk.mp3'
 
 export type SoundName =
-  | 'dice-roll' | 'die-select' | 'mark-place' | 'piece-drop' | 'farkle-bust' | 'bank-points'
+  | 'dice-roll' | 'die-select' | 'drawn-x' | 'drawn-circle' | 'piece-drop' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
   | 'letter-wrong' | 'round-win' | 'game-win' | 'error' | 'ship-hit' | 'ship-miss' | 'ship-sunk'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
   'die-select': dieSelect,
-  'mark-place': markPlace,
+  'drawn-x': drawnX,
+  'drawn-circle': drawnCircle,
   'piece-drop': pieceDrop,
   'farkle-bust': farkleBust,
   'bank-points': bankPoints,
