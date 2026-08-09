@@ -52,6 +52,16 @@ export const RULES: Record<Game, RuleContent> = {
       'First to three games wins the match.',
     ],
   },
+  connect4: {
+    intro: 'Click a column to drop a disc — it falls to the lowest open slot in that column.',
+    scoring: [],
+    bullets: [
+      'Four in a row — across, down, or on either diagonal — wins the game.',
+      'A full board with no four in a row is a draw: it replays and nobody scores.',
+      'First to three games wins the match.',
+      'The starting player alternates every game.',
+    ],
+  },
   hangman: {
     intro: 'One of you sets a word, the other guesses it letter by letter.',
     scoring: [],

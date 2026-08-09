@@ -1,7 +1,7 @@
 import { GAME_BLURB, GAME_COLOR, GAME_LABEL, GAME_PLAYER_RANGE, type Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
-const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
+const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 
 export function Landing({
   name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, error,

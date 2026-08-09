@@ -4,7 +4,7 @@ import { GAME_COLOR, GAME_LABEL, GAME_MAX_SEATS } from '../types'
 import { SeatAvatar } from '../components/SeatAvatar'
 import { Wordmark } from '../components/Wordmark'
 
-const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman']
+const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 const DIFFICULTIES: BotDifficulty[] = ['easy', 'medium', 'hard']
 const DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 

@@ -1,5 +1,10 @@
 # Requests for the human
 
+- [x] 2026-08-08, Connect 4 wrap-up — real audio: done — user supplied a
+      real disc-drop mp3; placeholder replaced.
+- [x] 2026-08-08, Connect 4 wrap-up — commit the charter: done — user
+      authorized commit + push after wrap-up.
+
 - [ ] 2026-08-07, wrap-up — non-blocking: the card-engine charter is complete
       (all 6 milestones, 165 tests, 12 commits on `main`). Nothing was pushed
       to GitHub — this project's standing policy is to ask first. Say the

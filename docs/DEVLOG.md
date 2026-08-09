@@ -1443,3 +1443,80 @@ wants it ported, but not started here.
 **Continue?** No — charter's definition of done is met. Wrapping up.
 Merging and pushing now, matching this session's established pattern of
 shipping each verified charter promptly.
+
+---
+
+# Charter: Connect 4 (2026-08-08)
+
+## Cycle 1 — 2026-08-08
+- **Shipped:** M1 — Connect 4 rules/bot (`src/games/connect4.ts` + tests),
+  `Connect4State` + `connect4Play`/`connect4AdvanceRound` in the room
+  reducer, `Game` union + records, `--blue`/`--connect4-color` tokens,
+  rules + Results entries. (No commit — see below.)
+- **Delegation:** Codex is back (probe OK at charter start, after being
+  quota-exhausted through every prior charter today). Both dispatches went
+  to `codex exec` (terra@low). First dispatch returned an honest partial:
+  tests green but `tsc` broken, because my spec grew the `Game` union while
+  fencing off `rules.ts`/`Results.tsx` as read-only — exhaustive
+  `Record<Game,...>`/switches in read-only files can't survive a union
+  expansion. Spec-author lesson, implementer behaved exactly right. Narrow
+  follow-up dispatch fixed both files.
+- **Verification:** re-ran independently: `tsc -b` clean, 480/480 tests,
+  build clean. Read the full diff line by line; hand-verified the bot's
+  diagonal-trap test fixture and the checkWin index arithmetic. One test
+  note: the `pref[0]` fallback assertion actually exits via the block
+  branch (col 0 blocks a vertical three), so the true no-safe-column
+  fallback path is uncovered — harmless, logic is two lines, noted here.
+- **Review:** sonnet, diff-scoped, evidence rule enforced: clean. 10 attack
+  paths traced with receipts (guest out-of-turn, full column, roundOver
+  replay, malformed col payloads incl. floats/strings/NaN — all fail
+  closed via lowestOpenRow returning -1; no flat-index wraparound because
+  checkWin walks (r,c) pairs with per-step bounds; bot never reuses a
+  mutated board; tie-at-top structurally impossible; win checked before
+  draw). Reviewer independently re-verified the draw fixture is genuinely
+  four-in-a-row-free.
+- **Process note:** `git commit` is permission-blocked in this session
+  (project CLAUDE.md forbids it; classifier enforces it against the lead
+  too, unlike prior sessions). Decision: keep building, land each slice
+  verified into the working tree, present the commit(s) to the user at
+  wrap-up rather than blocking mid-run on a non-essential step.
+- **Lesson:** when a spec touches a closed union type, every exhaustive
+  consumer of that union is in-scope for the same slice — enumerate them
+  up front (`grep 'Record<Game'` + switches) instead of discovering them
+  as typecheck failures.
+- **Continue?** Yes — M2 (UI + app wiring) next.
+
+## Cycle 2 — 2026-08-08
+- **Shipped:** M2 + M3 — `Connect4Table.tsx` (tray, socket/bevel discs,
+  hover preview, win ring), App wiring (route, `whoActsNow`,
+  `runConnect4Bot`, round-pause advance), shelf/picker entries, rules
+  overlay content, `piece-drop` sound (placeholder asset = copy of
+  `mark-place.mp3`), README refresh. Codex implemented spec 10 verbatim,
+  clean report, nothing uncovered.
+- **Verification:** `tsc -b` clean, 480/480, build clean — re-run
+  independently. Live browser (host vs bot, full match to 3–2 over five
+  games): shelf tile → room picker → table; disc drop + gravity stack;
+  bot wins/blocks/center-out correct in play (blocked my single threats,
+  split my double threat, took its own vertical win when I fed it);
+  hover preview at 30% opacity in the correct lowest slot (verified via
+  computed style: opacity 0.3, seat color); win state captured on
+  screen — "Round over" chip, "You connect four!", yellow ring + lifted
+  discs; starter alternation each game (bot opened games 2 and 4);
+  scores tracked on seat cards; results screen ("You take it!", "Match
+  score 3–2.", "3 games won"/"2 games won"); rematch resets to 0–0 fresh
+  table. Zero console errors throughout. Note: the browser pane's
+  synthetic hover doesn't reach React's delegated mouseover — real DOM
+  events (and real users) work; not a product bug.
+- **Review:** sonnet, diff-scoped. One low finding: during the 4s round
+  pause, `whoActsNow` (turnIdx-based, no roundOver check) lets the bot
+  loop re-dispatch no-op plays, allegedly re-broadcasting to a guest.
+  Lead re-trace: the harm scenario requires a bot AND a guest in one
+  room — impossible at 2 seats, and in host-vs-bot the reducer returns
+  the same reference (no re-render, no wire). Identical accepted pattern
+  in TTT. Rejected; recorded here as the standing probe instead.
+- **Lesson:** review findings that hinge on "extra traffic to the guest"
+  must first establish the seat topology can actually produce a guest in
+  that state — 2-seat games structurally exclude bot+guest coexistence.
+- **Continue?** Definition of done is met (all charter boxes checked
+  except the deferred commit). Wrap-up next: commit handoff to the user +
+  real-audio request, per the charter's one permitted end-of-run ask.

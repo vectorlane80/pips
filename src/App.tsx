@@ -9,11 +9,13 @@ import { Results } from './screens/Results'
 import { FarkleTable } from './screens/FarkleTable'
 import { YahtzeeTable } from './screens/YahtzeeTable'
 import { TttTable } from './screens/TttTable'
+import { Connect4Table } from './screens/Connect4Table'
 import { HangmanTable } from './screens/HangmanTable'
 import { RulesOverlay } from './components/RulesOverlay'
 import { decideFarkleBot } from './games/farkle'
 import { decideYahtzeeCategory, decideYahtzeeHold } from './games/yahtzee'
 import { decideTttMove } from './games/ttt'
+import { decideConnect4Move } from './games/connect4'
 import { decideHangmanLetter } from './games/hangman'
 
 // ---- Rummy (separate parallel session, per CHARTER.md resolution #7) ----
@@ -229,7 +231,7 @@ export default function App() {
       const seat = state.seats[state.hangman.guesserIdx]
       return seat ? { id: seat.id, bot: seat.bot } : null
     }
-    if (state.screen === 'farkle' || state.screen === 'yahtzee' || state.screen === 'ttt') {
+    if (state.screen === 'farkle' || state.screen === 'yahtzee' || state.screen === 'ttt' || state.screen === 'connect4') {
       const seat = state.seats[state.turnIdx]
       return seat ? { id: seat.id, bot: seat.bot } : null
     }
@@ -656,6 +658,17 @@ export default function App() {
     hostApply({ type: 'tttPlay', cell }, seatId)
   }
 
+  async function runConnect4Bot(seatId: string, key: string) {
+    const pace = roomRef.current!.botPace
+    await wait(BASE_MS * pace)
+    if (stale(key)) return
+    const state = roomRef.current!
+    const me = state.seats.findIndex((s) => s.id === seatId)
+    const opponent = state.seats.findIndex((s) => s.id !== seatId)
+    const col = decideConnect4Move(state.connect4.board, me, opponent)
+    hostApply({ type: 'connect4Play', col }, seatId)
+  }
+
   async function runHangmanBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -682,6 +695,7 @@ export default function App() {
       if (state.screen === 'farkle') await runFarkleBot(actor.id, myKey)
       else if (state.screen === 'yahtzee') await runYahtzeeBot(actor.id, myKey)
       else if (state.screen === 'ttt') await runTttBot(actor.id, myKey)
+      else if (state.screen === 'connect4') await runConnect4Bot(actor.id, myKey)
       else if (state.screen === 'hangman') await runHangmanBot(actor.id, myKey)
     } finally {
       botBusyRef.current = false
@@ -705,6 +719,17 @@ export default function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, room?.screen, room?.ttt.roundOver])
+
+  // Pause on a finished Connect 4 round (winning line still visible) before moving
+  // on, whether the round ended on a bot's move or a human's — otherwise it flashes past.
+  useEffect(() => {
+    if (role !== 'host' || !room) return
+    if (room.screen === 'connect4' && room.connect4.roundOver) {
+      const t = setTimeout(() => dispatch({ type: 'connect4AdvanceRound' }), ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, room?.screen, room?.connect4.roundOver])
 
   // ---- Rummy effects (host-only) ----
 
@@ -838,6 +863,15 @@ export default function App() {
             room={room}
             localSeatId={localSeatId}
             onPlay={(cell) => dispatch({ type: 'tttPlay', cell })}
+            onOpenRules={() => setRulesOpen(true)}
+            onLeave={resetToEntry}
+          />
+        )}
+        {room.screen === 'connect4' && (
+          <Connect4Table
+            room={room}
+            localSeatId={localSeatId}
+            onPlay={(col) => dispatch({ type: 'connect4Play', col })}
             onOpenRules={() => setRulesOpen(true)}
             onLeave={resetToEntry}
           />

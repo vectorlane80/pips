@@ -19,6 +19,7 @@
   --teal: #0fb5a0;
   --amber: #ff9f1c;
   --coral: #ff5d73;
+  --blue: #2f6fed;
   --yellow: #ffd23f;
   --green: #3ddc97;
   --green-text: #1aa06d;
@@ -29,6 +30,7 @@
   --yahtzee-color: var(--teal);
   --ttt-color: var(--amber);
   --hangman-color: var(--coral);
+  --connect4-color: var(--blue);
 }
 
 * {

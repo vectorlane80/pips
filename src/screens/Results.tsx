@@ -9,6 +9,7 @@ function pillDetail(room: RoomState): string {
     case 'farkle': return `${room.farkle.round} rounds`
     case 'yahtzee': return '13 turns'
     case 'ttt': return 'first to 3'
+    case 'connect4': return 'first to 3'
     case 'hangman': return 'first to 2'
   }
 }
@@ -23,6 +24,8 @@ function rowDetail(room: RoomState, seatId: string): string {
       return `upper ${upperTotal(room.yahtzee.cards[seatId] ?? {})}`
     case 'ttt':
       return `${room.ttt.wins[seatId] ?? 0} games won`
+    case 'connect4':
+      return `${room.connect4.wins[seatId] ?? 0} games won`
     case 'hangman':
       return `${room.hangman.wins[seatId] ?? 0} words solved`
   }
@@ -37,6 +40,10 @@ function ledeText(room: RoomState, winner: Seat): string {
     case 'ttt': {
       const others = room.seats.filter((s) => s.id !== winner.id).map((s) => room.ttt.wins[s.id] ?? 0)
       return `Match score ${room.ttt.wins[winner.id] ?? 0}–${Math.max(0, ...others)}.`
+    }
+    case 'connect4': {
+      const others = room.seats.filter((s) => s.id !== winner.id).map((s) => room.connect4.wins[s.id] ?? 0)
+      return `Match score ${room.connect4.wins[winner.id] ?? 0}–${Math.max(0, ...others)}.`
     }
     case 'hangman':
       return `${room.hangman.wins[winner.id] ?? 0} words solved.`

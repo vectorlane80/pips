@@ -1,10 +1,11 @@
 import type {
-  Action, FarkleState, Game, HangmanState, RoomState, Seat, TttState, YahtzeeState, YCategory,
+  Action, Connect4State, FarkleState, Game, HangmanState, RoomState, Seat, TttState, YahtzeeState, YCategory,
 } from '../types'
 import { GAME_MAX_SEATS, SEAT_PALETTE } from '../types'
 import { hasAnyScore, rollDice as rollFarkleDice, scoreSelection } from '../games/farkle'
 import { grandTotal, isFiveKind, rollDice as rollYahtzeeDice, scoreCategory, upperTotal } from '../games/yahtzee'
 import { checkWin, isDraw } from '../games/ttt'
+import { checkWin as c4CheckWin, isBoardFull, lowestOpenRow } from '../games/connect4'
 import { isWordSolved, randomWord } from '../games/hangman'
 import { randomBotName } from '../data/botNames'
 
@@ -59,6 +60,12 @@ function initTtt(seats: Seat[]): TttState {
   return { board: Array(9).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins }
 }
 
+function initConnect4(seats: Seat[]): Connect4State {
+  const wins: Record<string, number> = {}
+  seats.forEach((s) => { wins[s.id] = 0 })
+  return { board: Array(42).fill(null), starter: 0, winLine: [], over: false, roundOver: false, pendingWinnerId: null, status: '', wins }
+}
+
 function initHangman(seats: Seat[]): HangmanState {
   const wins: Record<string, number> = {}
   seats.forEach((s) => { wins[s.id] = 0 })
@@ -78,13 +85,13 @@ export function makeRoom(code: string, game: Game, hostName: string, hostId: str
   const seats = [makeSeat(hostId, hostName, false, true, 0)]
   return {
     screen: 'room', game, code, seats, turnIdx: 0, botPace: 1, botDifficulty: 'medium', showLog: true,
-    farkle: initFarkle(), yahtzee: initYahtzee(seats), ttt: initTtt(seats), hangman: initHangman(seats),
+    farkle: initFarkle(), yahtzee: initYahtzee(seats), ttt: initTtt(seats), hangman: initHangman(seats), connect4: initConnect4(seats),
     winnerId: null,
   }
 }
 
 function withNewSeats(state: RoomState, seats: Seat[]): RoomState {
-  return { ...state, seats, yahtzee: { ...state.yahtzee, cards: reconcileCards(state.yahtzee.cards, seats), bonuses: reconcileScores(state.yahtzee.bonuses, seats) }, ttt: { ...state.ttt, wins: reconcileScores(state.ttt.wins, seats) }, hangman: { ...state.hangman, wins: reconcileScores(state.hangman.wins, seats) } }
+  return { ...state, seats, yahtzee: { ...state.yahtzee, cards: reconcileCards(state.yahtzee.cards, seats), bonuses: reconcileScores(state.yahtzee.bonuses, seats) }, ttt: { ...state.ttt, wins: reconcileScores(state.ttt.wins, seats) }, hangman: { ...state.hangman, wins: reconcileScores(state.hangman.wins, seats) }, connect4: { ...state.connect4, wins: reconcileScores(state.connect4.wins, seats) } }
 }
 
 function reconcileCards(cards: YahtzeeState['cards'], seats: Seat[]): YahtzeeState['cards'] {
@@ -150,6 +157,10 @@ export function applyAction(state: RoomState, action: Action, by: string): RoomS
       return tttPlay(state, by, action.cell)
     case 'tttAdvanceRound':
       return tttAdvanceRound(state)
+    case 'connect4Play':
+      return connect4Play(state, by, action.col)
+    case 'connect4AdvanceRound':
+      return connect4AdvanceRound(state)
     case 'hangmanSetWord':
       return hangmanSetWord(state, by, action.word)
     case 'hangmanGuess':
@@ -167,11 +178,13 @@ function startGame(state: RoomState): RoomState {
   let yahtzee = state.yahtzee
   let ttt = state.ttt
   let hangman = state.hangman
+  let connect4 = state.connect4
   if (state.game === 'farkle') farkle = { ...initFarkle(), winningScore: farkle.winningScore, openingScore: farkle.openingScore }
   if (state.game === 'yahtzee') yahtzee = initYahtzee(seats)
   if (state.game === 'ttt') ttt = { ...initTtt(seats), starter: 0 }
   if (state.game === 'hangman') hangman = initHangman(seats)
-  return { ...state, screen: state.game, turnIdx: 0, farkle, yahtzee, ttt, hangman, winnerId: null }
+  if (state.game === 'connect4') connect4 = { ...initConnect4(seats), starter: 0 }
+  return { ...state, screen: state.game, turnIdx: 0, farkle, yahtzee, ttt, hangman, connect4, winnerId: null }
 }
 
 // ---------- Farkle ----------
@@ -338,6 +351,49 @@ function tttAdvanceRound(state: RoomState): RoomState {
   return {
     ...state, turnIdx: nextStarter,
     ttt: { ...t, board: Array(9).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '' },
+  }
+}
+
+// ---------- Connect 4 ----------
+
+function connect4Play(state: RoomState, by: string, col: number): RoomState {
+  if (state.screen !== 'connect4') return state
+  const c = state.connect4
+  if (c.roundOver || col < 0 || col > 6) return state
+  const seatIdx = state.seats.findIndex((s) => s.id === by)
+  if (seatIdx !== state.turnIdx) return state
+  const row = lowestOpenRow(c.board, col)
+  if (row < 0) return state
+  const board = [...c.board]
+  board[row * 7 + col] = seatIdx
+  const winLine = c4CheckWin(board, row, col, seatIdx)
+  const draw = !winLine && isBoardFull(board)
+  if (winLine || draw) {
+    const wins = { ...c.wins }
+    if (winLine) wins[by] = (wins[by] ?? 0) + 1
+    const seats = state.seats.map((s) => ({ ...s, score: wins[s.id] ?? 0 }))
+    const matchOver = Object.values(wins).some((w) => w >= 3)
+    const pendingWinnerId = matchOver ? Object.entries(wins).sort((a, b) => b[1] - a[1])[0][0] : null
+    return {
+      ...state, seats,
+      connect4: { ...c, board, winLine: winLine ?? [], over: true, roundOver: true, pendingWinnerId, wins },
+    }
+  }
+  const turnIdx = (state.turnIdx + 1) % state.seats.length
+  return { ...state, connect4: { ...c, board }, turnIdx }
+}
+
+function connect4AdvanceRound(state: RoomState): RoomState {
+  if (state.screen !== 'connect4') return state
+  const c = state.connect4
+  if (!c.roundOver) return state
+  if (c.pendingWinnerId) {
+    return { ...state, screen: 'results', winnerId: c.pendingWinnerId }
+  }
+  const nextStarter = (c.starter + 1) % state.seats.length
+  return {
+    ...state, turnIdx: nextStarter,
+    connect4: { ...c, board: Array(42).fill(null), winLine: [], over: false, roundOver: false, pendingWinnerId: null, starter: nextStarter, status: '' },
   }
 }
 

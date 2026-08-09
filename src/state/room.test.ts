@@ -130,3 +130,76 @@ describe('farkle — held dice survive a busted roll', () => {
     expect(result.farkle.dice).toEqual([])
   })
 })
+
+describe('connect4', () => {
+  function connect4Room(): RoomState {
+    let room = makeRoom('TEST-3', 'connect4', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    return applyAction(room, { type: 'startGame' }, 'h1')
+  }
+
+  function play(room: RoomState, col: number, by = room.seats[room.turnIdx].id) {
+    return applyAction(room, { type: 'connect4Play', col }, by)
+  }
+
+  it('starts with a fresh board and drops discs to the bottom', () => {
+    let room = connect4Room()
+    expect(room.screen).toBe('connect4')
+    expect(room.connect4.board).toEqual(Array(42).fill(null))
+    expect(room.turnIdx).toBe(0)
+    room = play(room, 2)
+    expect(room.connect4.board[37]).toBe(0)
+    room = play(room, 2)
+    expect(room.connect4.board[30]).toBe(1)
+  })
+
+  it('rejects invalid plays', () => {
+    const room = connect4Room()
+    expect(play(room, 0, 'g1')).toBe(room)
+    const full = { ...room, connect4: { ...room.connect4, board: Array(42).fill(null).map((cell, index) => index % 7 === 0 ? 0 : cell) } }
+    expect(play(full, 0)).toBe(full)
+    const over = { ...room, connect4: { ...room.connect4, roundOver: true } }
+    expect(play(over, 0)).toBe(over)
+    expect(play(room, -1)).toBe(room)
+    expect(play(room, 7)).toBe(room)
+  })
+
+  it('awards rounds and sends the third win to results', () => {
+    let room = connect4Room()
+    for (const col of [0, 1, 0, 1, 0, 1, 0]) room = play(room, col)
+    expect(room.connect4.roundOver).toBe(true)
+    expect(room.connect4.winLine).toHaveLength(4)
+    expect(room.connect4.wins).toEqual({ h1: 1, g1: 0 })
+    expect(room.seats.map((seat) => seat.score)).toEqual([1, 0])
+    room = { ...room, connect4: { ...room.connect4, wins: { h1: 2, g1: 0 } } }
+    room = play({ ...room, connect4: { ...room.connect4, board: Array(42).fill(null), roundOver: false, over: false }, turnIdx: 0 }, 0)
+    for (const col of [1, 0, 1, 0, 1, 0]) room = play(room, col)
+    expect(room.connect4.pendingWinnerId).toBe('h1')
+    room = applyAction(room, { type: 'connect4AdvanceRound' }, 'h1')
+    expect(room.screen).toBe('results')
+    expect(room.winnerId).toBe('h1')
+  })
+
+  it('handles a draw and advances non-final rounds', () => {
+    let room = connect4Room()
+    const drawn = [1, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, null, 1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0]
+    room = { ...room, connect4: { ...room.connect4, board: drawn }, turnIdx: 0 }
+    room = play(room, 5)
+    expect(room.connect4.roundOver).toBe(true)
+    expect(room.connect4.winLine).toEqual([])
+    expect(room.connect4.wins).toEqual({ h1: 0, g1: 0 })
+    room = applyAction(room, { type: 'connect4AdvanceRound' }, 'h1')
+    expect(room.connect4.board).toEqual(Array(42).fill(null))
+    expect(room.connect4.starter).toBe(1)
+    expect(room.turnIdx).toBe(1)
+    room = { ...room, connect4: { ...room.connect4, roundOver: true } }
+    room = applyAction(room, { type: 'connect4AdvanceRound' }, 'g1')
+    expect(room.connect4.starter).toBe(0)
+    expect(room.turnIdx).toBe(0)
+  })
+
+  it('adds a zeroed win entry for a new seat', () => {
+    const room = addSeat(makeRoom('TEST-4', 'connect4', 'Host', 'h1'), 'g1', 'Guest', false)
+    expect(room.connect4.wins).toEqual({ h1: 0, g1: 0 })
+  })
+})

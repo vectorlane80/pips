@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import diceRoll from '../assets/sounds/dice-roll.mp3'
 import dieSelect from '../assets/sounds/die-select.mp3'
 import markPlace from '../assets/sounds/mark-place.mp3'
+import pieceDrop from '../assets/sounds/piece-drop.mp3'
 import farkleBust from '../assets/sounds/farkle-bust.mp3'
 import bankPoints from '../assets/sounds/bank-points.mp3'
 import hotDice from '../assets/sounds/hot-dice.mp3'
@@ -15,7 +16,7 @@ import gameWin from '../assets/sounds/game-win.mp3'
 import error from '../assets/sounds/error.mp3'
 
 export type SoundName =
-  | 'dice-roll' | 'die-select' | 'mark-place' | 'farkle-bust' | 'bank-points'
+  | 'dice-roll' | 'die-select' | 'mark-place' | 'piece-drop' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
   | 'letter-wrong' | 'round-win' | 'game-win' | 'error'
 
@@ -23,6 +24,7 @@ const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
   'die-select': dieSelect,
   'mark-place': markPlace,
+  'piece-drop': pieceDrop,
   'farkle-bust': farkleBust,
   'bank-points': bankPoints,
   'hot-dice': hotDice,

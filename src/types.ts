@@ -1,4 +1,4 @@
-export type Game = 'farkle' | 'yahtzee' | 'ttt' | 'hangman'
+export type Game = 'farkle' | 'yahtzee' | 'ttt' | 'hangman' | 'connect4'
 export type Screen = 'entry' | 'room' | Game | 'results'
 
 export const GAME_COLOR: Record<Game, string> = {
@@ -6,6 +6,7 @@ export const GAME_COLOR: Record<Game, string> = {
   yahtzee: 'var(--yahtzee-color)',
   ttt: 'var(--ttt-color)',
   hangman: 'var(--hangman-color)',
+  connect4: 'var(--connect4-color)',
 }
 
 export const GAME_LABEL: Record<Game, string> = {
@@ -13,6 +14,7 @@ export const GAME_LABEL: Record<Game, string> = {
   yahtzee: 'Yahtzee',
   ttt: 'Tic Tac Toe',
   hangman: 'Hangman',
+  connect4: 'Connect 4',
 }
 
 export const GAME_BLURB: Record<Game, string> = {
@@ -20,6 +22,7 @@ export const GAME_BLURB: Record<Game, string> = {
   yahtzee: 'Thirteen boxes, three rolls a turn',
   ttt: 'Three in a row, best of five',
   hangman: 'Set a word, guess a word',
+  connect4: 'Drop discs — four in a row wins',
 }
 
 export const GAME_PLAYER_RANGE: Record<Game, string> = {
@@ -27,14 +30,16 @@ export const GAME_PLAYER_RANGE: Record<Game, string> = {
   yahtzee: '2–8 players',
   ttt: '2 players',
   hangman: '2 players',
+  connect4: '2 players',
 }
 
-// Farkle and Yahtzee scale to a party; Tic Tac Toe and Hangman are inherently two-player.
+// Farkle and Yahtzee scale to a party; Tic Tac Toe, Hangman, and Connect 4 are inherently two-player.
 export const GAME_MAX_SEATS: Record<Game, number> = {
   farkle: 8,
   yahtzee: 8,
   ttt: 2,
   hangman: 2,
+  connect4: 2,
 }
 
 export const GAME_MIN_SEATS: Record<Game, number> = {
@@ -42,6 +47,7 @@ export const GAME_MIN_SEATS: Record<Game, number> = {
   yahtzee: 1,
   ttt: 2,
   hangman: 2,
+  connect4: 2,
 }
 
 // Seat 0's color is always violet (host-shelf convention); after that we cycle the palette.
@@ -117,6 +123,17 @@ export interface TttState {
   wins: Record<string, number>
 }
 
+export interface Connect4State {
+  board: (number | null)[]
+  starter: number
+  winLine: number[]
+  over: boolean
+  roundOver: boolean
+  pendingWinnerId: string | null
+  status: string
+  wins: Record<string, number>
+}
+
 export type HangmanPhase = 'setting' | 'guessing' | 'roundOver'
 
 export interface HangmanState {
@@ -144,6 +161,7 @@ export interface RoomState {
   yahtzee: YahtzeeState
   ttt: TttState
   hangman: HangmanState
+  connect4: Connect4State
   winnerId: string | null
 }
 
@@ -162,6 +180,8 @@ export type Action =
   | { type: 'yahtzeeScore'; category: YCategory }
   | { type: 'tttPlay'; cell: number }
   | { type: 'tttAdvanceRound' }
+  | { type: 'connect4Play'; col: number }
+  | { type: 'connect4AdvanceRound' }
   | { type: 'hangmanSetWord'; word: string }
   | { type: 'hangmanGuess'; letter: string }
   | { type: 'hangmanAdvanceRound' }
