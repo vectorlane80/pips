@@ -39,7 +39,8 @@ the lighter hand, ties bank nothing.
 CHARTER.md, user's "common rules" instruction): a double at any open end
 counts both halves (5-5 lead = 10, not the prototype's 20; 3-3 at an end
 = 6), and a spinner's unstarted side arms count nothing. All in
-`scoring.ts`, trivially revertible.
+`scoring.ts`. Reviewed and approved by the user 2026-08-09 ("scoring is
+fine, I prefer yours") — this is the settled rule, not a pending question.
 
 ## Snake board
 
