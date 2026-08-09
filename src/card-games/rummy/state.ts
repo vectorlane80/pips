@@ -89,7 +89,7 @@ export interface RummySession {
                        // stock-recycle shuffle and round redeal — one seed drives the whole match
 }
 
-const TARGET_SCORE = 100
+const TARGET_SCORE = 500
 
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
 function dealRound(

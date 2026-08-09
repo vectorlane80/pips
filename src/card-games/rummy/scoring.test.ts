@@ -31,9 +31,9 @@ describe('meldedCardValue', () => {
     }
   })
 
-  it('non-Ace card in a meld → its normal deadwoodValue (7♣ → 7)', () => {
+  it('non-Ace card in a meld → its normal deadwoodValue (7♣ → 5)', () => {
     const meld = [card('c6', 'clubs', '7'), card('c7', 'clubs', '8'), card('c8', 'clubs', '9')]
-    expect(meldedCardValue(meld[0], meld)).toBe(7)
+    expect(meldedCardValue(meld[0], meld)).toBe(5)
   })
 
   it('face card (K♦) in a meld → 10', () => {
@@ -44,9 +44,9 @@ describe('meldedCardValue', () => {
 })
 
 describe('meldValue', () => {
-  it('A-2-3 ace-low run → 5 + 2 + 3 = 10', () => {
+  it('A-2-3 ace-low run → 5 + 5 + 5 = 15', () => {
     const meld = [card('c0', 'clubs', 'A'), card('c1', 'clubs', '2'), card('c2', 'clubs', '3')]
-    expect(meldValue(meld)).toBe(10)
+    expect(meldValue(meld)).toBe(15)
   })
 
   it('Q-K-A ace-high run → 10 + 10 + 15 = 35', () => {
@@ -78,9 +78,9 @@ describe('deadwood', () => {
     expect(deadwood(cards)).toBe(40)
   })
 
-  it('pips contribute their face value', () => {
+  it('pips contribute 5 each', () => {
     const cards = [card('c1', 'clubs', '2'), card('c6', 'clubs', '7'), card('c0', 'clubs', 'A')]
-    // 2=2, 7=7, A=15 → 24
-    expect(deadwood(cards)).toBe(24)
+    // 2=5, 7=5, A=15 → 25
+    expect(deadwood(cards)).toBe(25)
   })
 })

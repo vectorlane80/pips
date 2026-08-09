@@ -18,9 +18,9 @@ export function rankValueAceHigh(rank: Rank): number {
   return rank === 'A' ? 14 : rankValue(rank)
 }
 
-// The score value of a single card for deadwood purposes: face cards (J/Q/K) and 10 all count
-// as 10; everything else counts as its numeric rank; an unmelded Ace counts as 15.
+// The score value of a single card for deadwood purposes (Rummy 500 values): 2–9 count as 5;
+// face cards (J/Q/K) and 10 count as 10; an unmelded Ace counts as 15.
 export function deadwoodValue(rank: Rank): number {
   if (rank === 'A') return 15
-  return Math.min(rankValue(rank), 10)
+  return rankValue(rank) >= 10 ? 10 : 5
 }

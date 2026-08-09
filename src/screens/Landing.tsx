@@ -73,9 +73,11 @@ export function Landing({
         <div style={{ flex: '1 1 340px', maxWidth: 560 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
             <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
-            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
-              {ready ? `${GAMES.length} games` : 'type a name to start one'}
-            </span>
+            {!ready && (
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
+                type a name to start one
+              </span>
+            )}
           </div>
           <div className="shelf-grid">
             {GAMES.map((g) => (

@@ -60,15 +60,15 @@ describe('deadwoodValue', () => {
     expect(deadwoodValue('A')).toBe(15)
   })
 
-  it('returns raw value for 2 through 9', () => {
-    expect(deadwoodValue('2')).toBe(2)
-    expect(deadwoodValue('3')).toBe(3)
-    expect(deadwoodValue('4')).toBe(4)
+  it('returns 5 for 2 through 9', () => {
+    expect(deadwoodValue('2')).toBe(5)
+    expect(deadwoodValue('3')).toBe(5)
+    expect(deadwoodValue('4')).toBe(5)
     expect(deadwoodValue('5')).toBe(5)
-    expect(deadwoodValue('6')).toBe(6)
-    expect(deadwoodValue('7')).toBe(7)
-    expect(deadwoodValue('8')).toBe(8)
-    expect(deadwoodValue('9')).toBe(9)
+    expect(deadwoodValue('6')).toBe(5)
+    expect(deadwoodValue('7')).toBe(5)
+    expect(deadwoodValue('8')).toBe(5)
+    expect(deadwoodValue('9')).toBe(5)
   })
 
   it('returns 10 for 10', () => {

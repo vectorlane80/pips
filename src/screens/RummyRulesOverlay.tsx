@@ -6,8 +6,8 @@ export function RummyRulesOverlay({ onClose }: { onClose: () => void }) {
     'A set is 3-4 cards of the same rank, different suits. A run is 3+ consecutive same-suit cards — Aces can be low (A-2-3) or high (Q-K-A), but a run can\u2019t wrap past both ends.',
     'Lay down any melds you can, then discard exactly one card to end your turn.',
     'Go out — empty your hand by melding or discarding your last card — to end the round and score.',
-    'Scoring: every round, both players score the point value of what they\u2019ve melded, minus a penalty for whatever\u2019s left in their hand. Aces are worth 5 melded low, 15 melded high or in a set of aces, and cost 15 if left unmelded. Other cards: face cards and 10s are worth 10, everything else its own number.',
-    'First to 100 points wins the match.',
+    'Scoring: every round, both players score the point value of what they\u2019ve melded, minus a penalty for whatever\u2019s left in their hand. Aces are worth 5 melded low, 15 melded high or in a set of aces, and cost 15 if left unmelded. Other cards: 10s and face cards are worth 10, 2\u20139 are worth 5.',
+    'First to 500 points wins the match.',
     'If the stock runs out, drawing recycles the discard pile (keeping the top card in place). If that\u2019s not possible either, the round ends with no score and a new one deals.',
   ]
 
