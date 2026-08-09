@@ -1,11 +1,15 @@
 # Roadmap
 
-Charter: Battleship rule variants — see `CHARTER.md`.
+Charter: Item-generic containers (dominoes prep) — see `CHARTER.md`.
 
 ## Next up
-(none — variants charter complete; commit offered)
+- Dominoes: awaiting the design handoff; containers are ready.
 
 ## Done (this charter)
+- [containers] spec 16 — Zone/deck helpers generic over id-bearing
+  items, Card default, zero call-site churn. 534 tests. Review CLEAN.
+
+## Done (prior charter: Battleship variants)
 - [variants] specs 15/15a/15b/15c — standard / make-it-take-it /
   free-for-all, host-picked in the room, validator-enforced, bot loop
   free-mode cadence with starvation fix. 523 tests. Streak + free

@@ -31,7 +31,7 @@ export function createStandardDeck(options?: CreateDeckOptions): Card[] {
   return cards
 }
 
-export function shuffleDeck(cards: Card[], randomFn: () => number): Card[] {
+export function shuffleDeck<T>(cards: T[], randomFn: () => number): T[] {
   const result = [...cards]
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(randomFn() * (i + 1))
@@ -42,7 +42,7 @@ export function shuffleDeck(cards: Card[], randomFn: () => number): Card[] {
   return result
 }
 
-export function dealCards(cards: Card[], count: number): { dealt: Card[]; remaining: Card[] } {
+export function dealCards<T>(cards: T[], count: number): { dealt: T[]; remaining: T[] } {
   if (count <= 0) {
     return { dealt: [], remaining: [...cards] }
   }
@@ -52,7 +52,7 @@ export function dealCards(cards: Card[], count: number): { dealt: Card[]; remain
   return { dealt, remaining }
 }
 
-export function drawCard(cards: Card[]): { card: Card | undefined; remaining: Card[] } {
+export function drawCard<T>(cards: T[]): { card: T | undefined; remaining: T[] } {
   const { dealt, remaining } = dealCards(cards, 1)
   return { card: dealt[0], remaining }
 }

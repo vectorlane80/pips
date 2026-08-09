@@ -1641,3 +1641,21 @@ shipping each verified charter promptly.
   write-once winnerId, streak decisions from the in-call shot (never
   stale lastShot).
 - **State:** 523 tests / tsc / build green. Wrap-up: commit offer.
+
+## 2026-08-09 — Item-generic containers (spec 16, dominoes prep)
+
+- **Charter:** user-approved generalization ahead of the designer's first
+  dominoes layout. Zone + helpers → `<T extends {id:string} = Card>`;
+  shuffleDeck/dealCards/drawCard → plain `<T>`. Field/param names kept
+  (`cards`), so wire format and every call site unchanged; zones stay in
+  card-engine (the Card default bars them from src/engine/).
+- **Implementer:** deepseek:flash, spec followed exactly, no deviations,
+  ~$0.05. 11-test generic-items.test.ts proves a Tile {id,low,high} flows
+  through shuffle/deal/draw/zones; default-type line proves Card
+  inference intact.
+- **Verification:** 534 tests (523 unchanged + 11), tsc, build — re-run
+  by lead. Review (sonnet, type-soundness focus): CLEAN — probed
+  pairwise-arg union widening (correctly rejects), the `c is T`
+  predicate, and declaration-emit (moot, noEmit app).
+- **Next:** dominoes game module gets its own tile type +
+  createDominoSet when the design handoff lands.

@@ -25,7 +25,7 @@ specific game's rules:
 | Cards | `card-engine/cards.ts` | `Card` identity (`id`/`suit`/`rank`/`deckIndex`/`meta`), `SUITS`/`RANKS`, `cardsEqual`/`findCard`/`removeCard` |
 | Deck | `card-engine/deck.ts` | `createStandardDeck` (multi-deck, jokers), `shuffleDeck` (host-seeded), `dealCards`/`drawCard` |
 | RNG | `engine/rng.ts` | `createRng(seed)` — deterministic mulberry32, so shuffles are host-authoritative and testable |
-| Zones | `card-engine/zones.ts` | The generic `Zone` container (hand/discard/stock/anything) and card-movement ops |
+| Zones | `card-engine/zones.ts` | The generic `Zone<T extends {id} = Card>` container (hand/discard/stock/anything) and item-movement ops — since Aug 2026 generic over any id-bearing item (dominoes prep), `Card` by default |
 | Turn engine | `engine/turn-engine.ts` | Generic turn order: current player, direction, skip/extra-turn, an opaque `phase` slot |
 | Sync | `engine/sync.ts` | Host-authoritative action pipeline, public/private state split, revision numbers, reconnect snapshots |
 | Bot seam | `engine/bot.ts` | The one function a house player calls — goes through the exact same path as a human |
