@@ -1,131 +1,64 @@
-# Charter: Connect 4
+# Charter: Engine-core promotion (src/engine/)
 
 **Mode:** directed
-**Started:** 2026-08-08
-**Pre-approved:** yes — user invoked `/autonomous-dev-loop` + `/model-routing`
-with "Ask me no questions — completely autonomous from here until the end,
-when you can request audio from me." The only permitted end-of-run ask is the
-real audio asset(s).
+**Started:** 2026-08-09
+**Pre-approved:** yes — the lead investigated the grid/path-game abstraction
+question, recommended (option 1) promoting the game-agnostic modules out of
+`src/card-engine/`, and the user replied "Do number 1. Use /autonomous-dev-loop
+and /model-routing — but don't use codex at all." That reply is the charter
+approval; scope is exactly recommendation 1.
 
-**Delegation:** per `/model-routing`. Live-probed at charter start — Codex is
-back (quota reset since the deal-intro charter; probe returned OK). So:
-implementation + tests → `codex exec` (terra@low default); adversarial review
-→ `claude --model sonnet --effort medium`; spec authoring + loop driving +
-verification → this session (the session model *is* Fable, the designated
-spec-author tier, so no external `claude --model fable` call is needed — the
-lead authors specs directly and logs any deviation).
+**Delegation:** per `/model-routing`, with Codex excluded by user order.
+Implementation (mechanical refactor) → `deepseek:flash` (live-probed OK at
+charter start); adversarial review → `claude --model sonnet --effort medium`;
+spec authoring + loop driving + verification + docs → this session (session
+model is Fable, the designated spec-author tier — no external call needed).
 
-**Working branch:** `main`, directly — matching this session's established
-pattern of landing each verified slice as one commit on `main`. No push
-without explicit user say-so (standing REQUESTS.md item).
+**Working branch:** `main`, per this repo's established pattern. No
+`git commit` / `git push` by the loop (project CLAUDE.md); the slice lands
+verified in the working tree, commit deferred to user authorization at
+wrap-up. Single-cycle run, lead present — the hourly safety-net scheduler is
+deliberately skipped (it exists to revive long unattended runs; here it would
+only risk an orphaned cron).
 
-## Design source
+## Scope (locked)
 
-`Design Handoff/CONNECT4.md`, plus the fully-working reference implementation
-in `Design Handoff/Pips.dc.html` (lines ~332–384 markup, ~1303–1399 logic).
-The handoff says: port the rules, not necessarily the code.
+Move the three game-agnostic modules — `sync.ts`, `turn-engine.ts`, `rng.ts`,
+each with its test file — from `src/card-engine/` to a new `src/engine/`
+directory, verbatim (no behavior change, no API change). Update every
+importer. No re-export shims. `git mv` so history survives the eventual
+commit.
 
-## Architecture decision (locked)
-
-Connect 4 joins the **older game system** — `src/games/` pure logic +
-`src/state/room.ts` host-authoritative reducer + a `src/screens/` table —
-exactly like Tic Tac Toe, its closest sibling (same first-to-three match
-shape, same turn model). It does **not** touch `src/card-engine/` or
-`src/card-games/`. State is plain serializable data over PeerJS; the host
-validates every move; clients only submit intents and render.
-
-## Target user
-A Pips player (host-vs-bot or host-vs-guest over a room code) who wants a
-quick Connect 4 match from the same shelf as the other games.
-
-## Core use case
-Pick Connect 4 on the landing shelf (or in the room game picker), share the
-code or play the house, click a column to drop a disc, watch it land in the
-lowest open slot with hover preview on your turn, first to three game wins
-takes the match — with the same look, header, sounds, and results flow as
-every other Pips game.
+Rationale (from the investigation): these three modules contain no card
+knowledge and are exactly what Battleship (hidden per-player boards =
+`HostSession` private state) and Wahoo (seeded RNG, turn engine with
+extra-turn) need. Promoting them makes the shared core real without building
+a speculative grid/path engine.
 
 ## Non-goals
-- **No drag, no undo, no animation of the disc falling** — the handoff
-  specifies click-to-drop only; discs appear in place (radial-gradient
-  bevel per the visual spec), no falling animation is described.
-- **No difficulty levels for the bot.** The handoff defines exactly one bot
-  policy (win / block / center-out-safe). TTT and Hangman likewise ignore
-  `botDifficulty`; Connect 4 does the same.
-- **>2 players** — inherently two-player, like TTT.
-- **Networked hover preview.** The prototype keeps `c4HoverCol` in its
-  single-client state; in the real app hover is per-client UI state local to
-  the table screen. It never crosses PeerJS.
-- **New real audio.** A disc-drop sound doesn't exist in the asset set; per
-  the user's instruction a *placeholder* (`piece-drop.mp3`, a copy of the
-  existing `mark-place.mp3` so it's audible and valid) ships now, and the
-  real asset is requested from the user at wrap-up. `round-win` and
-  `game-win` already exist and already fire via the established patterns.
-- **Automated DOM tests** — no jsdom in the project; rendered behavior is
-  live-verified in a real browser (established practice). Pure logic
-  (rules, bot, reducer) is vitest-tested.
-
-## Header note
-The handoff asks for the Pips-wordmark header on the Connect 4 table and its
-rollout to the other tables "for consistency". That rollout **already
-happened** in a prior charter — `TableHeader.tsx` renders `Wordmark` as a
-back-to-landing button and every table uses it. Connect 4 simply uses the
-existing `TableHeader`. Nothing to roll out.
+- **No grid engine, no path engine.** Per the investigation: grid games share
+  ~10 lines of index math; abstract only when a second game of a family
+  exists.
+- **`bot.ts` stays in `src/card-engine/`.** It is also generic (imports only
+  sync), but the approved scope named exactly three modules. Candidate for a
+  later promotion — noted in REQUESTS.md.
+- **No edits to `CLAUDE.md`** (user-owned). Its card-engine import
+  constraints implicitly extend to `src/engine/`; flagged in REQUESTS.md for
+  the user to codify if desired.
+- No Battleship work, no behavior changes, no drive-by refactors.
 
 ## Milestones
-- M1: rules + state — `src/games/connect4.ts` (+`connect4.test.ts`):
-  `lowestOpenRow`, `checkWin`, `isBoardFull`, `decideConnect4Move`;
-  `src/types.ts` (Game union + records + `Connect4State` + actions);
-  `src/state/room.ts` (init, `connect4Play`, `connect4AdvanceRound`,
-  startGame/withNewSeats wiring) + `room.test.ts` coverage.
-- M2: UI + app wiring — `src/screens/Connect4Table.tsx` (tray, sockets,
-  beveled discs, hover preview, win ring, seat score cards, sounds),
-  `App.tsx` (route, `whoActsNow`, bot runner, round-pause advance),
-  `Landing.tsx`/`Room.tsx` shelf entries, `rules.ts` entry, `tokens.css`
-  (`--blue: #2f6fed`, `--connect4-color`), `useSound.ts` + placeholder
-  `piece-drop.mp3`.
-- M3: live browser verification of a full host-vs-bot match (win, draw-replay
-  if reachable, hover preview, sounds, results/rematch), review findings
-  fixed, docs/state files current.
+- M1: files moved, all importers updated, `npx tsc -b --noEmit` + `npm test`
+  (481) + `npm run build` clean, review clean, docs
+  (`docs/card-engine.md`, `README.md`) updated to the new layout.
 
 ## Definition of done
-- Connect 4 appears on the shelf and in the room picker; a full
-  host-vs-bot match plays to results and rematch works — live-verified in a
-  real browser.
-- Rules, win detection (all four directions), draw-replay, starter
-  alternation, and bot policy match the handoff, unit-tested.
-- Guest-side flow is code-reviewed for host-authority (no host-only state
-  mutated client-side); guest actions validated host-side.
-- `npx tsc -b --noEmit`, `npm test`, `npm run build` clean throughout.
-- Placeholder `piece-drop.mp3` in place; real audio requested at wrap-up.
+- `src/engine/` holds sync/turn-engine/rng (+tests); `src/card-engine/` holds
+  only card-specific modules (cards, deck, zones, bot) importing from
+  `../engine/`.
+- Zero references to the old paths anywhere in `src/`.
+- Typecheck, 481 tests, and build all green, re-run by the lead.
+- Working tree left uncommitted-but-staged-clean for user commit.
 
 ## Run budget
-6 cycles (expect 2–3). On exhaustion: land in-flight work, clean tree,
-cancel the safety net, request renewal.
-
-## Stop criteria
-- Stop when the definition of done is met.
-- Any milestone unresolved after 3 cycles forces a pivot/pause decision.
-
-## Ambiguity resolutions
-1. **Board orientation** — flat 42-cell array, row-major, row 0 = top,
-   exactly as the prototype (`c4Board[row*7+col]`), cell = seat index or
-   `null`. Drop fills the highest index (bottom-most) open row.
-2. **Win-line highlight extent** — the full contiguous run through the
-   dropped disc (may exceed 4), matching the prototype's `c4Check`.
-3. **State shape** — mirrors `TttState` (`board`, `starter`, `winLine`,
-   `over`, `roundOver`, `pendingWinnerId`, `wins`) so the round-pause →
-   advance flow in `App.tsx` is the same code shape as TTT's. Status text is
-   derived in the screen, not stored.
-4. **Match length** — first to **three** games (handoff), pause
-   `ROUND_PAUSE_MS` on round end with the winning line highlighted, then
-   host auto-advances (`connect4AdvanceRound`), like TTT.
-5. **Sounds** — `piece-drop` on your own placement only (TTT's
-   diff-signature pattern, to avoid bot spam), `round-win` on round end,
-   `game-win` via the existing shared `Results.tsx`.
-6. **Bot's "safer column" rule** — implemented exactly as the prototype:
-   among center-out-preferred open columns, keep those whose drop does not
-   give the opponent an immediate win anywhere next turn; pick the first
-   survivor, else the first preferred open column.
-7. **Draw** — full board, no line: replay, nobody scores, starter still
-   alternates (prototype behavior).
+2 cycles (expect 1). Stop when the definition of done is met.

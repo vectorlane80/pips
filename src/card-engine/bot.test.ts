@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyAction, createHostSession } from './sync.ts'
-import type { ActionValidator, HostSession } from './sync.ts'
+import { applyAction, createHostSession } from '../engine/sync.ts'
+import type { ActionValidator, HostSession } from '../engine/sync.ts'
 import { runBotTurn } from './bot.ts'
 
 // ---------------------------------------------------------------------------

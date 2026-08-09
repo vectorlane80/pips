@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs'
-import { assertWireSafe } from '../card-engine/sync'
+import { assertWireSafe } from '../engine/sync'
 
 type GuestToHost<TAction> = { kind: 'join'; name: string } | { kind: 'action'; action: TAction }
 type HostToGuest<TState> = { kind: 'state'; state: TState } | { kind: 'rejected'; reason: string }

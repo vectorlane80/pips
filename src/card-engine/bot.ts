@@ -1,5 +1,5 @@
-import type { ActionOutcome, ActionValidator, HostSession } from './sync.ts'
-import { applyAction, deriveSnapshot } from './sync.ts'
+import type { ActionOutcome, ActionValidator, HostSession } from '../engine/sync.ts'
+import { applyAction, deriveSnapshot } from '../engine/sync.ts'
 
 export type BotStrategy<TPublicState, TPrivateState, TAction> = (
   publicState: TPublicState,

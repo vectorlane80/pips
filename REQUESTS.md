@@ -1,5 +1,19 @@
 # Requests for the human
 
+- [ ] 2026-08-09, engine-core wrap-up — **commit the charter**: the
+      `src/engine/` promotion sits verified in the working tree (renames
+      staged, imports + docs modified, 481 tests / tsc / build green). The
+      loop can't commit (project CLAUDE.md). Say the word and it lands as
+      one commit on `main`.
+- [ ] 2026-08-09, non-blocking — CLAUDE.md's card-engine constraint
+      paragraph predates `src/engine/`; consider codifying: `src/engine/`
+      must not import React, screens/components, card-engine, card-games,
+      or games — it is the bottom layer. (CLAUDE.md is user-owned, so the
+      loop didn't touch it.)
+- [ ] 2026-08-09, non-blocking — `src/card-engine/bot.ts` (`runBotTurn`) is
+      fully generic; promote it to `src/engine/` whenever the first
+      non-card game grows a house bot.
+
 - [x] 2026-08-08, Connect 4 wrap-up — real audio: done — user supplied a
       real disc-drop mp3; placeholder replaced.
 - [x] 2026-08-08, Connect 4 wrap-up — commit the charter: done — user

@@ -7,11 +7,13 @@ Seven games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4*
 **Rummy**, and **Phase 10**. Farkle and Yahtzee support a full party (up to 8 players);
 the rest are two-player. Every game can be played solo against a house bot.
 
-Rummy and Phase 10 are built on a separate, reusable card-game engine
-(`src/card-engine/`) designed to support future card games (Golf, Crazy Eights, Hearts,
-Spades) without reimplementing decks, hands, hidden information, and turn order each
-time — see [docs/card-engine.md](docs/card-engine.md), [docs/rummy.md](docs/rummy.md),
-and [docs/phase10.md](docs/phase10.md).
+Rummy and Phase 10 are built on a reusable card-game engine (`src/card-engine/`),
+itself built on a game-agnostic core (`src/engine/`: seeded RNG, turn order, and
+host-authoritative sync with hidden per-player state) that future non-card games
+(Battleship, Wahoo) will share. Designed so new games don't reimplement decks, hands,
+hidden information, and turn order each time — see
+[docs/card-engine.md](docs/card-engine.md), [docs/rummy.md](docs/rummy.md), and
+[docs/phase10.md](docs/phase10.md).
 
 ## Stack
 

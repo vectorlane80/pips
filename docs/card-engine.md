@@ -5,7 +5,9 @@ built to support Rummy next, and Golf, Crazy Eights, Hearts, Spades, and
 Phase 10 after that — without each one reimplementing decks, hands, dealing,
 hidden information, turn order, and PeerJS synchronization from scratch.
 
-Lives entirely under `src/card-engine/` (the reusable layer) and
+Lives under `src/engine/` (the game-agnostic core: RNG, turn order, host
+sync — promoted out of `src/card-engine/` in Aug 2026 so non-card games like
+Battleship can build on it), `src/card-engine/` (the card-specific layer) and
 `src/card-games/<game>/` (a specific game's rules on top of it — currently
 just `src/card-games/rummy/`, a minimal proof harness, not full Rummy).
 
@@ -22,10 +24,10 @@ specific game's rules:
 |---|---|---|
 | Cards | `card-engine/cards.ts` | `Card` identity (`id`/`suit`/`rank`/`deckIndex`/`meta`), `SUITS`/`RANKS`, `cardsEqual`/`findCard`/`removeCard` |
 | Deck | `card-engine/deck.ts` | `createStandardDeck` (multi-deck, jokers), `shuffleDeck` (host-seeded), `dealCards`/`drawCard` |
-| RNG | `card-engine/rng.ts` | `createRng(seed)` — deterministic mulberry32, so shuffles are host-authoritative and testable |
+| RNG | `engine/rng.ts` | `createRng(seed)` — deterministic mulberry32, so shuffles are host-authoritative and testable |
 | Zones | `card-engine/zones.ts` | The generic `Zone` container (hand/discard/stock/anything) and card-movement ops |
-| Turn engine | `card-engine/turn-engine.ts` | Generic turn order: current player, direction, skip/extra-turn, an opaque `phase` slot |
-| Sync | `card-engine/sync.ts` | Host-authoritative action pipeline, public/private state split, revision numbers, reconnect snapshots |
+| Turn engine | `engine/turn-engine.ts` | Generic turn order: current player, direction, skip/extra-turn, an opaque `phase` slot |
+| Sync | `engine/sync.ts` | Host-authoritative action pipeline, public/private state split, revision numbers, reconnect snapshots |
 | Bot seam | `card-engine/bot.ts` | The one function a house player calls — goes through the exact same path as a human |
 
 Every module is pure functions over plain data. No classes, no React, no
@@ -371,14 +373,18 @@ re-verified clean after every single milestone specifically to confirm this
 ## Where things live
 
 ```
-src/card-engine/
-  cards.ts / cards.test.ts              Card identity
-  deck.ts / deck.test.ts                Standard deck creation, shuffle, deal
+src/engine/                             Game-agnostic core — no card imports;
+                                        Battleship/Wahoo build on this too
   rng.ts / rng.test.ts                  Seeded PRNG
-  zones.ts / zones.test.ts              Hand/DiscardPile/PlayerZone/PublicZone
   turn-engine.ts / turn-engine.test.ts  Generic turn order
   sync.ts / sync.test.ts                Host authority, hidden info, reconnection
-  bot.ts / bot.test.ts                  House-player seam
+
+src/card-engine/                        Card-specific layer, imports src/engine/
+  cards.ts / cards.test.ts              Card identity
+  deck.ts / deck.test.ts                Standard deck creation, shuffle, deal
+  zones.ts / zones.test.ts              Hand/DiscardPile/PlayerZone/PublicZone
+  bot.ts / bot.test.ts                  House-player seam (generic; promotion
+                                        candidate when a non-card game needs it)
 
 src/card-games/
   rummy/

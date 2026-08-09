@@ -1,13 +1,13 @@
 import type { Card } from '../../card-engine/cards.ts'
 import type { Zone } from '../../card-engine/zones.ts'
-import type { TurnState } from '../../card-engine/turn-engine.ts'
-import type { HostSession } from '../../card-engine/sync.ts'
+import type { TurnState } from '../../engine/turn-engine.ts'
+import type { HostSession } from '../../engine/sync.ts'
 import { shuffleDeck, dealCards } from '../../card-engine/deck.ts'
 import { createPhase10Deck } from './deck.ts'
-import { createRng } from '../../card-engine/rng.ts'
+import { createRng } from '../../engine/rng.ts'
 import { createHand, createDiscardPile, createPublicZone, addCards, cardCount } from '../../card-engine/zones.ts'
-import { createTurnState } from '../../card-engine/turn-engine.ts'
-import { createHostSession } from '../../card-engine/sync.ts'
+import { createTurnState } from '../../engine/turn-engine.ts'
+import { createHostSession } from '../../engine/sync.ts'
 
 export type Phase10TurnPhase = 'draw' | 'discard'
 

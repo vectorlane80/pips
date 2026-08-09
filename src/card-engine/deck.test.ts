@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createStandardDeck, dealCards, drawCard, shuffleDeck } from './deck.ts'
-import { createRng } from './rng.ts'
+import { createRng } from '../engine/rng.ts'
 
 describe('createStandardDeck', () => {
   it('returns 52 cards with no jokers by default', () => {
