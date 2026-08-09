@@ -1,4 +1,4 @@
-import type { BotStrategy } from '../../card-engine/bot.ts'
+import type { BotStrategy } from '../../engine/bot.ts'
 import type { RummyPublicState, RummyPrivateState, RummyAction } from './state.ts'
 import { fullMeldCards } from './state.ts'
 import { classifyMeld, hasMeldIncluding } from './melds.ts'

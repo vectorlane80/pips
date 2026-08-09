@@ -9,7 +9,7 @@ import { createRng } from '../../engine/rng.ts'
 import { createTurnState } from '../../engine/turn-engine.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { classifyMeld } from './melds.ts'
-import type { BotStrategy } from '../../card-engine/bot.ts'
+import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
 
 function totalCards(

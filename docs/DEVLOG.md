@@ -1551,3 +1551,20 @@ shipping each verified charter promptly.
   lead's re-runs exactly. deepseek:flash cost ~$0.19 (909k in / 9.6k out).
 - **Continue?** Definition of done met in one cycle. Wrap-up: commit
   handoff to the user.
+
+## 2026-08-09 — Requests run (cycle 2)
+
+- **Authorization:** user: "Run the requests, all approved, including
+  commit." Covers: commit the engine-core charter, codify the src/engine/
+  constraint in CLAUDE.md, promote bot.ts, and the standing 08-07 push
+  request.
+- **Shipped:** commit 41fa325 (engine-core promotion); bot.ts + bot.test.ts
+  → src/engine/ via git mv (deepseek:flash, spec 12, ~$0.016, report
+  accurate on re-verification); CLAUDE.md bottom-layer bullet (lead,
+  user-authorized); docs file-tree corrected.
+- **Verification:** tsc clean, 481/481, build clean — re-run by lead after
+  the implementer. Review (sonnet): CLEAN, and confirmed by live grep that
+  src/engine/ already satisfies the new constraint (imports nothing outside
+  its own directory + vitest).
+- **Continue?** All requests done. Push to origin/main per approval; run
+  ends.

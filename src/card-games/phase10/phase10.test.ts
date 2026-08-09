@@ -7,7 +7,7 @@ import { cardCount, createHand, createDiscardPile, createPublicZone, createPlaye
 import { createPhase10Deck } from './deck.ts'
 import { createRng } from '../../engine/rng.ts'
 import { createHostSession } from '../../engine/sync.ts'
-import type { BotStrategy } from '../../card-engine/bot.ts'
+import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
 
 // Phase 10 deck id layout (108 cards): red 1-12 ×2 = p10-0..p10-23, blue 1-12 ×2 =

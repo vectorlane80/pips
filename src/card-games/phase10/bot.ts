@@ -1,4 +1,4 @@
-import type { BotStrategy } from '../../card-engine/bot.ts'
+import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
 import type { Phase10PublicState, Phase10PrivateState, Phase10Action } from './state.ts'
 import { fullGroupCards } from './state.ts'

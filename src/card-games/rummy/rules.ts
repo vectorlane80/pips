@@ -1,7 +1,7 @@
 import type { Card } from '../../card-engine/cards.ts'
 import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
-import { runBotTurn, type BotStrategy } from '../../card-engine/bot.ts'
+import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, createTurnState } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, topCard, cardCount, createPlayerZone, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'

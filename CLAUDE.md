@@ -8,6 +8,10 @@ backend. `npx tsc -b --noEmit` and `npm run build` must stay clean at all times.
 - All state that crosses PeerJS must be plain serializable data — no class
   instances, no functions, no DOM/framework objects. `JSON.stringify` round-trip
   must be lossless for anything sent over the wire.
+- The engine core (`src/engine/`: rng, turn-engine, sync, bot) is the bottom
+  layer: it must not import from React, `src/screens/`, `src/components/`,
+  `src/card-engine/`, `src/card-games/`, `src/games/`, or `src/state/` — pure
+  functions over plain data, game-agnostic, card-agnostic.
 - The card engine (`src/card-engine/`) must not import from React, from
   `src/screens/`, `src/components/`, or from any specific game's rules module.
   It also must not know about Farkle/Yahtzee/Tic Tac Toe/Hangman — those live in

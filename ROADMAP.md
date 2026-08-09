@@ -3,7 +3,7 @@
 Charter: Engine-core promotion — see `CHARTER.md`.
 
 ## Next up
-(none — charter complete in cycle 1; commit deferred to user, see REQUESTS.md)
+(none — charter complete; all wrap-up requests run in cycle 2, committed and pushed)
 
 ## Done (this charter)
 - [cycle 1] M1 — `src/engine/` created; sync/turn-engine/rng (+tests) moved

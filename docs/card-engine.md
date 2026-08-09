@@ -28,7 +28,7 @@ specific game's rules:
 | Zones | `card-engine/zones.ts` | The generic `Zone` container (hand/discard/stock/anything) and card-movement ops |
 | Turn engine | `engine/turn-engine.ts` | Generic turn order: current player, direction, skip/extra-turn, an opaque `phase` slot |
 | Sync | `engine/sync.ts` | Host-authoritative action pipeline, public/private state split, revision numbers, reconnect snapshots |
-| Bot seam | `card-engine/bot.ts` | The one function a house player calls — goes through the exact same path as a human |
+| Bot seam | `engine/bot.ts` | The one function a house player calls — goes through the exact same path as a human |
 
 Every module is pure functions over plain data. No classes, no React, no
 PeerJS import anywhere in `card-engine/` — confirmed by review at every
@@ -378,13 +378,12 @@ src/engine/                             Game-agnostic core — no card imports;
   rng.ts / rng.test.ts                  Seeded PRNG
   turn-engine.ts / turn-engine.test.ts  Generic turn order
   sync.ts / sync.test.ts                Host authority, hidden info, reconnection
+  bot.ts / bot.test.ts                  House-player seam
 
 src/card-engine/                        Card-specific layer, imports src/engine/
   cards.ts / cards.test.ts              Card identity
   deck.ts / deck.test.ts                Standard deck creation, shuffle, deal
   zones.ts / zones.test.ts              Hand/DiscardPile/PlayerZone/PublicZone
-  bot.ts / bot.test.ts                  House-player seam (generic; promotion
-                                        candidate when a non-card game needs it)
 
 src/card-games/
   rummy/
