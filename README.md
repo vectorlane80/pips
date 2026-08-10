@@ -1,7 +1,9 @@
 # Pips
 
 Little games for two people and one code. Pick a game, share a room code, play — no
-account, no sign-in, nothing to install.
+account, no sign-in, nothing to install. Each game lives at its own
+URL (`/pips/<game>`) — refresh lands you on that game's fresh room,
+and Back returns to the shelf.
 
 Ten games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
 **Rummy**, **Phase 10**, **Battleship**, **Dominoes**, and **Wahoo**. Farkle and

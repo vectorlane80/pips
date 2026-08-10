@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Action, Game, RoomState } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
+import { decideBoot, gameFromPath, gamePath, readNameCookie, writeNameCookie, type RoutedGame } from './state/route'
 import { randomBotName } from './data/botNames'
 import { createHost, joinHost, peerIdForCode, type GuestHandle, type HostHandle } from './net/peer'
 import { Landing } from './screens/Landing'
@@ -179,6 +180,9 @@ export default function App() {
   const wahooNamesRef = useRef<Record<string, string>>({})
   const wahooBotSeatsRef = useRef<Set<string>>(new Set())
   const wahooDroppedRef = useRef<string[]>([])
+  // Routing: the popstate guard reads the live game from a ref (no stale closures).
+  const liveGameRef = useRef<RoutedGame | null>(null)
+  const pendingHostBootRef = useRef<RoutedGame | null>(null)
 
   useEffect(() => {
     roomRef.current = room
@@ -199,14 +203,109 @@ export default function App() {
     wahooGuestRef.current?.destroy()
   }, [])
 
+  // ---- Routing ----
+
+  function pushGameUrl(game: RoutedGame) {
+    if (gameFromPath(location.pathname) !== game) history.pushState({}, '', gamePath(game))
+  }
+
+  function replaceGameUrl(game: RoutedGame) {
+    if (gameFromPath(location.pathname) !== game) history.replaceState({}, '', gamePath(game))
+  }
+
+  // Boot: seed the name from the cookie, then act on the initial URL —
+  // ?join= deep link, game deep link (host), or plain shelf.
   useEffect(() => {
-    const join = new URLSearchParams(location.search).get('join')
-    if (join) setJoinCodeInput(join.toUpperCase())
+    const cookieName = readNameCookie()
+    if (cookieName) setName(cookieName)
+    const boot = decideBoot(location.pathname, location.search, !!cookieName)
+    switch (boot.kind) {
+      case 'join':
+        setJoinCodeInput(boot.code.toUpperCase())
+        break
+      case 'host':
+        // replaceState first: a deep link has no /pips entry beneath, so
+        // Back exits the site — correct for a deep link. The shelf handler
+        // runs once the cookie-seeded name lands in state (host starters
+        // read `name` synchronously).
+        history.replaceState({}, '', gamePath(boot.game))
+        pendingHostBootRef.current = boot.game
+        break
+      case 'shelf-needs-name':
+        history.replaceState({}, '', '/pips/')
+        break
+      case 'shelf':
+        // Plain shelf on a junk path (/pips/not-a-game): scrub the URL so it
+        // doesn't linger in the address bar. 'shelf' already means no game
+        // path, so the base forms are the only paths fine as-is.
+        if (location.pathname !== '/' && location.pathname !== '/pips' && location.pathname !== '/pips/') {
+          history.replaceState({}, '', '/pips/')
+        }
+        break
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Deep-link host: start the game after the cookie name has been seeded.
+  useEffect(() => {
+    const game = pendingHostBootRef.current
+    if (game === null || name === '') return
+    pendingHostBootRef.current = null
+    hostGameFromBoot(game)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name])
+
+  // Current "live game" for the popstate guard. Lobbies/rooms and results
+  // screens are NOT live; battleship stays live until stage === 'over'
+  // (leaving mid-match is what we guard).
+  function liveGameNow(): RoutedGame | null {
+    const legacy = roomRef.current
+    if (legacy && legacy.screen !== 'room' && legacy.screen !== 'results') return legacy.game
+    if (rummyRole && rummyView && !rummyView.publicState.matchWinnerId) return 'rummy'
+    if (phase10Role && phase10View && !phase10View.publicState.matchWinnerId) return 'phase10'
+    if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
+    if (dominoesRole && dominoesView && dominoesView.publicState.stage !== 'over') return 'dominoes'
+    if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
+    return null
+  }
+
+  useEffect(() => {
+    liveGameRef.current = liveGameNow()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView])
+
+  // Back/forward guard: confirm before leaving a live game mid-match.
+  useEffect(() => {
+    const onPopstate = () => {
+      const game = liveGameRef.current
+      if (game !== null && !window.confirm('Leave the game?')) {
+        history.pushState({}, '', gamePath(game))
+        return
+      }
+      resetToEntry({ fromPopstate: true })
+    }
+    window.addEventListener('popstate', onPopstate)
+    return () => window.removeEventListener('popstate', onPopstate)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function hostGameFromBoot(game: RoutedGame) {
+    switch (game) {
+      case 'farkle': case 'yahtzee': case 'ttt': case 'hangman': case 'connect4':
+        startHost(game)
+        return
+      case 'rummy': startRummyHost(); return
+      case 'phase10': startPhase10Host(); return
+      case 'battleship': startBattleshipHost(); return
+      case 'dominoes': startDominoesHost(); return
+      case 'wahoo': startWahooHost(); return
+    }
+  }
 
   function hostApply(action: Action, by: string): RoomState | null {
     if (!roomRef.current) return null
     const next = applyAction(roomRef.current, action, by)
+    if (action.type === 'pickGame') replaceGameUrl(next.game)
     roomRef.current = next
     setRoom(next)
     hostRef.current?.broadcast(next)
@@ -225,6 +324,8 @@ export default function App() {
     roomRef.current = initial
     setRoom(initial)
     setRole('host')
+    writeNameCookie(name)
+    pushGameUrl(game)
     setLocalSeatId(hostId)
     setError(null)
     hostRef.current = createHost<RoomState, Action>(code, {
@@ -256,8 +357,15 @@ export default function App() {
     setError(null)
     const handle = joinHost<RoomState, Action>(code, name.trim(), {
       onState(state) {
+        const first = roomRef.current === null
         roomRef.current = state
         setRoom(state)
+        if (first) {
+          writeNameCookie(name)
+          pushGameUrl(state.game)
+        } else {
+          replaceGameUrl(state.game)
+        }
       },
       onError() {
         setError('Could not reach that room. Check the code and try again.')
@@ -271,7 +379,7 @@ export default function App() {
     handle.peerId.then((id) => setLocalSeatId(id)).catch(() => {})
   }
 
-  function resetToEntry() {
+  function resetToEntry(opts?: { fromPopstate?: boolean }) {
     hostRef.current?.destroy()
     hostRef.current = null
     guestRef.current?.destroy()
@@ -373,6 +481,9 @@ export default function App() {
     wahooBotBusyRef.current = false
     wahooBotSeatsRef.current.clear()
     wahooNamesRef.current = {}
+    // UI Leave buttons land on the shelf; from popstate the browser has
+    // already moved, so history is left alone.
+    if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -422,6 +533,8 @@ export default function App() {
     const code = `RM-${generateCode()}`
     const hostId = peerIdForCode(code)
     setRummyRole('host')
+    writeNameCookie(name)
+    pushGameUrl('rummy')
     setRummyCode(code)
     setRummyLocalPlayerId(hostId)
     rummyLocalPlayerIdRef.current = hostId
@@ -535,6 +648,8 @@ export default function App() {
     })
     rummyGuestRef.current = handle
     setRummyRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('rummy')
     setRummyCode(code)
     handle.peerId.then((id) => { setRummyLocalPlayerId(id); rummyLocalPlayerIdRef.current = id }).catch(() => {})
   }
@@ -589,6 +704,8 @@ export default function App() {
     const code = `P10-${generateCode()}`
     const hostId = peerIdForCode(code)
     setPhase10Role('host')
+    writeNameCookie(name)
+    pushGameUrl('phase10')
     setPhase10Code(code)
     setPhase10LocalPlayerId(hostId)
     phase10LocalPlayerIdRef.current = hostId
@@ -702,6 +819,8 @@ export default function App() {
     })
     phase10GuestRef.current = handle
     setPhase10Role('guest')
+    writeNameCookie(name)
+    pushGameUrl('phase10')
     setPhase10Code(code)
     handle.peerId.then((id) => { setPhase10LocalPlayerId(id); phase10LocalPlayerIdRef.current = id }).catch(() => {})
   }
@@ -756,6 +875,8 @@ export default function App() {
     const code = `BS-${generateCode()}`
     const hostId = peerIdForCode(code)
     setBattleshipRole('host')
+    writeNameCookie(name)
+    pushGameUrl('battleship')
     setBattleshipCode(code)
     setBattleshipLocalPlayerId(hostId)
     battleshipLocalPlayerIdRef.current = hostId
@@ -872,6 +993,8 @@ export default function App() {
     })
     battleshipGuestRef.current = handle
     setBattleshipRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('battleship')
     setBattleshipCode(code)
     handle.peerId.then((id) => { setBattleshipLocalPlayerId(id); battleshipLocalPlayerIdRef.current = id }).catch(() => {})
   }
@@ -931,6 +1054,8 @@ export default function App() {
     const code = `DM-${generateCode()}`
     const hostId = peerIdForCode(code)
     setDominoesRole('host')
+    writeNameCookie(name)
+    pushGameUrl('dominoes')
     setDominoesCode(code)
     setDominoesLocalPlayerId(hostId)
     dominoesLocalPlayerIdRef.current = hostId
@@ -1044,6 +1169,8 @@ export default function App() {
     })
     dominoesGuestRef.current = handle
     setDominoesRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('dominoes')
     setDominoesCode(code)
     handle.peerId.then((id) => { setDominoesLocalPlayerId(id); dominoesLocalPlayerIdRef.current = id }).catch(() => {})
   }
@@ -1108,6 +1235,8 @@ export default function App() {
     const code = `WH-${generateCode()}`
     const hostId = peerIdForCode(code)
     setWahooRole('host')
+    writeNameCookie(name)
+    pushGameUrl('wahoo')
     setWahooCode(code)
     setWahooLocalPlayerId(hostId)
     wahooLocalPlayerIdRef.current = hostId
@@ -1274,6 +1403,8 @@ export default function App() {
     })
     wahooGuestRef.current = handle
     setWahooRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('wahoo')
     setWahooCode(code)
     handle.peerId.then((id) => { setWahooLocalPlayerId(id); wahooLocalPlayerIdRef.current = id }).catch(() => {})
   }

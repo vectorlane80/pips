@@ -1848,3 +1848,28 @@ shipping each verified charter promptly.
 - Verified: live target probe at unit (−2,8) = the green arrow's exact
   hole; Oscar visual review PASS — target on the bottom tip's leftmost
   hole, zero geometry regressions. 674 tests / tsc / build green.
+
+## 2026-08-10 — URL routing + name cookie (specs 19, 19b–19d)
+
+- **Charter:** /pips/<game> per game (all ten), Back = one step to the
+  shelf, refresh = that game's pre-start page, confirm-guard on Back
+  during live games, guests get URLs too, pips-name cookie prefills
+  the landing, GH Pages 404.html fallback. Hand-rolled history — no
+  router dep.
+- **Design core:** pure route.ts (segment map, decideBoot(path, search,
+  hasName), injectable cookie accessor for DOM-less tests) + thin App
+  glue: guarded pushGameUrl/replaceGameUrl (idempotent per path — the
+  one-entry-per-session invariant holds across 14 call sites without
+  bookkeeping), popstate listener over refs, deep-link boot via
+  replaceState-then-host.
+- **Verified live, full matrix:** entry URL + cookie write; pre-start
+  Back with zero confirms; live-game Back BOTH branches (decline
+  restores /pips/wahoo and keeps the match; accept exits); deep link
+  with cookie → fresh Dominoes room; without cookie → shelf with URL
+  cleaned; legacy host push + in-room picker replaceState
+  (connect4→farkle); Leave → /pips/; dist/404.html shipped by build.
+- **Oscar review:** traced the invariant across every call site,
+  confirmed no StrictMode double-boot, live-game classification
+  correct for all ten games. Two finds fixed: cookie now
+  encode/decodeURIComponent (';' names can't corrupt it) + junk-path
+  URL cleanup on shelf boot. 696 tests / tsc / build green.
