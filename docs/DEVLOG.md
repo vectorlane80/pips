@@ -1777,3 +1777,22 @@ shipping each verified charter promptly.
 - 674 tests / tsc / build green; live-verified: board matches the dot
   diagram feature-for-feature; die renders full-size with pips and
   attribution.
+
+## 2026-08-10 — Wahoo scale unification + Oscar VISUAL review (spec 18m)
+
+- **User caught the render broken again post-v3**: holes outgrew the
+  cross (unit=paneW/16 + viewBox -8..8 survived from 3-wide era; 18k's
+  screen section wasn't applied). Fix: ONE source of truth —
+  BOARD_SPAN 19 / ARM_HALF_WIDTH 2.75 / ARM_LENGTH 8.75 — unit and
+  viewBox both derive from it; the mismatch class is now impossible.
+- **New verification rigs, per the user's mandate:**
+  (1) automated containment probe on the LIVE page — every track/lane/
+  center hole checked inside the rendered cross via SVGGeometryElement
+  .isPointInFill, zero clipped by the pane (bases correctly on felt);
+  (2) an Oscar VISUAL review pipeline — live-DOM geometry serialized to
+  SVG in-page, rasterized to PNG via canvas, and reviewed by sonnet
+  WITH VISION against a hole-by-hole checklist of the reference board.
+- **Oscar verdict: PASS** — 5-wide arms, 6 per edge, 5 per tip, shared
+  corners, tip-hung color lanes, outward diagonal bases, four-fold
+  symmetry, modest centered center hole, nothing clipped. 674 tests /
+  tsc / build green.

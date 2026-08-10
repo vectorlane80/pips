@@ -44,14 +44,22 @@ function armFill(arm: number, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
 }
 
-// ---- Cross board geometry (viewBox unit space, -8..8) ----
+// ---- Board scale (one source of truth) ----
+// The pane is BOARD_SPAN units wide: content spans ±8 units, plus a margin.
+// Every position on the board — holes, marbles, rings, and the cross — is a
+// unit offset scaled by `unit = paneW / BOARD_SPAN`; the cross viewBox is
+// built from BOARD_SPAN too, so no second scale can drift.
+const BOARD_SPAN = 19 // total units across the pane (content ±8 + margin)
+const ARM_HALF_WIDTH = 2.75 // bars contain columns at ±2 with margin
+const ARM_LENGTH = 8.75 // bars reach past tip rows at ±8
+
 // The solid cream cross is the two rounded bars only (no corner plates). Every
 // shape is rendered twice in one SVG — a stroked pass then a fill-only pass —
 // so the second pass covers the interior strokes and only the union's outer
 // outline survives (a welded single-outline cross).
 const CROSS_SHAPES: ReadonlyArray<{ x: number; y: number; width: number; height: number; rx: number }> = [
-  { x: -7.75, y: -1.75, width: 15.5, height: 3.5, rx: 0.3 }, // horizontal bar
-  { x: -1.75, y: -7.75, width: 3.5, height: 15.5, rx: 0.3 }, // vertical bar
+  { x: -ARM_LENGTH, y: -ARM_HALF_WIDTH, width: ARM_LENGTH * 2, height: ARM_HALF_WIDTH * 2, rx: 0.3 }, // horizontal bar
+  { x: -ARM_HALF_WIDTH, y: -ARM_LENGTH, width: ARM_HALF_WIDTH * 2, height: ARM_LENGTH * 2, rx: 0.3 }, // vertical bar
 ]
 
 function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; stroked: boolean }) {
@@ -216,7 +224,7 @@ export function WahooTable({
   const [selectedMarbleIdx, setSelectedMarbleIdx] = useState<number | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
 
-  // Measure the square board pane; unit = pane/16 (the board spans -7..7 units).
+  // Measure the square board pane; unit = pane/BOARD_SPAN (content ±8 + margin).
   useEffect(() => {
     const el = boardRef.current
     if (!el) return
@@ -228,8 +236,9 @@ export function WahooTable({
   }, [])
 
   const board = useMemo(() => createBoard(), [])
-  // paneW/16; the SVG cross viewBox "-8 -8 16 16" must match this scale.
-  const unit = paneW / 16
+  // One scale contract: unit derives from BOARD_SPAN and the cross viewBox is
+  // built from the same constant — no other scale exists in this file.
+  const unit = paneW / BOARD_SPAN
   const boardReady = paneW > 0
 
   // Sound effects — diff lastEvent identity (every accepted action replaces it;
@@ -421,7 +430,11 @@ export function WahooTable({
               {/* Solid cream cross under the holes; the felt shows around it and
                   under the bases. Two passes per shape: stroked then fill-only,
                   so interior strokes vanish and one outer outline remains. */}
-              <svg className="wh-cross" viewBox="-8 -8 16 16" aria-hidden="true">
+              <svg
+                className="wh-cross"
+                viewBox={`${-BOARD_SPAN / 2} ${-BOARD_SPAN / 2} ${BOARD_SPAN} ${BOARD_SPAN}`}
+                aria-hidden="true"
+              >
                 {CROSS_SHAPES.map((s, i) => (
                   <CrossRect key={`o${i}`} shape={s} stroked />
                 ))}
