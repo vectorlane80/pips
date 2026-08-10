@@ -13,9 +13,9 @@ import {
 
 export type WahooSeatCount = 2 | 3 | 4
 
-// marble position: -1 base, -2 center, 0..57 track (relative to own arm's
-// come-out hole: 0 = come-out, 57 = home entrance at the own-arm tip middle),
-// 58..61 home lane (58 outermost, adjacent to the home entrance; 61 deepest,
+// marble position: -1 base, -2 center, 0..62 track (relative to own arm's
+// come-out hole: 0 = come-out, 62 = home entrance at the own-arm tip middle),
+// 63..66 home lane (63 outermost, adjacent to the home entrance; 66 deepest,
 // nearest the center)
 export type MarblePos = number
 
@@ -24,7 +24,7 @@ export interface WahooPublicState {
   turn: TurnState<'roll' | 'move'> // phase 'roll' = awaiting ROLL, 'move' = die shown, awaiting MOVE
   seatArms: Record<string, number> // playerId -> arm 0..3
   positions: Record<string, MarblePos[]> // playerId -> 4 marbles
-  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 1 | 17 } | null
+  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 6 | 22 } | null
   die: number | null // current roll while phase 'move'
   sixStreak: number // consecutive 6s in the current player's chain
   lastMoved: { playerId: string; marbleIdx: number } | null // for the triple-six bust
@@ -60,13 +60,13 @@ export interface WahooSession {
 }
 
 // The two forward-diagonal corners a player's marbles can shortcut into the
-// center from (relative track coordinates). The other two corners (33, 49)
+// center from (relative track coordinates). The other two corners (38, 54)
 // are only ever reached by EXITING the center — see exitTargetRel.
 // (SHORTCUT_ENTRIES lives in board.ts with the rest of the constant set.)
 
 // Relative track position of the exit corner for a center marble that entered
-// via the given corner: the diagonal opposite (entry 1 → 33, entry 17 → 49).
-export function exitTargetRel(entryCornerRel: 1 | 17): 33 | 49 {
+// via the given corner: the diagonal opposite (entry 6 → 38, entry 22 → 54).
+export function exitTargetRel(entryCornerRel: 6 | 22): 38 | 54 {
   return SHORTCUT_EXITS[entryCornerRel]
 }
 
@@ -161,7 +161,7 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     }
   }
 
-  // shortcut: track marble at p, corner c in {1, 17}, p <= c and the die lands
+  // shortcut: track marble at p, corner c in {6, 22}, p <= c and the die lands
   // exactly on the corner plus one step into the center. The path is a jump —
   // only the center's occupant matters.
   const centerByOwn = centerBy?.playerId === playerId
@@ -175,7 +175,7 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     }
   }
 
-  // exit: center marble of this player, die 1 or 6, diagonal corner (33/49)
+  // exit: center marble of this player, die 1 or 6, diagonal corner (38/54)
   // free of own marbles (an opponent there is bumped).
   if ((die === 1 || die === 6) && centerBy?.playerId === playerId) {
     const target = exitTargetRel(centerBy.entryCornerRel)
@@ -200,7 +200,7 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     } else {
       // entering the lane from the track: no own marble in lane slots
       // LANE_START..to (the lane entry consumes the count exactly at the
-      // 0..57 → 58..61 boundary; a marble never lands on its own rel 58..63
+      // 0..62 → 63..66 boundary; a marble never lands on its own rel 63..66
       // track holes)
       if (!laneOccupied(positions, LANE_START, to)) moves.push({ marbleIdx: i, kind: 'advance' })
     }

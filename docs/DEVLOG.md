@@ -1831,3 +1831,20 @@ shipping each verified charter promptly.
   marble transition during the HMR resize; a 16-marble
   nearest-hole-delta probe returned all zeros.
 - 674 tests / tsc / build green.
+
+## 2026-08-10 — Come-out at the tip corner (specs 18q/18q2/18q3)
+
+- **User's annotated arrows ended the come-out saga**: each seat enters
+  at ITS OWN ARM'S TIP CORNER on the side facing its base (yellow NW →
+  left tip's top hole; red NE → top tip's right; blue SE → right tip's
+  bottom; green SW → bottom tip's left). Home entrance stays the tip
+  middle — the circuit is come-out → clockwise 62 → turn in two holes
+  before where you started. My two prior anchorings (inner-corner-
+  adjacent, then above-the-corner) were both misreadings of prose/
+  photos; the arrows were the first unambiguous spec.
+- Constants re-anchored (entries q*16+9, trackIndexFor +9, entrance
+  rel 62, lanes 63..66, corners {6,22,38,54}, shortcut {6,22}→{38,54});
+  rules/bot logic untouched; three-dispatch test migration.
+- Verified: live target probe at unit (−2,8) = the green arrow's exact
+  hole; Oscar visual review PASS — target on the bottom tip's leftmost
+  hole, zero geometry regressions. 674 tests / tsc / build green.

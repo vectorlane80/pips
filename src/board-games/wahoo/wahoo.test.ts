@@ -184,7 +184,7 @@ describe('out', () => {
   })
 
   it('bumps an opponent sitting on the entry hole', () => {
-    // p2 (arm 2) at rel 32 sits on absolute 14 — p1's come-out hole.
+    // p2 (arm 2) at rel 32 sits on absolute 9 — p1's come-out hole.
     const wh = buildWahoo({
       phase: 'move',
       die: 6,
@@ -221,9 +221,9 @@ describe('advance', () => {
   })
 
   it('detects cross-seat collisions in absolute terms and bumps the opponent', () => {
-    // p1 (arm 0) rel 12 and p2 (arm 2) rel 44 both sit on absolute 26 — they
+    // p1 (arm 0) rel 12 and p2 (arm 2) rel 44 both sit on absolute 21 — they
     // collide absolutely but not relatively.
-    expect(absoluteIndex({ p1: 0, p2: 2 }, 'p2', 44)).toBe(26)
+    expect(absoluteIndex({ p1: 0, p2: 2 }, 'p2', 44)).toBe(21)
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
@@ -301,25 +301,25 @@ describe('home lane', () => {
 })
 
 describe('shortcut', () => {
-  it('offers the corner jump from p=12 with die 6 via corner 17', () => {
-    const wh = buildWahoo({ phase: 'move', die: 6, positions: { p1: [12, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
+  it('offers the corner jump from p=5 with die 2 via corner 6', () => {
+    const wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    expect(legalMoves(wh.session.publicState, 'p1', 2)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.positions['p1']).toEqual([-2, -1, -1, -1])
-    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[1] })
+    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] })
     expect(pub.lastEvent).toEqual({ kind: 'shortcut', by: 'p1', bumpedId: null })
   })
 
-  it('never offers the 33/49 corners as shortcut entries', () => {
-    // p=31 die 3: (33 − 31) + 1 = 3 would fit if 33 were a shortcut corner
-    let wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [31, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    let moves = legalMoves(wh.session.publicState, 'p1', 3)
+  it('never offers the 38/54 corners as shortcut entries', () => {
+    // p=37 die 2: (38 − 37) + 1 = 2 would fit if 38 were a shortcut corner
+    let wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [37, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    let moves = legalMoves(wh.session.publicState, 'p1', 2)
     expect(moves.some((m) => m.kind === 'shortcut')).toBe(false)
-    // p=47 die 3: (49 − 47) + 1 = 3
-    wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [47, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    moves = legalMoves(wh.session.publicState, 'p1', 3)
+    // p=53 die 2: (54 − 53) + 1 = 2
+    wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [53, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    moves = legalMoves(wh.session.publicState, 'p1', 2)
     expect(moves.some((m) => m.kind === 'shortcut')).toBe(false)
   })
 
@@ -327,7 +327,7 @@ describe('shortcut', () => {
     const wh = buildWahoo({
       phase: 'move',
       die: 2,
-      positions: { p1: [0, -2, -1, -1], p2: [-1, -1, -1, -1] },
+      positions: { p1: [5, -2, -1, -1], p2: [-1, -1, -1, -1] },
       centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 2).some((m) => m.kind === 'shortcut')).toBe(false)
@@ -339,7 +339,7 @@ describe('shortcut', () => {
     const wh = buildWahoo({
       phase: 'move',
       die: 2,
-      positions: { p1: [0, -1, -1, -1], p2: [-2, -1, -1, -1] },
+      positions: { p1: [5, -1, -1, -1], p2: [-2, -1, -1, -1] },
       centerBy: { playerId: 'p2', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[1] },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
@@ -365,7 +365,7 @@ describe('exit', () => {
     expect(r.outcome.ok).toBe(false)
   })
 
-  it('lands on the diagonal corner: entry 1 → rel 33, entry 17 → rel 49', () => {
+  it('lands on the diagonal corner: entry 6 → rel 38, entry 22 → rel 54', () => {
     let wh = buildWahoo({
       phase: 'move',
       die: 1,
@@ -405,12 +405,12 @@ describe('exit', () => {
   })
 
   it('bumps an opponent on the target corner', () => {
-    // p1 (arm 0) exits entry 1 → rel 33 = abs (14+33) = 47. p2 (arm 2) at
-    // rel 1 sits on the same absolute hole: (46+1) = 47.
+    // p1 (arm 0) exits entry 6 → rel 38 = abs (9+38) = 47. p2 (arm 2) at
+    // rel 6 sits on the same absolute hole: (41+6) = 47.
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
-      positions: { p1: [-2, -1, -1, -1], p2: [1, -1, -1, -1] },
+      positions: { p1: [-2, -1, -1, -1], p2: [6, -1, -1, -1] },
       centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[0] },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
@@ -460,13 +460,14 @@ describe('six chain', () => {
   })
 
   it('a 6 with no legal move is a pass: streak dies, no extra roll', () => {
-    // marble at 52 wants 58 but the lane slot is occupied; every lane marble
-    // overshoots with a 6, nothing is in base or the center — no legal moves.
+    // the marble at the entrance (rel 62) overshoots with a 6 (68 > 66); every
+    // lane marble overshoots too, nothing is in base or the center — no legal
+    // moves.
     const wh = buildWahoo({
       phase: 'roll',
       rngSeed: 4, // first roll is a 6
       sixStreak: 2,
-      positions: { p1: [52, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
+      positions: { p1: [HOME_ENTRANCE_REL, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 6)).toEqual([])
     const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
@@ -527,7 +528,7 @@ describe('win', () => {
       phase: 'move',
       die: 6,
       sixStreak: 2,
-      positions: { p1: [52, LANE_START + 1, LANE_START + 2, LANE_END], p2: [-1, -1, -1, -1] },
+      positions: { p1: [HOME_ENTRANCE_REL - 5, LANE_START + 1, LANE_START + 2, LANE_END], p2: [-1, -1, -1, -1] },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)

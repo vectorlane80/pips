@@ -83,10 +83,10 @@ describe('createBoard', () => {
     }
   })
 
-  it('places shared corners at 15/31/47/63, entries at 14/30/46/62, entrances at 7/23/39/55', () => {
+  it('places shared corners at 15/31/47/63, entries at 9/25/41/57, entrances at 7/23/39/55', () => {
     const board = createBoard()
     expect(board.corners).toEqual([15, 31, 47, 63])
-    expect(board.entries).toEqual([14, 30, 46, 62])
+    expect(board.entries).toEqual([9, 25, 41, 57])
     expect(board.entrances).toEqual([7, 23, 39, 55])
     // The shared corners are the four (±2, ±2) holes — each quadrant's last
     // hole; the entrance is the tip middle of each arm (furthest from center).
@@ -112,21 +112,22 @@ describe('createBoard', () => {
       expect(key(board.track[index])).toBe(key(expectedEntrances[q]))
     })
     for (let q = 0; q < 4; q++) {
-      // The come-out (entry) is the last right-column hole, one unit step
-      // before its quadrant's shared corner (e.g. (2,−3) for the top arm).
-      expect(sqDist(board.track[board.entries[q]], board.track[board.corners[q]])).toBe(1)
+      // The come-out (entry) is the own-arm tip corner on the base-facing
+      // side, two holes past the home entrance in travel order (e.g. (2,−8)
+      // for the top arm, two after the entrance at (0,−8)).
+      expect(board.entries[q] - board.entrances[q]).toBe(2)
       // Corner → next arm's first hole is a unit step (shared corners).
       expect(sqDist(board.track[board.corners[q]], board.track[(board.corners[q] + 1) % TRACK_LEN])).toBe(1)
-      // Seat-relative landmarks: rel 0 = the come-out, rel 57 = the entrance.
+      // Seat-relative landmarks: rel 0 = the come-out, rel 62 = the entrance.
       expect(trackIndexFor(q, 0)).toBe(board.entries[q])
       expect(trackIndexFor(q, HOME_ENTRANCE_REL)).toBe(board.entrances[q])
     }
   })
 
-  it('home lanes start at the entrance-adjacent hole (rel 58) and run toward the center (rel 61)', () => {
+  it('home lanes start at the entrance-adjacent hole (rel 63) and run toward the center (rel 66)', () => {
     const board = createBoard()
     // The top arm's lane hangs INWARD from the tip-middle entrance: (0,−7) …
-    // (0,−4), rel 58 = adjacent below the entrance, rel 61 = deepest.
+    // (0,−4), rel 63 = adjacent below the entrance, rel 66 = deepest.
     expect(board.homes[0]).toEqual([
       { x: 0, y: -7 },
       { x: 0, y: -6 },
@@ -134,13 +135,13 @@ describe('createBoard', () => {
       { x: 0, y: -4 },
     ])
     for (let q = 0; q < 4; q++) {
-      // homes[q][0] (rel 58) is one unit from the arm's home entrance.
+      // homes[q][0] (rel 63) is one unit from the arm's home entrance.
       expect(sqDist(board.track[board.entrances[q]], board.homes[q][0])).toBe(1)
       // The lane is a straight run: consecutive slots are unit steps apart.
       for (let i = 0; i < 3; i++) {
         expect(sqDist(board.homes[q][i], board.homes[q][i + 1])).toBe(1)
       }
-      // Deepest slot (rel 61) is closer to the center than the outer slot.
+      // Deepest slot (rel 66) is closer to the center than the outer slot.
       expect(sqDist(board.homes[q][3], board.center)).toBeLessThan(sqDist(board.homes[q][0], board.center))
     }
   })
@@ -175,7 +176,7 @@ describe('createBoard', () => {
 
 describe('trackIndexFor', () => {
   it('maps arm + relative distance to the absolute track index', () => {
-    expect(trackIndexFor(0, 0)).toBe(14) // the arm's come-out, not the seam
+    expect(trackIndexFor(0, 0)).toBe(9) // the arm's come-out, not the seam
     expect(trackIndexFor(2, HOME_ENTRANCE_REL)).toBe(39) // arm 2's home entrance
     const expected = [
       [15, 31, 47, 63],
@@ -190,10 +191,10 @@ describe('trackIndexFor', () => {
     }
   })
 
-  it("places each arm's four corners at relative distances 1/17/33/49", () => {
+  it("places each arm's four corners at relative distances 6/22/38/54", () => {
     const board = createBoard()
     for (let arm = 0; arm < 4; arm++) {
-      const relatives = board.corners.map((c) => ((c - arm * 16 - 14) % TRACK_LEN + TRACK_LEN) % TRACK_LEN)
+      const relatives = board.corners.map((c) => ((c - trackIndexFor(arm, 0)) % TRACK_LEN + TRACK_LEN) % TRACK_LEN)
       expect(new Set(relatives)).toEqual(new Set(CORNER_RELS))
       relatives.forEach((distance, k) => {
         expect(trackIndexFor(arm, distance)).toBe(board.corners[k])
@@ -206,16 +207,16 @@ describe('trackIndexFor', () => {
       expect(CORNER_RELS).toContain(entry)
       const exit = SHORTCUT_EXITS[entry]
       expect(CORNER_RELS).toContain(exit)
-      // Diagonal opposites sit half a lap away: entry 1 → 33, entry 17 → 49.
+      // Diagonal opposites sit half a lap away: entry 6 → 38, entry 22 → 54.
       expect(exit - entry).toBe(TRACK_LEN / 2)
     }
   })
 
-  it('the owner path is 0..57 then the lane: rel 58..61 are homes, never track', () => {
+  it('the owner path is 0..62 then the lane: rel 63..66 are homes, never track', () => {
     const board = createBoard()
-    expect(OWNER_TRACK_LEN).toBe(58)
-    expect(LANE_START).toBe(58)
-    expect(LANE_END).toBe(61)
+    expect(OWNER_TRACK_LEN).toBe(63)
+    expect(LANE_START).toBe(63)
+    expect(LANE_END).toBe(66)
     const homeKeys = new Set(board.homes.flat().map(key))
     for (let rel = LANE_START; rel <= LANE_END; rel++) {
       expect(homeKeys.has(key(board.homes[0][rel - LANE_START]))).toBe(true)
