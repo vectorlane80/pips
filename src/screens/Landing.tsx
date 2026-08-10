@@ -4,7 +4,7 @@ import { Wordmark } from '../components/Wordmark'
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -16,6 +16,7 @@ export function Landing({
   onPickPhase10: () => void
   onPickBattleship: () => void
   onPickDominoes: () => void
+  onPickWahoo: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
@@ -183,6 +184,26 @@ export function Landing({
               </span>
               <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
                 2 players
+              </span>
+            </button>
+            <button
+              type="button"
+              className="shelf-tile"
+              disabled={!ready}
+              onClick={onPickWahoo}
+              style={{
+                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                background: ready ? '#9333ea' : 'var(--grey-fill)',
+                color: ready ? '#fff' : 'var(--disabled-text)',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Wahoo</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                Race your marbles home — bump anyone in the way.
+              </span>
+              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                2–4 players
               </span>
             </button>
           </div>

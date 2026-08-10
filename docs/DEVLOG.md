@@ -1688,3 +1688,26 @@ shipping each verified charter promptly.
   paths: bot-vs-bot sims in suite (hidden-pane rAF throttling made the
   round-2 intro crawl — environment artifact, documented).
 - **State:** 597 tests / tsc / build green. Commit offer next.
+
+## 2026-08-09 — Wahoo (specs 18, 18b–18e): first multi-seat engine game
+
+- **Charter:** user-approved with corrections (no score pills;
+  triple-six bust; exact-count center entry via forward corners with
+  diagonal exit; spectator-block for late joins). Salvaged the design
+  handoff by regenerating the board (one quadrant rotated ×4, symmetry
+  PROVEN by test) while keeping its distance state model.
+- **Build:** 5 deepseek dispatches ≈ $0.9. Reviews: module CLEAN (22
+  probes incl. wrap-seam and six-chain-leak attacks); wiring approve
+  after one major find — two legal moves CAN share a destination hole
+  (advance vs center-exit onto a corner; reviewer proved it with
+  probes) — fixed with contested-target marble-first selection; two ref
+  nits fixed; systemic peer.ts notes → REQUESTS.
+- **Live:** 4-seat room (bot fill, Start gating), correct cross
+  rendered, roll → target → move, out on 6, six extra-turn, auto-pass,
+  bot rotation, legend counts, and a second browser tab join rejected
+  mid-game with the exact spectator message. Full games via 2/3/4-seat
+  sims.
+- **Multi-seat pattern documented in docs/wahoo.md** — lobby broadcast,
+  seated-id action gating, per-seat bot loop, replace-with-bot: the
+  template for de-2-playering the other engine games (next charter).
+- **State:** 664 tests / tsc / build green. Commit offer.

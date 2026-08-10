@@ -1,10 +1,24 @@
 # Requests for the human
 
-- [ ] 2026-08-09, Battleship wrap-up — **commit the charter**: the full
-      Battleship implementation sits verified in the working tree
-      (514 tests / tsc / build green, two clean reviews, full match
-      live-verified). Say the word and it lands as one commit on `main`
-      (+ push).
+- [ ] 2026-08-09, Wahoo wrap-up — **commit the charter**: verified in
+      the tree (664 tests / tsc / build green, two reviews, live 4-seat
+      game). Say the word.
+- [ ] 2026-08-09, Wahoo wrap-up — **real audio**: wanted files for
+      `src/assets/sounds/`: `marble-move.mp3` (marble hop),
+      `marble-bump.mp3` (the send-'em-home moment). Currently reusing
+      piece-drop / farkle-bust; `dice-roll` is already real and right.
+      Optional: `marble-home.mp3` for lane entries.
+- [ ] 2026-08-09, non-blocking, cross-game — peer.ts systemic notes from
+      the Wahoo review: `reject()` doesn't close the connection, and
+      `onAction` keys purely on conn.peer (a reconnecting peer that
+      knows a departed seat's old id could act for it — only that
+      seat's former occupant in practice). Worth a small hardening pass
+      affecting all multiplayer games.
+- [ ] 2026-08-09, non-blocking — the app bundle crossed Vite's 500 kB
+      chunk warning (ten games in one chunk). Consider per-game dynamic
+      import() code-splitting in a future charter.
+
+- [x] 2026-08-09, Battleship wrap-up — commit: done (13577cc, pushed).
 - [x] 2026-08-09, Battleship wrap-up — real audio: done — user supplied
       ship-hit / ship-miss / ship-destroyed mp3s; installed as
       ship-hit / ship-miss / ship-sunk. Placement still reuses

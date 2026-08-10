@@ -52,10 +52,21 @@ import { DominoesTable } from './screens/DominoesTable'
 import { DominoesResults } from './screens/DominoesResults'
 import { DominoesRoom } from './screens/DominoesRoom'
 
+// ---- Wahoo (separate parallel session, per CHARTER.md resolution #7) ----
+import { createWahooGame, type WahooSession, type WahooPublicState, type WahooAction } from './board-games/wahoo/state'
+import { applyWahooAction, runWahooBotTurn } from './board-games/wahoo/rules'
+import { wahooBotStrategy } from './board-games/wahoo/bot'
+import { WahooTable } from './screens/WahooTable'
+import { WahooResults } from './screens/WahooResults'
+import { WahooRoom } from './screens/WahooRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
 type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
+type WahooView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: WahooPublicState; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -114,6 +125,17 @@ export default function App() {
   const [dominoesConnection, setDominoesConnection] = useState<'connected' | 'disconnected'>('connected')
   const [dominoesWaiting, setDominoesWaiting] = useState(false)
 
+  // ---- Wahoo ----
+  const [wahooRole, setWahooRole] = useState<'host' | 'guest' | null>(null)
+  const [wahooCode, setWahooCode] = useState('')
+  const [wahooLocalPlayerId, setWahooLocalPlayerId] = useState<string | null>(null)
+  const [wahooView, setWahooView] = useState<WahooView | null>(null)
+  const [wahooConnection, setWahooConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [wahooNotice, setWahooNotice] = useState<string | null>(null)
+  const [wahooStarted, setWahooStarted] = useState(false)
+  const [wahooSeats, setWahooSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [wahooDropped, setWahooDropped] = useState<string[]>([])
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -147,6 +169,16 @@ export default function App() {
   const dominoesLocalPlayerIdRef = useRef<string | null>(null)
   const dominoesOpponentIdRef = useRef<string | null>(null)
   const dominoesOpponentNameRef = useRef('')
+  const wahooSessionRef = useRef<WahooSession | null>(null)
+  const wahooHostRef = useRef<HostHandle<WahooView> | null>(null)
+  const wahooGuestRef = useRef<GuestHandle<WahooAction> | null>(null)
+  const wahooBotBusyRef = useRef(false)
+  const wahooLocalPlayerIdRef = useRef<string | null>(null)
+  const wahooSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const wahooStartedRef = useRef(false)
+  const wahooNamesRef = useRef<Record<string, string>>({})
+  const wahooBotSeatsRef = useRef<Set<string>>(new Set())
+  const wahooDroppedRef = useRef<string[]>([])
 
   useEffect(() => {
     roomRef.current = room
@@ -163,6 +195,8 @@ export default function App() {
     battleshipGuestRef.current?.destroy()
     dominoesHostRef.current?.destroy()
     dominoesGuestRef.current?.destroy()
+    wahooHostRef.current?.destroy()
+    wahooGuestRef.current?.destroy()
   }, [])
 
   useEffect(() => {
@@ -317,6 +351,28 @@ export default function App() {
     setDominoesView(null)
     setDominoesConnection('connected')
     setDominoesWaiting(false)
+    // Wahoo
+    wahooHostRef.current?.destroy()
+    wahooHostRef.current = null
+    wahooGuestRef.current?.destroy()
+    wahooGuestRef.current = null
+    wahooSessionRef.current = null
+    setWahooRole(null)
+    setWahooCode('')
+    setWahooLocalPlayerId(null)
+    wahooLocalPlayerIdRef.current = null
+    setWahooView(null)
+    setWahooConnection('connected')
+    setWahooNotice(null)
+    setWahooStarted(false)
+    wahooStartedRef.current = false
+    setWahooSeats([])
+    wahooSeatsRef.current = []
+    setWahooDropped([])
+    wahooDroppedRef.current = []
+    wahooBotBusyRef.current = false
+    wahooBotSeatsRef.current.clear()
+    wahooNamesRef.current = {}
   }
 
   function whoActsNow(state: RoomState): { id: string; bot: boolean } | null {
@@ -1016,6 +1072,244 @@ export default function App() {
 
   // ---- End Dominoes helpers ----
 
+  // ---- Wahoo helpers ----
+
+  function wahooActorKey(wh: WahooSession): string {
+    const ps = wh.session.publicState
+    return `${ps.stage}:${ps.turn.turnNumber}`
+  }
+
+  function wahooStale(key: string) {
+    return !wahooSessionRef.current || wahooActorKey(wahooSessionRef.current) !== key
+  }
+
+  function wahooBroadcast() {
+    if (!wahooStartedRef.current) {
+      const view: WahooView = {
+        kind: 'lobby',
+        roster: wahooSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === wahooLocalPlayerIdRef.current })),
+      }
+      setWahooView(view)
+      wahooHostRef.current?.broadcast(view)
+      return
+    }
+    const snap = deriveSnapshot(wahooSessionRef.current!.session, wahooLocalPlayerIdRef.current!)
+    const view: WahooView = {
+      kind: 'game',
+      revision: snap.revision,
+      publicState: snap.publicState,
+      names: { ...wahooNamesRef.current },
+    }
+    setWahooView(view)
+    wahooHostRef.current?.broadcast(view)
+  }
+
+  function startWahooHost() {
+    const code = `WH-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setWahooRole('host')
+    setWahooCode(code)
+    setWahooLocalPlayerId(hostId)
+    wahooLocalPlayerIdRef.current = hostId
+    setWahooStarted(false)
+    wahooStartedRef.current = false
+    setWahooSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    wahooSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    wahooDroppedRef.current = []
+    setWahooDropped([])
+    setWahooNotice(null)
+    setError(null)
+    wahooHostRef.current = createHost<WahooView, WahooAction>(code, {
+      onJoin(guestId, guestName) {
+        if (wahooStartedRef.current) {
+          wahooHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (wahooSeatsRef.current.length >= 4) {
+          wahooHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        wahooSeatsRef.current = [...wahooSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setWahooSeats(wahooSeatsRef.current)
+        wahooBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!wahooStartedRef.current) return
+        const session = wahooSessionRef.current
+        if (!session) return
+        if (!wahooSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyWahooAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        wahooSessionRef.current = result.wh
+        wahooBroadcast()
+      },
+      onLeave(guestId) {
+        if (!wahooStartedRef.current) {
+          wahooSeatsRef.current = wahooSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setWahooSeats(wahooSeatsRef.current)
+          wahooBroadcast()
+          return
+        }
+        const seat = wahooSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setWahooNotice(`${seat.name} disconnected.`)
+        if (!wahooDroppedRef.current.includes(guestId)) {
+          wahooDroppedRef.current = [...wahooDroppedRef.current, guestId]
+          setWahooDropped(wahooDroppedRef.current)
+        }
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    wahooBroadcast()
+  }
+
+  function addWahooHouseBot() {
+    if (wahooRole !== 'host' || wahooStartedRef.current) return
+    if (wahooSeatsRef.current.length >= 4) return
+    const botId = `bot-${wahooSeatsRef.current.length}`
+    const botName = randomBotName(wahooSeatsRef.current.map((s) => s.name))
+    wahooSeatsRef.current = [...wahooSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setWahooSeats(wahooSeatsRef.current)
+    wahooBotSeatsRef.current.add(botId)
+    wahooBroadcast()
+  }
+
+  function wahooStart() {
+    if (wahooRole !== 'host' || wahooStartedRef.current) return
+    const seats = wahooSeatsRef.current
+    if (seats.length < 2 || seats.length > 4) return
+    const playerIds = seats.map((s) => s.playerId)
+    for (let i = playerIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
+    }
+    const seed = Math.floor(Math.random() * 2147483647)
+    wahooSessionRef.current = createWahooGame(playerIds, seed)
+    wahooNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    wahooStartedRef.current = true
+    setWahooStarted(true)
+    wahooDroppedRef.current = []
+    setWahooDropped([])
+    wahooBroadcast()
+  }
+
+  function wahooReplaceWithBot(playerId: string) {
+    if (wahooRole !== 'host' || !wahooStartedRef.current) return
+    // Ref-guard (not the state value): a double-click before React re-renders
+    // would otherwise read the stale dropped list twice and replace twice.
+    if (!wahooDroppedRef.current.includes(playerId)) return
+    wahooBotSeatsRef.current.add(playerId)
+    wahooNamesRef.current = { ...wahooNamesRef.current, [playerId]: `${wahooNamesRef.current[playerId]} (bot)` }
+    wahooDroppedRef.current = wahooDroppedRef.current.filter((id) => id !== playerId)
+    setWahooDropped(wahooDroppedRef.current)
+    wahooBroadcast()
+    runWahooBotsIfNeeded()
+  }
+
+  async function runWahooBots(botId: string, key: string) {
+    while (!wahooStale(key)) {
+      await wait(BASE_MS)
+      if (wahooStale(key)) return
+      const session = wahooSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play') return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!wahooBotSeatsRef.current.has(botId)) return
+      const result = runWahooBotTurn(session, botId, wahooBotStrategy)
+      if (!result.outcome.ok) return
+      wahooSessionRef.current = result.wh
+      wahooBroadcast()
+    }
+  }
+
+  async function runWahooBotsIfNeeded() {
+    if (wahooBotBusyRef.current) return
+    const session = wahooSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    const currentId = currentPlayer(ps.turn)
+    if (!wahooBotSeatsRef.current.has(currentId)) return
+    wahooBotBusyRef.current = true
+    const key = wahooActorKey(session)
+    try {
+      await runWahooBots(currentId, key)
+    } finally {
+      wahooBotBusyRef.current = false
+      setTimeout(() => runWahooBotsIfNeeded(), 50)
+    }
+  }
+
+  function startWahooGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<WahooView, WahooAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setWahooView(view)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setWahooView(view)
+        setWahooStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setWahooConnection('connected')
+      },
+      onDisconnected() {
+        setWahooConnection('disconnected')
+      },
+    })
+    wahooGuestRef.current = handle
+    setWahooRole('guest')
+    setWahooCode(code)
+    handle.peerId.then((id) => { setWahooLocalPlayerId(id); wahooLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function wahooDispatch(action: WahooAction) {
+    if (wahooRole === 'host' && wahooLocalPlayerId) {
+      const session = wahooSessionRef.current
+      if (!session) return
+      const result = applyWahooAction(session, wahooLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      wahooSessionRef.current = result.wh
+      wahooBroadcast()
+    } else if (wahooRole === 'guest') {
+      wahooGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function wahooRematch() {
+    if (wahooRole !== 'host' || !wahooSessionRef.current) return
+    const ps = wahooSessionRef.current.session.publicState
+    if (ps.stage !== 'over') return
+    const prevRevision = wahooSessionRef.current.session.revision
+    const playerIds = [...ps.turn.playerOrder]
+    for (let i = playerIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
+    }
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createWahooGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    wahooSessionRef.current = next
+    wahooBroadcast()
+  }
+
+  // ---- End Wahoo helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -1265,10 +1559,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dominoesRole, dominoesView?.publicState.stage, dominoesView?.publicState.matchWinnerId])
 
+  // ---- Wahoo effects (host-only) ----
+
+  // Bot turn trigger. The actor key only bumps when a turn hands off (or a 6
+  // grants an extra roll), so the inner loop covers the ROLL then MOVE of one
+  // bot window; each action is committed + broadcast separately so guests see
+  // the die before the move.
+  useEffect(() => {
+    if (wahooRole !== 'host' || !wahooView) return
+    runWahooBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wahooRole, wahooView])
+
   // ---- Render ----
 
-  // Landing: dice games, Rummy, Phase 10, Battleship, and Dominoes are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole) {
+  // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, and Wahoo are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole) {
     return (
       <Landing
         name={name}
@@ -1281,6 +1587,7 @@ export default function App() {
           else if (code.startsWith('P10-')) startPhase10Guest(code)
           else if (code.startsWith('BS-')) startBattleshipGuest(code)
           else if (code.startsWith('DM-')) startDominoesGuest(code)
+          else if (code.startsWith('WH-')) startWahooGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -1288,6 +1595,7 @@ export default function App() {
         onPickPhase10={startPhase10Host}
         onPickBattleship={startBattleshipHost}
         onPickDominoes={startDominoesHost}
+        onPickWahoo={startWahooHost}
         error={error}
       />
     )
@@ -1602,6 +1910,96 @@ export default function App() {
         onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
+    )
+  }
+
+  // ---- Wahoo session active ----
+  // Wahoo lobby — the first multi-seat room. Host sees seats from state;
+  // guests see the lobby view the host broadcasts (buttons hidden either way).
+  if (wahooRole && !wahooStarted) {
+    const roster = wahooRole === 'host'
+      ? wahooSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === wahooLocalPlayerId }))
+      : (wahooView?.kind === 'lobby' ? wahooView.roster : [])
+    return (
+      <WahooRoom
+        code={wahooCode}
+        localName={name}
+        isHost={wahooRole === 'host'}
+        seats={roster}
+        notice={wahooNotice ?? error}
+        onAddHouseBot={addWahooHouseBot}
+        onStartGame={wahooStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Wahoo match results
+  if (wahooView?.kind === 'game' && wahooView.publicState.stage === 'over' && wahooView.publicState.winnerId) {
+    return (
+      <WahooResults
+        localPlayerId={wahooLocalPlayerId ?? ''}
+        localName={name}
+        names={wahooView.names}
+        publicState={wahooView.publicState}
+        isHost={wahooRole === 'host'}
+        notice={wahooNotice ?? error}
+        onRematch={wahooRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Wahoo table (active game). Host-only: a "replace with a bot" banner above
+  // the table for every guest seat that disconnected mid-game.
+  if (wahooView?.kind === 'game' && wahooLocalPlayerId) {
+    return (
+      <>
+        {wahooRole === 'host' && wahooDropped.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            background: 'var(--coral)',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 'clamp(14px, 1.8vw, 17px)',
+            padding: '10px 22px',
+            borderRadius: 999,
+            border: '3px solid var(--ink)',
+            boxShadow: '0 5px 0 var(--ink)',
+            marginBottom: 'clamp(10px, 2vw, 18px)',
+          }}>
+            {wahooDropped.map((pid) => (
+              <button
+                key={pid}
+                type="button"
+                className="btn pill-small"
+                style={{ background: '#fff', color: 'var(--coral)' }}
+                onClick={() => wahooReplaceWithBot(pid)}
+              >
+                Replace {wahooView.names[pid] ?? pid} with a bot
+              </button>
+            ))}
+          </div>
+        )}
+        <WahooTable
+          code={wahooCode}
+          localPlayerId={wahooLocalPlayerId}
+          localName={name}
+          names={wahooView.names}
+          connection={wahooConnection}
+          notice={wahooNotice ?? error}
+          publicState={wahooView.publicState}
+          onRoll={() => wahooDispatch({ type: 'ROLL' })}
+          onMove={(move) => wahooDispatch({ type: 'MOVE', move })}
+          onOpenRules={() => {}}
+          onLeave={resetToEntry}
+        />
+      </>
     )
   }
 

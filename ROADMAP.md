@@ -1,11 +1,19 @@
 # Roadmap
 
-Charter: Dominoes (All Fives) — see `CHARTER.md`.
+Charter: Wahoo — see `CHARTER.md`.
 
 ## Next up
-(none — dominoes charter complete; commit offered)
+(none — wahoo charter complete; commit offered)
+- Next natural charter: lift the 2-player cap on Rummy/Phase 10/
+  Dominoes/Farkle-style seating using the Wahoo multi-seat pattern.
 
 ## Done (this charter)
+- [wahoo] specs 18/18b–18e — generated board (proven symmetry), full
+  rules incl. user's center/triple-six corrections, multi-guest lobby
+  wiring + spectator block, contested-target fix. 664 tests, module
+  CLEAN + wiring approve, live 4-seat verification.
+
+## Done (prior charter: Dominoes)
 - [dominoes] specs 17/17a–17h — module (standardized All Fives scoring,
   common draw rule), snake layout with flush corners, screens with
   domino-back deal intro, App wiring. 597 tests, two approve reviews,
