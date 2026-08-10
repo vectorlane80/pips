@@ -40,7 +40,7 @@ export type WahooEvent =
   | { kind: 'shortcut'; by: string; bumpedId: string | null } // entered center
   | { kind: 'exit'; by: string; bumpedId: string | null } // left center
   | { kind: 'bust'; by: string } // triple six
-  | { kind: 'pass'; by: string } // no legal move
+  | { kind: 'pass'; by: string; die: number } // no legal move; die so clients can show the roll
   | { kind: 'win'; by: string }
 
 export type WahooAction =

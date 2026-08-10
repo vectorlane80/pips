@@ -472,7 +472,7 @@ describe('six chain', () => {
     const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1' })
+    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 6 })
     expect(pub.die).toBeNull()
     expect(pub.sixStreak).toBe(0)
     expect(pub.turn.phase).toBe('roll')
@@ -492,7 +492,7 @@ describe('pass', () => {
     const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1' })
+    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 2 })
     expect(pub.die).toBeNull()
     expect(pub.turn.phase).toBe('roll')
     expect(currentPlayer(pub.turn)).toBe('p2')

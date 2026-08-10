@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { Hole, WahooBoard } from '../board-games/wahoo/board'
-import { createBoard, trackIndexFor } from '../board-games/wahoo/board'
+import { createBoard, LANE_START, OWNER_TRACK_LEN, trackIndexFor } from '../board-games/wahoo/board'
 import { exitTargetRel, legalMoves, type WahooMove, type WahooPublicState } from '../board-games/wahoo/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { Die } from '../components/Die'
@@ -83,15 +83,15 @@ function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; s
 // The center drop-target ring scales to this same size.
 const CENTER_DIAMETER = 0.9
 
-// The physical hole a marble currently occupies (-1 base, -2 center, 0..51
-// track relative to the arm's come-out, 52..55 home lane, outermost first).
+// The physical hole a marble currently occupies (-1 base, -2 center, 0..57
+// track relative to the arm's come-out, 58..61 home lane, outermost first).
 function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, marbleIdx: number): Hole {
   const arm = publicState.seatArms[playerId]
   const p = publicState.positions[playerId][marbleIdx]
   if (p === -1) return board.bases[arm][marbleIdx]
   if (p === -2) return board.center
-  if (p <= 51) return board.track[trackIndexFor(arm, p)]
-  return board.homes[arm][p - 52]
+  if (p <= OWNER_TRACK_LEN - 1) return board.track[trackIndexFor(arm, p)]
+  return board.homes[arm][p - LANE_START]
 }
 
 // The physical hole a legal move's marble ends at: out → the arm's entry hole,
@@ -103,7 +103,7 @@ function destinationHole(board: WahooBoard, publicState: WahooPublicState, playe
   if (move.kind === 'shortcut') return board.center
   if (move.kind === 'exit') return board.track[exitTargetRel(publicState.centerBy!.entryCornerRel)]
   const to = publicState.positions[playerId][move.marbleIdx] + die
-  return to <= 51 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - 52]
+  return to <= OWNER_TRACK_LEN - 1 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - LANE_START]
 }
 
 // Destination target ring diameter in units: the standard 0.68 ring on
@@ -170,7 +170,7 @@ function computeStatusLine(publicState: WahooPublicState, localPlayerId: string,
     case 'bust':
       return `Three sixes — ${actor === 'You' ? 'your' : `${actor}'s`} marble goes home!`
     case 'pass':
-      return actor === 'You' ? 'You have no move — you pass.' : `${actor} has no move — passes.`
+      return `${actor} rolled a ${ev.die} — no move, passes.`
     case 'win':
       return actor === 'You' ? 'You win!' : `${actor} wins!`
   }
@@ -249,7 +249,9 @@ export function WahooTable({
     const ev = publicState.lastEvent
     if (ev !== lastEventRef.current) {
       if (ev !== null) {
-        if (ev.kind === 'roll') {
+        // A pass is a roll with no legal move: the die still got rolled, so it
+        // plays the roll sound, sticks to lastRoll, and flickers like any roll.
+        if (ev.kind === 'roll' || ev.kind === 'pass') {
           play('dice-roll')
           setLastRoll({ die: ev.die, by: ev.by })
           // Replicate useDiceAnimation's flicker (7 frames × 60ms of random
@@ -397,29 +399,28 @@ export function WahooTable({
       {/* Error banner */}
       {notice && <div className="wh-error-banner">{notice}</div>}
 
-      {/* Main table card */}
+      {/* Main table card: flex row of the die rail + board, legend below */}
       <div className="wh-table-card">
-        {/* Action cluster: the house die (last-roller caption beneath it) sits
-            beside the Roll button, centered above the board; status stays in
-            the strip below. The die is presentational — no onClick. */}
-        <div className="wh-action-strip">
-          <div className="wh-action-cluster">
-            <div className="wh-die-col">
-              <Die
-                value={dieFlicker ?? publicState.die ?? lastRoll?.die ?? 0}
-                muted={dieFlicker === null && !myMovePhase}
-                rotation={dieRotation}
-              />
-              {lastRoll !== null && (
-                <span className="wh-die-caption">
-                  {lastRoll.by === localPlayerId ? 'You' : (names[lastRoll.by] ?? lastRoll.by)}
-                </span>
-              )}
-            </div>
-            <button type="button" className="btn btn-coral wh-roll-btn" onClick={onRoll} disabled={!canRoll}>
-              Roll
-            </button>
+        {/* Left rail: the house die (last-roller caption beneath it), the Roll
+            button, and the status lines, stacked in a ~200px column beside the
+            board. The die is presentational — no onClick. On narrow screens
+            (< 900px) the rail collapses back above the board. */}
+        <div className="wh-rail">
+          <div className="wh-die-col">
+            <Die
+              value={dieFlicker ?? publicState.die ?? lastRoll?.die ?? 0}
+              muted={dieFlicker === null && !myMovePhase}
+              rotation={dieRotation}
+            />
+            {lastRoll !== null && (
+              <span className="wh-die-caption">
+                {lastRoll.by === localPlayerId ? 'You' : (names[lastRoll.by] ?? lastRoll.by)}
+              </span>
+            )}
           </div>
+          <button type="button" className="btn btn-coral wh-roll-btn" onClick={onRoll} disabled={!canRoll}>
+            Roll
+          </button>
           <div className="wh-status">{status}</div>
         </div>
 
@@ -443,7 +444,7 @@ export function WahooTable({
                 ))}
               </svg>
 
-              {/* 52 track holes, drilled into the cross. Come-out (entry) holes
+              {/* 64 track holes, drilled into the cross. Come-out (entry) holes
                   ring solid in their arm's color, home-entrance holes ring thin-
                   double in the arm color, corner holes ring in the brand tint */}
               {board.track.map((h, i) => {
@@ -638,14 +639,10 @@ export function WahooTable({
         <div className="wh-legend">
           {publicState.turn.playerOrder.map((pid) => {
             const isTurn = pid === currentPlayer(publicState.turn)
-            const positions = publicState.positions[pid]
-            const home = positions.filter((p) => p >= 52).length
-            const base = positions.filter((p) => p === -1).length
             return (
               <div key={pid} className={`wh-seat-chip${isTurn ? ' wh-seat-chip--turn' : ''}`}>
                 <span className="wh-seat-dot" style={{ background: seatColor(publicState, pid) }} />
                 <span className="wh-seat-name">{names[pid] ?? pid}</span>
-                <span className="wh-seat-stats">{home} home · {base} base</span>
                 {isTurn && <span className="wh-turn-tag">turn</span>}
               </div>
             )

@@ -1,5 +1,5 @@
 /* ===================================================================
-   WahooTable — marble race: action strip, board pane, legend
+   WahooTable — marble race: die rail, board pane, legend
    =================================================================== */
 
 .wh-table {
@@ -76,7 +76,7 @@
   margin-bottom: clamp(10px, 2vw, 18px);
 }
 
-/* ---- Main table card ---- */
+/* ---- Main table card: flex row of die rail + board, legend below ---- */
 
 .wh-table-card {
   background: var(--surface);
@@ -85,25 +85,22 @@
   box-shadow: 0 10px 0 var(--ink);
   padding: clamp(16px, 2.4vw, 26px);
   display: flex;
-  flex-direction: column;
-}
-
-/* ---- Action cluster (die + Roll, centered above the board) ---- */
-
-.wh-action-strip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(10px, 1.6vw, 16px);
-  margin-bottom: clamp(14px, 2.2vw, 22px);
-}
-
-/* Die beside the Roll button, both centered as one cluster. */
-.wh-action-cluster {
-  display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: flex-start;
   justify-content: center;
-  gap: clamp(16px, 2.8vw, 26px);
+  gap: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Left rail: die + caption, Roll button, status (fixed ~200px) ---- */
+
+.wh-rail {
+  flex: none;
+  width: 200px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(12px, 1.6vw, 16px);
 }
 
 /* Die + last-roller caption stack */
@@ -127,7 +124,7 @@
 }
 
 .wh-roll-btn {
-  min-width: 150px;
+  width: 100%;
   min-height: 52px;
 }
 
@@ -136,17 +133,39 @@
   font-weight: 600;
   color: var(--body-text);
   line-height: 1.3;
-  text-align: center;
+  text-align: left;
 }
 
-/* ---- Board pane (square, max 660px, centered) ---- */
+/* Narrow screens (< 900px): the rail collapses back above the board as the
+   old centered cluster — die + Roll in a row, status centered beneath. */
+@media (max-width: 899px) {
+  .wh-rail {
+    flex-basis: 100%;
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px clamp(16px, 4vw, 26px);
+  }
+  .wh-roll-btn {
+    width: auto;
+    min-width: 150px;
+  }
+  .wh-status {
+    flex-basis: 100%;
+    text-align: center;
+  }
+}
+
+/* ---- Board pane (square, card width minus the rail, up to 900px) ---- */
 
 .wh-board {
   position: relative;
-  width: 100%;
-  max-width: 660px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 900px;
   aspect-ratio: 1;
-  margin: 0 auto;
   border-radius: 24px;
   border: 4px solid var(--ink);
   background: #d7d2ea; /* felt */
@@ -314,7 +333,7 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  margin-top: clamp(14px, 2.2vw, 22px);
+  flex-basis: 100%;
 }
 
 .wh-seat-chip {
@@ -343,13 +362,6 @@
 }
 
 .wh-seat-name {
-  white-space: nowrap;
-}
-
-.wh-seat-stats {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted-text);
   white-space: nowrap;
 }
 

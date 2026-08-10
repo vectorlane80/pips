@@ -1796,3 +1796,38 @@ shipping each verified charter promptly.
   corners, tip-hung color lanes, outward diagonal bases, four-fold
   symmetry, modest centered center hole, nothing clipped. 674 tests /
   tsc / build green.
+
+## 2026-08-10 — Roll visibility + stale-constant purge (spec 18n)
+
+- **User repro decoded the bug**: dice blank UNTIL someone rolled 1/6.
+  Root cause in rules.ts, not rendering — a no-move roll resolves in
+  one transition whose only event is 'pass' (no die), so clients never
+  saw the roll early-game. The pass event now carries the die; the
+  screen treats pass like roll (flicker + persistence + dice-roll
+  sound) with status "rolled a N — no move, passes."
+- **Highlights**: WahooTable still had v2 constants (51/52) in marble
+  positioning, destinationHole, and the legend's home count (which
+  would have miscounted track rel 52–57 as "home"). All swapped to the
+  module's exported constants.
+- **Oscar visual review (2 images)**: baseline-geometry regression
+  check PASS, and the live destination highlight verified to sit on
+  exactly trackIndexFor(arm, 0) — the reviewer reverse-derived pixel
+  coords from board.ts to prove the ring is the come-out hole, one
+  step before the shared corner, own arm. 674 tests / tsc / build
+  green.
+
+## 2026-08-10 — Wahoo layout: die rail left, board enlarged (18o/18p/18p2)
+
+- User orders: counters gone from the legend (name + dot + TURN only);
+  die/roller/Roll/status in a left rail; board grown to fill (886px vs
+  660 at full card). Oscar visual review of the new layout: PASS on
+  all ordered items + geometry regression + marble-on-hole
+  concentricity, with one flag — dead gutter under the top-hugging
+  rail. Fixed via rail align-self stretch + justify center (the first
+  centering pass no-opped against the parent's flex-start; live
+  measurement caught it: rail 247px → 886px, cluster centered).
+- Transient scare, resolved by measurement: a screenshot showed base
+  marbles offset half-a-hole — a stale compositor frame of the 0.35s
+  marble transition during the HMR resize; a 16-marble
+  nearest-hole-delta probe returned all zeros.
+- 674 tests / tsc / build green.

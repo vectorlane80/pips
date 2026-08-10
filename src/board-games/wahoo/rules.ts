@@ -100,7 +100,7 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
             turn: advanceTurn(rolled.turn, 'roll'),
             die: null,
             sixStreak: 0,
-            lastEvent: { kind: 'pass', by: playerId },
+            lastEvent: { kind: 'pass', by: playerId, die },
           },
           privateStates,
         }

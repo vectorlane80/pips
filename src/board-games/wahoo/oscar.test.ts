@@ -309,7 +309,7 @@ describe('attack: six-chain integrity', () => {
     const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1' })
+    expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 2 })
     expect(pub.sixStreak).toBe(0)
     expect(currentPlayer(pub.turn)).toBe('p2')
   })
