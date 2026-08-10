@@ -97,6 +97,26 @@
   margin-bottom: clamp(14px, 2.2vw, 22px);
 }
 
+/* Die + last-roller caption stack */
+.wh-die-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.wh-die-caption {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-text);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wh-action-main {
   display: flex;
   flex-direction: column;
@@ -126,9 +146,19 @@
   margin: 0 auto;
   border-radius: 24px;
   border: 4px solid var(--ink);
-  background: #e3e3f2;
+  background: #d7d2ea; /* felt */
   box-shadow: 0 8px 0 rgba(23, 23, 58, 0.16);
   overflow: hidden;
+}
+
+/* Solid cream cross board, under the holes. */
+.wh-cross {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* ---- Holes ---- */
@@ -137,22 +167,8 @@
   position: absolute;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: var(--grey-fill);
-  border: 2px solid var(--grey-border-2);
-  pointer-events: none;
-}
-
-.wh-hole--tinted {
-  border-color: var(--slate-pip-border);
-}
-
-/* ---- Corner diamonds ---- */
-
-.wh-corner {
-  position: absolute;
-  transform: translate(-50%, -50%) rotate(45deg);
-  border: 2px solid var(--slate-pip-border);
-  border-radius: 3px;
+  background: #fff;
+  border: 2px solid rgba(23, 23, 58, 0.3);
   pointer-events: none;
 }
 

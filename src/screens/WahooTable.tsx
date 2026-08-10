@@ -29,12 +29,47 @@ export interface WahooTableProps {
 // ---- Arm palette (fixed per arm index 0..3, assigned at game start) ----
 
 const ARM_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
-const ARM_TINTS = ['#fbd0d0', '#cee0fd', '#c8f1d7', '#faecc1'] // arm color at ~25% over white
-const MUTED_ARM = '#c9c9e0' // 3-player games: the unused arm
-const MUTED_TINT = '#f2f2f7'
+const CORNER_RING = 'rgba(147, 51, 234, 0.5)' // brand-tinted ring on the four corner holes
+const GREY_BORDER = 'var(--grey-border)' // unseated arms: grey instead of an arm color
 
 function seatColor(publicState: WahooPublicState, playerId: string): string {
   return ARM_COLORS[publicState.seatArms[playerId]]
+}
+
+// Arm color as an rgba fill at the given alpha (home-lane holes use 0.45).
+function armFill(arm: number, alpha: number): string {
+  const hex = ARM_COLORS[arm]
+  const n = parseInt(hex.slice(1), 16)
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`
+}
+
+// ---- Cross board geometry (viewBox unit space, -8..8) ----
+// The solid cream cross is two bars plus four 45° corner plates. Every shape
+// is rendered twice in one SVG — a stroked pass then a fill-only pass — so the
+// second pass covers the interior strokes and only the union's outer outline
+// survives (a welded single-outline cross).
+const CROSS_SHAPES: ReadonlyArray<{ x: number; y: number; width: number; height: number; rx: number; cx?: number; cy?: number }> = [
+  { x: -7.75, y: -1.75, width: 15.5, height: 3.5, rx: 0.3 }, // horizontal bar
+  { x: -1.75, y: -7.75, width: 3.5, height: 15.5, rx: 0.3 }, // vertical bar
+  { x: -2.85, y: -2.85, width: 1.7, height: 1.7, rx: 0.3, cx: -2, cy: -2 },
+  { x: 1.15, y: -2.85, width: 1.7, height: 1.7, rx: 0.3, cx: 2, cy: -2 },
+  { x: -2.85, y: 1.15, width: 1.7, height: 1.7, rx: 0.3, cx: -2, cy: 2 },
+  { x: 1.15, y: 1.15, width: 1.7, height: 1.7, rx: 0.3, cx: 2, cy: 2 },
+]
+
+function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; stroked: boolean }) {
+  return (
+    <rect
+      x={shape.x}
+      y={shape.y}
+      width={shape.width}
+      height={shape.height}
+      rx={shape.rx}
+      fill="#fbfaf6"
+      {...(shape.cx !== undefined ? { transform: `rotate(45 ${shape.cx} ${shape.cy})` } : {})}
+      {...(stroked ? { stroke: '#17173a', strokeWidth: 0.18 } : {})}
+    />
+  )
 }
 
 // ---- Geometry helpers ----
@@ -62,24 +97,28 @@ function destinationHole(board: WahooBoard, publicState: WahooPublicState, playe
   return to <= 51 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - 52]
 }
 
-function BoardHole({ x, y, unit, tint, ring, size = 0.72 }: {
+function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)', borderWidth = 2, shadow, size = 0.62 }: {
   x: number
   y: number
   unit: number
-  tint?: string
-  ring?: string
+  fill?: string
+  border?: string
+  borderWidth?: number
+  shadow?: string // 2px box-shadow ring outside the border
   size?: number
 }) {
   return (
     <span
-      className={`wh-hole${tint !== undefined ? ' wh-hole--tinted' : ''}`}
+      className="wh-hole"
       style={{
         left: `calc(50% + ${x * unit}px)`,
         top: `calc(50% + ${y * unit}px)`,
         width: size * unit,
         height: size * unit,
-        ...(tint !== undefined ? { background: tint } : {}),
-        ...(ring !== undefined ? { borderColor: ring, borderWidth: 3 } : {}),
+        background: fill,
+        borderColor: border,
+        borderWidth,
+        ...(shadow !== undefined ? { boxShadow: `0 0 0 2px ${shadow}` } : {}),
       }}
     />
   )
@@ -148,6 +187,9 @@ export function WahooTable({
   const { play, enabled, setEnabled } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
   const [paneW, setPaneW] = useState(0)
+  // The most recent roll, kept so the die still shows a (muted) value between
+  // turns — blank only before the first roll of the game.
+  const [lastRoll, setLastRoll] = useState<{ die: number; by: string } | null>(null)
   // Marble-first selection for shared (contested) destinations: null = plain
   // destination-click mode; a marble index narrows the visible targets to that
   // marble's moves (see destGroups/pendingContest below).
@@ -166,6 +208,7 @@ export function WahooTable({
   }, [])
 
   const board = useMemo(() => createBoard(), [])
+  // paneW/16; the SVG cross viewBox "-8 -8 16 16" must match this scale.
   const unit = paneW / 16
   const boardReady = paneW > 0
 
@@ -177,7 +220,10 @@ export function WahooTable({
     const ev = publicState.lastEvent
     if (ev !== lastEventRef.current) {
       if (ev !== null) {
-        if (ev.kind === 'roll') play('dice-roll')
+        if (ev.kind === 'roll') {
+          play('dice-roll')
+          setLastRoll({ die: ev.die, by: ev.by })
+        }
         else if (ev.kind === 'bust') play('farkle-bust')
         else if (ev.kind === 'move' || ev.kind === 'out' || ev.kind === 'shortcut' || ev.kind === 'exit') {
           if (ev.bumpedId !== null) play('farkle-bust')
@@ -189,26 +235,14 @@ export function WahooTable({
   }, [publicState.lastEvent, play])
 
   // ---- Board content ----
-  // Lane/base holes that currently hold a marble (their ring goes full color).
-  const { occupiedLane, occupiedBase } = useMemo(() => {
-    const lane = new Set<string>()
-    const base = new Set<string>()
-    for (const pid of Object.keys(publicState.positions)) {
-      const arm = publicState.seatArms[pid]
-      const positions = publicState.positions[pid]
-      for (let i = 0; i < positions.length; i++) {
-        const p = positions[i]
-        if (p === -1) {
-          const h = board.bases[arm][i]
-          base.add(`${h.x}:${h.y}`)
-        } else if (p >= 52) {
-          const h = board.homes[arm][p - 52]
-          lane.add(`${h.x}:${h.y}`)
-        }
-      }
-    }
-    return { occupiedLane: lane, occupiedBase: base }
-  }, [publicState, board])
+  // Arms with a seated player (2P leaves two arms empty, 3P one muted arm);
+  // everything else renders grey per §4.
+  const seatedArms = useMemo(() => new Set(Object.values(publicState.seatArms)), [publicState.seatArms])
+  const entryByTrackIdx = useMemo(() => {
+    const m = new Map<number, number>() // track index -> arm whose entry it is
+    board.entries.forEach((idx, arm) => m.set(idx, arm))
+    return m
+  }, [board])
 
   // Destination targets, one pulsing ring per destination hole, grouped by
   // landing hole. A hole reached by exactly one move is a plain click-to-
@@ -315,7 +349,14 @@ export function WahooTable({
       <div className="wh-table-card">
         {/* Action strip */}
         <div className="wh-action-strip">
-          <Die value={publicState.die ?? 0} muted={!myTurn} />
+          <div className="wh-die-col">
+            <Die value={publicState.die ?? lastRoll?.die ?? 0} muted={publicState.die === null} />
+            {lastRoll !== null && (
+              <span className="wh-die-caption">
+                {lastRoll.by === localPlayerId ? 'You' : (names[lastRoll.by] ?? lastRoll.by)}
+              </span>
+            )}
+          </div>
           <div className="wh-action-main">
             <button type="button" className="btn btn-coral wh-roll-btn" onClick={onRoll} disabled={!canRoll}>
               Roll
@@ -328,59 +369,60 @@ export function WahooTable({
         <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarbleIdx(null)}>
           {boardReady && (
             <>
-              {/* 52 track holes, neutral */}
-              {board.track.map((h, i) => (
-                <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} />
-              ))}
+              {/* Solid cream cross under the holes; the felt shows around it and
+                  under the bases. Two passes per shape: stroked then fill-only,
+                  so interior strokes vanish and one outer outline remains. */}
+              <svg className="wh-cross" viewBox="-8 -8 16 16" aria-hidden="true">
+                {CROSS_SHAPES.map((s, i) => (
+                  <CrossRect key={`o${i}`} shape={s} stroked />
+                ))}
+                {CROSS_SHAPES.map((s, i) => (
+                  <CrossRect key={`f${i}`} shape={s} stroked={false} />
+                ))}
+              </svg>
 
-              {/* Corner holes: subtle diamond outline */}
-              {board.corners.map((idx) => {
-                const h = board.track[idx]
+              {/* 52 track holes, drilled into the cross; entry holes ring in
+                  their arm's color, corner holes ring in the brand tint */}
+              {board.track.map((h, i) => {
+                const entryArm = entryByTrackIdx.get(i)
+                const shadow = entryArm !== undefined
+                  ? (seatedArms.has(entryArm) ? ARM_COLORS[entryArm] : GREY_BORDER)
+                  : board.corners.includes(i) ? CORNER_RING : undefined
                 return (
-                  <span
-                    key={`c${idx}`}
-                    className="wh-corner"
-                    style={{
-                      left: `calc(50% + ${h.x * unit}px)`,
-                      top: `calc(50% + ${h.y * unit}px)`,
-                      width: 1.06 * unit,
-                      height: 1.06 * unit,
-                    }}
-                  />
+                  <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={shadow} />
                 )
               })}
 
-              {/* Home lane holes, tinted per arm (muted arm greyed) */}
+              {/* Home lane holes: arm color at 45% + arm border; unseated arms grey */}
               {board.homes.map((lane, arm) =>
                 lane.map((h, j) => {
-                  const key = `${h.x}:${h.y}`
-                  const muted = publicState.mutedArm === arm
+                  const seated = seatedArms.has(arm)
                   return (
                     <BoardHole
                       key={`h${arm}-${j}`}
                       x={h.x}
                       y={h.y}
                       unit={unit}
-                      tint={muted ? MUTED_TINT : ARM_TINTS[arm]}
-                      ring={occupiedLane.has(key) ? (muted ? MUTED_ARM : ARM_COLORS[arm]) : undefined}
+                      fill={seated ? armFill(arm, 0.45) : 'var(--grey-fill)'}
+                      border={seated ? ARM_COLORS[arm] : GREY_BORDER}
                     />
                   )
                 }),
               )}
 
-              {/* Base holes, tinted per arm (muted arm greyed) */}
+              {/* Base holes on the felt: cream fill, 3px arm ring; unseated arms grey */}
               {board.bases.map((cluster, arm) =>
                 cluster.map((h, j) => {
-                  const key = `${h.x}:${h.y}`
-                  const muted = publicState.mutedArm === arm
+                  const seated = seatedArms.has(arm)
                   return (
                     <BoardHole
                       key={`b${arm}-${j}`}
                       x={h.x}
                       y={h.y}
                       unit={unit}
-                      tint={muted ? MUTED_TINT : ARM_TINTS[arm]}
-                      ring={occupiedBase.has(key) ? (muted ? MUTED_ARM : ARM_COLORS[arm]) : undefined}
+                      fill="#fbfaf6"
+                      border={seated ? ARM_COLORS[arm] : GREY_BORDER}
+                      borderWidth={3}
                     />
                   )
                 }),
@@ -401,8 +443,8 @@ export function WahooTable({
                       key={`${pid}-${i}`}
                       className="wh-marble"
                       style={{
-                        width: 0.6 * unit,
-                        height: 0.6 * unit,
+                        width: 0.85 * unit,
+                        height: 0.85 * unit,
                         background: seatColor(publicState, pid),
                         transform: `translate(calc(-50% + ${h.x * unit}px), calc(-50% + ${h.y * unit}px))`,
                       }}
@@ -426,8 +468,8 @@ export function WahooTable({
                     style={{
                       left: `calc(50% + ${h.x * unit}px)`,
                       top: `calc(50% + ${h.y * unit}px)`,
-                      width: 0.68 * unit,
-                      height: 0.68 * unit,
+                      width: 0.96 * unit,
+                      height: 0.96 * unit,
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -457,8 +499,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.78 * unit,
-                        height: 0.78 * unit,
+                        width: 0.68 * unit,
+                        height: 0.68 * unit,
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -475,8 +517,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.78 * unit,
-                        height: 0.78 * unit,
+                        width: 0.68 * unit,
+                        height: 0.68 * unit,
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -499,8 +541,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.78 * unit,
-                        height: 0.78 * unit,
+                        width: 0.68 * unit,
+                        height: 0.68 * unit,
                       }}
                       onClick={(e) => {
                         e.stopPropagation()

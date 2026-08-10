@@ -1711,3 +1711,25 @@ shipping each verified charter promptly.
   seated-id action gating, per-seat bot loop, replace-with-bot: the
   template for de-2-playering the other engine games (next charter).
 - **State:** 664 tests / tsc / build green. Commit offer.
+
+## 2026-08-09 — Wahoo visual redesign (specs 18f/18g)
+
+- **User report:** board squashed/washed out, floating corner diamonds,
+  no die value, no sound. Lead performed the visual review directly
+  (screenshots in hand; the CLI reviewer has no eyes) — diagnosis:
+  figure-ground inversion (track lowest-contrast element), cross
+  existing only as negative space, corner markers detached from their
+  holes, die rendered blank outside the brief move window, unseated
+  arms styled like seated ones.
+- **Redesign:** solid cream cross drawn as an SVG underlay (two-pass
+  union-outline trick) with welded corner plates on deep felt; white
+  drilled track holes; solid lane tints; color-ringed bases and entry
+  holes; grey unseated arms; bigger marbles; die persists the last roll
+  with roller caption. Oscar code audit: clean except a caption
+  overflow and a 16/17 viewBox scale mismatch — both fixed (18g).
+- **Sound:** instrumented window.Audio live — dice-roll/piece-drop ARE
+  constructed on events; code path verified firing. The user's silence
+  is environmental: most likely the persistent pips-sound mute cookie
+  (one toggle in any game silences all games for a year).
+- **State:** 671 tests / tsc / build green. Redesign uncommitted;
+  charter itself was committed as 39bfe1c.
