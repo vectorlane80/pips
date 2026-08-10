@@ -133,8 +133,8 @@ function layPhaseEnabled(selectedIds: string[], hand: Card[], requirement: Phase
   return classifyPhaseHand(cards, requirement).valid
 }
 
-function canHitGroup(groupCards: Card[], groupType: GroupType, selectedCard: Card): boolean {
-  const combined = [...groupCards, selectedCard]
+function canHitGroup(groupCards: Card[], groupType: GroupType, selectedCards: Card[]): boolean {
+  const combined = [...groupCards, ...selectedCards]
   return groupType === 'set' ? isValidSet(combined)
        : groupType === 'run' ? isValidRun(combined)
        : isValidColorGroup(combined)
@@ -451,14 +451,15 @@ export function Phase10Table({
   const lHint = lEnabled ? '' : layPhaseHint(selectedIds, hand, myRequirement, isMyTurn, publicState.turn.phase, hasLaid)
   const dHint = dEnabled ? '' : discardHint(selectedIds, isMyTurn, publicState.turn.phase)
 
-  // True iff the single selected card could validly be hit onto the given group
+  // True iff every currently selected card, together, could validly be hit onto the given
+  // group in one action — any positive number of selected cards, not just one.
   const groupHittable = (targetPlayerId: string, groupIndex: number): boolean => {
     if (!canAct || publicState.turn.phase !== 'discard') return false
-    if (!hasLaid || selectedCards.length !== 1) return false
+    if (!hasLaid || selectedCards.length === 0) return false
     const group = publicState.groups[targetPlayerId]?.[groupIndex]
     if (!group) return false
     const full = fullGroupCards(publicState.groups, publicState.hits, targetPlayerId, groupIndex)
-    return canHitGroup(full, group.type, selectedCards[0])
+    return canHitGroup(full, group.type, selectedCards)
   }
 
   // ---- Handlers ----
@@ -479,9 +480,8 @@ export function Phase10Table({
 
   const handleHit = useCallback(
     (targetPlayerId: string, groupIndex: number) => {
-      const card = selectedCards[0]
-      if (!card) return
-      onHit(targetPlayerId, groupIndex, [card.id])
+      if (selectedCards.length === 0) return
+      onHit(targetPlayerId, groupIndex, selectedCards.map((c) => c.id))
       setSelectedIds([])
     },
     [onHit, selectedCards],

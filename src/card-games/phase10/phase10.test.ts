@@ -422,6 +422,61 @@ describe('Phase 10 integration harness', () => {
     expect(totalCards(result.game)).toBe(108)
   })
 
+  it('HIT happy path — two cards hit onto the same group in one action', () => {
+    // p2's group is a run green 3-4-5-6-7; p1 hits green 1 AND green 2 onto it in one HIT
+    const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-52', 'p10-54', 'p10-56', 'p10-58', 'p10-60'].map((id) => cardMap().get(id)!))
+    const p1Cards = ['p10-48', 'p10-50', 'p10-24', 'p10-26', 'p10-28', 'p10-30', 'p10-32', 'p10-34', 'p10-36', 'p10-38']
+    const p2Cards = ['p10-72', 'p10-74', 'p10-76', 'p10-78', 'p10-80', 'p10-82', 'p10-84', 'p10-86', 'p10-88', 'p10-90']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96', 'p10-52', 'p10-54', 'p10-56', 'p10-58', 'p10-60']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: false },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 4 }] },
+    })
+
+    const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-48', 'p10-50'] })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.game.session.publicState
+    expect(pub.hits).toHaveLength(1)
+    expect(pub.hits[0]).toMatchObject({ playerId: 'p1', targetPlayerId: 'p2', targetGroupIndex: 0 })
+    expect(pub.hits[0].cards.map((c) => c.id).sort()).toEqual(['p10-48', 'p10-50'].sort())
+    // both cards left the hand in the same action — not two separate HITs
+    expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(8)
+    expect(pub.handCounts['p1']).toBe(8)
+    expect(totalCards(result.game)).toBe(108)
+  })
+
+  it('HIT rejected — two selected cards together do not extend the group validly', () => {
+    // p2's group is a run green 3-4-5-6-7; green 1 + green 9 together leave a gap (no green 8) —
+    // rejected as a whole, not partially applied.
+    const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-52', 'p10-54', 'p10-56', 'p10-58', 'p10-60'].map((id) => cardMap().get(id)!))
+    const p1Cards = ['p10-48', 'p10-64', 'p10-24', 'p10-26', 'p10-28', 'p10-30', 'p10-32', 'p10-34', 'p10-36', 'p10-38']
+    const p2Cards = ['p10-72', 'p10-74', 'p10-76', 'p10-78', 'p10-80', 'p10-82', 'p10-84', 'p10-86', 'p10-88', 'p10-90']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96', 'p10-52', 'p10-54', 'p10-56', 'p10-58', 'p10-60']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: false },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 4 }] },
+    })
+
+    // p10-64 is green 9 — 1, 3-7, 9 has a gap at 8 with no wild to fill it
+    const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-48', 'p10-64'] })
+    expect(result.outcome.ok).toBe(false)
+
+    const pub = result.game.session.publicState
+    expect(pub.hits).toHaveLength(0)
+    expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(10)
+  })
+
   it('HIT rejected — the added card breaks the group constraint', () => {
     const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-8', 'p10-32', 'p10-56'].map((id) => cardMap().get(id)!))
     const p1Cards = ['p10-12', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-10', 'p10-14', 'p10-16', 'p10-18', 'p10-20']
