@@ -183,7 +183,7 @@ describe('out', () => {
   })
 
   it('bumps an opponent sitting on the entry hole', () => {
-    // p2 (arm 2) at rel 26 sits on absolute 0 — p1's entry hole.
+    // p2 (arm 2) at rel 26 sits on absolute 10 — p1's come-out hole.
     const wh = buildWahoo({
       phase: 'move',
       die: 6,
@@ -220,9 +220,9 @@ describe('advance', () => {
   })
 
   it('detects cross-seat collisions in absolute terms and bumps the opponent', () => {
-    // p1 (arm 0) rel 12 and p2 (arm 2) rel 38 both sit on absolute 12 — they
+    // p1 (arm 0) rel 12 and p2 (arm 2) rel 38 both sit on absolute 22 — they
     // collide absolutely but not relatively.
-    expect(absoluteIndex({ p1: 0, p2: 2 }, 'p2', 38)).toBe(12)
+    expect(absoluteIndex({ p1: 0, p2: 2 }, 'p2', 38)).toBe(22)
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
@@ -297,24 +297,24 @@ describe('home lane', () => {
 })
 
 describe('shortcut', () => {
-  it('offers the corner jump from p=10 with die 3 via corner 12', () => {
-    const wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [10, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    expect(legalMoves(wh.session.publicState, 'p1', 3)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
+  it('offers the corner jump from p=10 with die 6 via corner 15', () => {
+    const wh = buildWahoo({ phase: 'move', die: 6, positions: { p1: [10, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.positions['p1']).toEqual([-2, -1, -1, -1])
-    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 })
+    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: 15 })
     expect(pub.lastEvent).toEqual({ kind: 'shortcut', by: 'p1', bumpedId: null })
   })
 
-  it('never offers the 38/51 corners as shortcut entries', () => {
-    // p=36 die 3: (38 − 36) + 1 = 3 would fit if 38 were a shortcut corner
-    let wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [36, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+  it('never offers the 28/41 corners as shortcut entries', () => {
+    // p=26 die 3: (28 − 26) + 1 = 3 would fit if 28 were a shortcut corner
+    let wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [26, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     let moves = legalMoves(wh.session.publicState, 'p1', 3)
     expect(moves.some((m) => m.kind === 'shortcut')).toBe(false)
-    // p=49 die 3: (51 − 49) + 1 = 3
-    wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [49, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    // p=39 die 3: (41 − 39) + 1 = 3
+    wh = buildWahoo({ phase: 'move', die: 3, positions: { p1: [39, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     moves = legalMoves(wh.session.publicState, 'p1', 3)
     expect(moves.some((m) => m.kind === 'shortcut')).toBe(false)
   })
@@ -323,8 +323,8 @@ describe('shortcut', () => {
     const wh = buildWahoo({
       phase: 'move',
       die: 3,
-      positions: { p1: [10, -2, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 25 },
+      positions: { p1: [0, -2, -1, -1], p2: [-1, -1, -1, -1] },
+      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 15 },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 3).some((m) => m.kind === 'shortcut')).toBe(false)
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
@@ -335,15 +335,15 @@ describe('shortcut', () => {
     const wh = buildWahoo({
       phase: 'move',
       die: 3,
-      positions: { p1: [10, -1, -1, -1], p2: [-2, -1, -1, -1] },
-      centerBy: { playerId: 'p2', marbleIdx: 0, entryCornerRel: 25 },
+      positions: { p1: [0, -1, -1, -1], p2: [-2, -1, -1, -1] },
+      centerBy: { playerId: 'p2', marbleIdx: 0, entryCornerRel: 15 },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.positions['p1']).toEqual([-2, -1, -1, -1])
     expect(pub.positions['p2']).toEqual([-1, -1, -1, -1]) // bumped back to base
-    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 })
+    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 })
     expect(pub.lastEvent).toEqual({ kind: 'shortcut', by: 'p1', bumpedId: 'p2' })
   })
 })
@@ -354,24 +354,24 @@ describe('exit', () => {
       phase: 'move',
       die: 3,
       positions: { p1: [-2, -1, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 3).some((m) => m.kind === 'exit')).toBe(false)
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
     expect(r.outcome.ok).toBe(false)
   })
 
-  it('lands on the diagonal corner: entry 12 → rel 38, entry 25 → rel 51', () => {
+  it('lands on the diagonal corner: entry 2 → rel 28, entry 15 → rel 41', () => {
     let wh = buildWahoo({
       phase: 'move',
       die: 1,
       positions: { p1: [-2, -1, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
     })
     let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
     expect(r.outcome.ok).toBe(true)
     let pub = r.wh.session.publicState
-    expect(pub.positions['p1']).toEqual([38, -1, -1, -1])
+    expect(pub.positions['p1']).toEqual([28, -1, -1, -1])
     expect(pub.centerBy).toBeNull()
     expect(pub.lastEvent).toEqual({ kind: 'exit', by: 'p1', bumpedId: null })
 
@@ -379,12 +379,12 @@ describe('exit', () => {
       phase: 'move',
       die: 6,
       positions: { p1: [-2, -1, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 25 },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 15 },
     })
     r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
     expect(r.outcome.ok).toBe(true)
     pub = r.wh.session.publicState
-    expect(pub.positions['p1']).toEqual([51, -1, -1, -1])
+    expect(pub.positions['p1']).toEqual([41, -1, -1, -1])
     expect(pub.centerBy).toBeNull()
   })
 
@@ -392,8 +392,8 @@ describe('exit', () => {
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
-      positions: { p1: [-2, 38, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+      positions: { p1: [-2, 28, -1, -1], p2: [-1, -1, -1, -1] },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 1).some((m) => m.kind === 'exit')).toBe(false)
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
@@ -401,17 +401,18 @@ describe('exit', () => {
   })
 
   it('bumps an opponent on the target corner', () => {
-    // p2 (arm 2) at rel 12 sits on absolute 38 — the exit corner for entry 12.
+    // p1 (arm 0) exits entry 2 → rel 28 = abs (10+28)%52 = 38. p2 (arm 2) at
+    // rel 2 sits on the same absolute hole: (26+10+2)%52 = 38.
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
-      positions: { p1: [-2, -1, -1, -1], p2: [12, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+      positions: { p1: [-2, -1, -1, -1], p2: [2, -1, -1, -1] },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.positions['p1']).toEqual([38, -1, -1, -1])
+    expect(pub.positions['p1']).toEqual([28, -1, -1, -1])
     expect(pub.positions['p2']).toEqual([-1, -1, -1, -1])
     expect(pub.lastEvent).toEqual({ kind: 'exit', by: 'p1', bumpedId: 'p2' })
   })

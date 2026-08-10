@@ -7,7 +7,8 @@ import { trackIndexFor } from './board.ts'
 export type WahooSeatCount = 2 | 3 | 4
 
 // marble position: -1 base, -2 center, 0..51 track (relative to own arm's
-// entry), 52..55 home lane (52 innermost, 55 deepest)
+// come-out hole), 52..55 home lane (52 outermost, adjacent to the home
+// entrance; 55 deepest, nearest the center)
 export type MarblePos = number
 
 export interface WahooPublicState {
@@ -15,7 +16,7 @@ export interface WahooPublicState {
   turn: TurnState<'roll' | 'move'> // phase 'roll' = awaiting ROLL, 'move' = die shown, awaiting MOVE
   seatArms: Record<string, number> // playerId -> arm 0..3
   positions: Record<string, MarblePos[]> // playerId -> 4 marbles
-  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 12 | 25 } | null
+  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 2 | 15 } | null
   die: number | null // current roll while phase 'move'
   sixStreak: number // consecutive 6s in the current player's chain
   lastMoved: { playerId: string; marbleIdx: number } | null // for the triple-six bust
@@ -51,14 +52,14 @@ export interface WahooSession {
 }
 
 // The two corners a player's marbles can shortcut into the center from, in
-// relative track coordinates. The other two corners (38, 51) are only ever
+// relative track coordinates. The other two corners (28, 41) are only ever
 // reached by EXITING the center.
-const SHORTCUT_CORNERS: ReadonlyArray<12 | 25> = [12, 25]
+const SHORTCUT_CORNERS: ReadonlyArray<2 | 15> = [2, 15]
 
-// Absolute track index of the exit corner for a center marble that entered via
-// the given corner: the diagonal opposite (entry 12 → 38, entry 25 → 51).
-export function exitTargetRel(entryCornerRel: 12 | 25): 38 | 51 {
-  return entryCornerRel === 12 ? 38 : 51
+// Relative track position of the exit corner for a center marble that entered
+// via the given corner: the diagonal opposite (entry 2 → 28, entry 15 → 41).
+export function exitTargetRel(entryCornerRel: 2 | 15): 28 | 41 {
+  return entryCornerRel === 2 ? 28 : 41
 }
 
 // Absolute track index (0..51) of a player's relative track position.
@@ -152,7 +153,7 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     }
   }
 
-  // shortcut: track marble at p, corner c in {12, 25}, p <= c and the die lands
+  // shortcut: track marble at p, corner c in {2, 15}, p <= c and the die lands
   // exactly on the corner plus one step into the center. The path is a jump —
   // only the center's occupant matters.
   const centerByOwn = centerBy?.playerId === playerId

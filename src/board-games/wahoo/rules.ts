@@ -60,7 +60,7 @@ function applyMove(
       others[bumpedId][centerBy.marbleIdx] = -1
     }
     myPositions[move.marbleIdx] = -2
-    centerBy = { playerId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 12 | 25 }
+    centerBy = { playerId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 2 | 15 }
   } else {
     // exit: the center marble jumps to the diagonal corner.
     const target = exitTargetRel(centerBy!.entryCornerRel)

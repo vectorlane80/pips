@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { Hole, WahooBoard } from '../board-games/wahoo/board'
 import { createBoard, trackIndexFor } from '../board-games/wahoo/board'
 import { exitTargetRel, legalMoves, type WahooMove, type WahooPublicState } from '../board-games/wahoo/state'
@@ -44,17 +45,13 @@ function armFill(arm: number, alpha: number): string {
 }
 
 // ---- Cross board geometry (viewBox unit space, -8..8) ----
-// The solid cream cross is two bars plus four 45° corner plates. Every shape
-// is rendered twice in one SVG — a stroked pass then a fill-only pass — so the
-// second pass covers the interior strokes and only the union's outer outline
-// survives (a welded single-outline cross).
-const CROSS_SHAPES: ReadonlyArray<{ x: number; y: number; width: number; height: number; rx: number; cx?: number; cy?: number }> = [
+// The solid cream cross is the two rounded bars only (no corner plates). Every
+// shape is rendered twice in one SVG — a stroked pass then a fill-only pass —
+// so the second pass covers the interior strokes and only the union's outer
+// outline survives (a welded single-outline cross).
+const CROSS_SHAPES: ReadonlyArray<{ x: number; y: number; width: number; height: number; rx: number }> = [
   { x: -7.75, y: -1.75, width: 15.5, height: 3.5, rx: 0.3 }, // horizontal bar
   { x: -1.75, y: -7.75, width: 3.5, height: 15.5, rx: 0.3 }, // vertical bar
-  { x: -2.85, y: -2.85, width: 1.7, height: 1.7, rx: 0.3, cx: -2, cy: -2 },
-  { x: 1.15, y: -2.85, width: 1.7, height: 1.7, rx: 0.3, cx: 2, cy: -2 },
-  { x: -2.85, y: 1.15, width: 1.7, height: 1.7, rx: 0.3, cx: -2, cy: 2 },
-  { x: 1.15, y: 1.15, width: 1.7, height: 1.7, rx: 0.3, cx: 2, cy: 2 },
 ]
 
 function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; stroked: boolean }) {
@@ -66,7 +63,6 @@ function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; s
       height={shape.height}
       rx={shape.rx}
       fill="#fbfaf6"
-      {...(shape.cx !== undefined ? { transform: `rotate(45 ${shape.cx} ${shape.cy})` } : {})}
       {...(stroked ? { stroke: '#17173a', strokeWidth: 0.18 } : {})}
     />
   )
@@ -75,7 +71,7 @@ function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; s
 // ---- Geometry helpers ----
 
 // The physical hole a marble currently occupies (-1 base, -2 center, 0..51
-// track relative to the arm's entry, 52..55 home lane, innermost first).
+// track relative to the arm's come-out, 52..55 home lane, outermost first).
 function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, marbleIdx: number): Hole {
   const arm = publicState.seatArms[playerId]
   const p = publicState.positions[playerId][marbleIdx]
@@ -97,7 +93,7 @@ function destinationHole(board: WahooBoard, publicState: WahooPublicState, playe
   return to <= 51 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - 52]
 }
 
-function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)', borderWidth = 2, shadow, size = 0.62 }: {
+function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)', borderWidth = 2, shadow, ringClass, ringColor, size = 0.62 }: {
   x: number
   y: number
   unit: number
@@ -105,11 +101,13 @@ function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)'
   border?: string
   borderWidth?: number
   shadow?: string // 2px box-shadow ring outside the border
+  ringClass?: string // extra class for a distinct ring style (e.g. the entrance double ring)
+  ringColor?: string // CSS var --ring-color consumed by the ring class
   size?: number
 }) {
   return (
     <span
-      className="wh-hole"
+      className={ringClass !== undefined ? `wh-hole ${ringClass}` : 'wh-hole'}
       style={{
         left: `calc(50% + ${x * unit}px)`,
         top: `calc(50% + ${y * unit}px)`,
@@ -119,6 +117,7 @@ function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)'
         borderColor: border,
         borderWidth,
         ...(shadow !== undefined ? { boxShadow: `0 0 0 2px ${shadow}` } : {}),
+        ...(ringColor !== undefined ? ({ '--ring-color': ringColor } as CSSProperties) : {}),
       }}
     />
   )
@@ -239,8 +238,13 @@ export function WahooTable({
   // everything else renders grey per §4.
   const seatedArms = useMemo(() => new Set(Object.values(publicState.seatArms)), [publicState.seatArms])
   const entryByTrackIdx = useMemo(() => {
-    const m = new Map<number, number>() // track index -> arm whose entry it is
+    const m = new Map<number, number>() // track index -> arm whose come-out (entry) it is
     board.entries.forEach((idx, arm) => m.set(idx, arm))
+    return m
+  }, [board])
+  const entranceByTrackIdx = useMemo(() => {
+    const m = new Map<number, number>() // track index -> arm whose home entrance it is
+    board.entrances.forEach((idx, arm) => m.set(idx, arm))
     return m
   }, [board])
 
@@ -381,16 +385,31 @@ export function WahooTable({
                 ))}
               </svg>
 
-              {/* 52 track holes, drilled into the cross; entry holes ring in
-                  their arm's color, corner holes ring in the brand tint */}
+              {/* 52 track holes, drilled into the cross. Come-out (entry) holes
+                  ring solid in their arm's color, home-entrance holes ring thin-
+                  double in the arm color, corner holes ring in the brand tint */}
               {board.track.map((h, i) => {
                 const entryArm = entryByTrackIdx.get(i)
-                const shadow = entryArm !== undefined
-                  ? (seatedArms.has(entryArm) ? ARM_COLORS[entryArm] : GREY_BORDER)
-                  : board.corners.includes(i) ? CORNER_RING : undefined
-                return (
-                  <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={shadow} />
-                )
+                const entranceArm = entranceByTrackIdx.get(i)
+                if (entryArm !== undefined) {
+                  const color = seatedArms.has(entryArm) ? ARM_COLORS[entryArm] : GREY_BORDER
+                  return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={color} />
+                }
+                if (entranceArm !== undefined) {
+                  const color = seatedArms.has(entranceArm) ? ARM_COLORS[entranceArm] : GREY_BORDER
+                  return (
+                    <BoardHole
+                      key={`t${i}`}
+                      x={h.x}
+                      y={h.y}
+                      unit={unit}
+                      ringClass="wh-hole--entrance"
+                      ringColor={color}
+                    />
+                  )
+                }
+                const cornerRing = board.corners.includes(i) ? CORNER_RING : undefined
+                return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={cornerRing} />
               })}
 
               {/* Home lane holes: arm color at 45% + arm border; unseated arms grey */}

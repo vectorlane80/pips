@@ -1733,3 +1733,26 @@ shipping each verified charter promptly.
   (one toggle in any game silences all games for a year).
 - **State:** 671 tests / tsc / build green. Redesign uncommitted;
   charter itself was committed as 39bfe1c.
+
+## 2026-08-09 — Wahoo topology correction (specs 18h v2 / 18i)
+
+- **User caught a real rules-topology error twice.** First: home lanes
+  sat in the same arm as the entry (short-circuit); their correction —
+  your lane is the arm that FEEDS your corner. Second (with a reference
+  board photo, interrupting the first fix mid-dispatch): the come-out
+  sits ON YOUR OWN ARM just above your corner, AFTER your home
+  entrance — entrance → come-out → corner, all on your side.
+- **Final topology:** symmetric 5+3+5 quadrants (52 holes inside a
+  plain plus, corner plates deleted); per arm: entrance at quadrant
+  index 9 (rel 51 — lane logic unchanged), come-out at index 10
+  (entries = q*13+10), own corner two ahead (rel 2); corners at rel
+  {2,15,28,41}; shortcut entries {2,15} → diagonal exits {28,41}. Base
+  clusters sit in the diagonal region their arm's inbound edge faces
+  (SE base ↔ right-arm lane, per the user's example).
+- **Blast radius contained by the relative-distance design:** bot.ts
+  untouched; rules.ts only swapped its corner-constant set; lane entry,
+  six chains, bumps identical. 3 stale test literals fixed (one was a
+  test contradicting its own title). 673 tests / tsc / build green.
+- **Verified live:** 4-seat game — every base's lane is the arm feeding
+  its corner; entrance + come-out rings sit on each seat's own edge
+  above its corner, matching the reference photo.

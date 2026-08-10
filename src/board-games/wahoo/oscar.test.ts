@@ -61,11 +61,11 @@ function buildWahoo(config: {
 }
 
 describe('attack: wrap-boundary cross-seat collision (51 -> 0)', () => {
-  it('bumps correctly when the landing hole is absolute index 0, reached by wrap from arm 3', () => {
-    // p2 sits at arm3 rel 51 = absolute (39+51)%52 = 38. Not the wrap case we want.
-    // We want two seats whose absolute landing coincides exactly AT the seam: abs 0.
-    // p1 arm0 rel0 = abs0 (its own entry). p2 arm2 rel26 = abs (26+26)%52=52%52=0.
-    expect(trackIndexFor(2, 26)).toBe(0)
+  it('bumps correctly when the landing hole is absolute index 10, the come-out seam of arm 0', () => {
+    // p2 sits at arm3 rel 51 = absolute (39+10+51)%52 = 48. Not the case we want.
+    // We want two seats whose absolute landing coincides exactly AT the seam: abs 10.
+    // p1 arm0 rel0 = abs10 (its own come-out). p2 arm2 rel26 = abs (26+10+26)%52 = 10.
+    expect(trackIndexFor(2, 26)).toBe(10)
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
@@ -80,11 +80,12 @@ describe('attack: wrap-boundary cross-seat collision (51 -> 0)', () => {
     expect(pub.lastEvent).toEqual({ kind: 'move', by: 'p2', marbleIdx: 0, bumpedId: null })
   })
 
-  it('own-marble block also holds exactly at the wrap seam (abs 51 -> abs 0 is NOT the same hole)', () => {
-    // Sanity: abs 51 and abs 0 are adjacent but distinct holes; a marble sitting
-    // on absolute 51 must not spuriously block a landing on absolute 0.
-    // p1 arm0 rel51 = abs51. p1 also wants another marble to land on rel0(out) -- entry hole is a
-    // different absolute (0) from 51, so 'out' must remain legal.
+  it('own-marble block also holds exactly at the wrap seam (abs 9 -> abs 10 is NOT the same hole)', () => {
+    // Sanity: the home entrance (abs 9) and the come-out (abs 10) are adjacent
+    // but distinct holes; a marble sitting on the entrance must not spuriously
+    // block a landing on the come-out.
+    // p1 arm0 rel51 = abs9 (its home entrance). 'out' lands on rel0 -- the
+    // come-out is a different absolute (10) from 9, so 'out' must remain legal.
     const wh = buildWahoo({
       phase: 'move',
       die: 1,
@@ -94,20 +95,23 @@ describe('attack: wrap-boundary cross-seat collision (51 -> 0)', () => {
   })
 
   it('two seats whose relative positions differ but whose absolute wrap-adjacent holes coincide get bumped, not silently allowed to coexist', () => {
-    // p1 arm0 rel1 = abs1. p2 arm3 rel14 = abs (39+14)%52 = 53%52=1. Cross-seat collision one past the seam.
-    expect(trackIndexFor(3, 14)).toBe(1)
+    // p1 arm0 rel43 = abs (10+43)%52 = 53%52=1. p2 arm3 starts at rel2 = abs 51
+    // (the wrap corner), then advances die 2 to rel4 = abs (39+10+4)%52 = 53%52=1.
+    // Cross-seat collision one past the seam: the attacker lands on the victim's hole.
+    expect(trackIndexFor(3, 4)).toBe(1)
+    expect(trackIndexFor(0, 43)).toBe(1)
     const wh = buildWahoo({
       playerIds: ['p1', 'p2'],
       seatArms: { p1: 0, p2: 3 },
       phase: 'move',
       die: 2,
       currentIndex: 1,
-      positions: { p1: [1, -1, -1, -1], p2: [12, -1, -1, -1] },
+      positions: { p1: [43, -1, -1, -1], p2: [2, -1, -1, -1] },
     })
     const r = applyWahooAction(wh, 'p2', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.positions['p2']).toEqual([14, -1, -1, -1])
+    expect(pub.positions['p2']).toEqual([4, -1, -1, -1])
     expect(pub.positions['p1']).toEqual([-1, -1, -1, -1])
     expect(pub.lastEvent).toEqual({ kind: 'move', by: 'p2', marbleIdx: 0, bumpedId: 'p1' })
   })
@@ -244,13 +248,13 @@ describe('attack: six-chain integrity', () => {
   })
 
   it('bust on the third six clears centerBy when the busted marble just entered center this turn', () => {
-    // p1 at rel 20 shortcuts into the center via corner 25 (die = 25-20+1 = 6),
+    // p1 at rel 10 shortcuts into the center via corner 15 (die = 15-10+1 = 6),
     // and this is the third consecutive six.
     const wh = buildWahoo({
       phase: 'move',
       die: 6,
       sixStreak: 2,
-      positions: { p1: [20, -1, -1, -1], p2: [-1, -1, -1, -1] },
+      positions: { p1: [10, -1, -1, -1], p2: [-1, -1, -1, -1] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
@@ -271,14 +275,14 @@ describe('attack: six-chain integrity', () => {
       die: 6,
       sixStreak: 2,
       positions: { p1: [5, -2, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 12 },
+      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 2 },
     })
     const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
     expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1' })
     expect(pub.positions['p1']).toEqual([-1, -2, -1, -1]) // marble 0 busted, marble 1 still centered
-    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 1, entryCornerRel: 12 })
+    expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 1, entryCornerRel: 2 })
   })
 
   it('a non-six pass also resets a nonzero sixStreak (no residual chain state leaks across a pass)', () => {
@@ -307,21 +311,21 @@ describe('attack: overshoot and boundary exactness', () => {
   })
 
   it('a marble cannot exit to a corner it already occupies via a normal (non-shortcut) advance', () => {
-    // p1 has a marble already sitting on absolute corner 38 in track terms
-    // (arm0 rel38) while its center marble (entry 12) tries to exit onto the
-    // same relative 38 -- must be blocked exactly like the documented case,
+    // p1 has a marble already sitting on absolute corner 28 in track terms
+    // (arm0 rel28) while its center marble (entry 2) tries to exit onto the
+    // same relative 28 -- must be blocked exactly like the documented case,
     // confirmed here with the marble reached by ordinary track advance instead
     // of being placed by hand at the corner.
-    let wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [36, -1, -1, -1], p2: [-1, -1, -1, -1] } })
+    let wh = buildWahoo({ phase: 'move', die: 2, positions: { p1: [26, -1, -1, -1], p2: [-1, -1, -1, -1] } })
     let r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
     expect(r.outcome.ok).toBe(true)
-    expect(r.wh.session.publicState.positions['p1'][0]).toBe(38)
+    expect(r.wh.session.publicState.positions['p1'][0]).toBe(28)
 
     wh = buildWahoo({
       phase: 'move',
       die: 1,
-      positions: { p1: [38, -2, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 12 },
+      positions: { p1: [28, -2, -1, -1], p2: [-1, -1, -1, -1] },
+      centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: 2 },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 1).some((m) => m.kind === 'exit')).toBe(false)
   })
@@ -331,7 +335,7 @@ describe('attack: serialization across every event kind', () => {
   const scenarios: Array<{ name: string; build: () => WahooSession; act: (wh: WahooSession) => WahooSession }> = [
     {
       name: 'shortcut',
-      build: () => buildWahoo({ phase: 'move', die: 3, positions: { p1: [10, -1, -1, -1], p2: [-1, -1, -1, -1] } }),
+      build: () => buildWahoo({ phase: 'move', die: 3, positions: { p1: [0, -1, -1, -1], p2: [-1, -1, -1, -1] } }),
       act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } }).wh,
     },
     {
@@ -341,7 +345,7 @@ describe('attack: serialization across every event kind', () => {
           phase: 'move',
           die: 1,
           positions: { p1: [-2, -1, -1, -1], p2: [-1, -1, -1, -1] },
-          centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+          centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
         }),
       act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'exit' } }).wh,
     },
@@ -422,12 +426,12 @@ describe('sanity: absoluteIndex helper matches trackIndexFor directly', () => {
 describe('attack: legalMoves destination collisions (WahooTable UI ambiguity)', () => {
   it('exit and advance can target the identical absolute hole for the same player + die', () => {
     // p1 (arm 0, identity mapping) has a marble in center that entered via
-    // corner 12 -> its exit target is rel 38 = absolute 38. A second p1
-    // marble sits at rel 32; die 6 advances it to rel 38 = absolute 38 too.
+    // corner 2 -> its exit target is rel 28 = absolute 28. A second p1
+    // marble sits at rel 22; die 6 advances it to rel 28 = absolute 28 too.
     const wh = buildWahoo({
       seatArms: { p1: 0, p2: 2 },
-      positions: { p1: [-2, 32, -1, -1], p2: [-1, -1, -1, -1] },
-      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 12 },
+      positions: { p1: [-2, 22, -1, -1], p2: [-1, -1, -1, -1] },
+      centerBy: { playerId: 'p1', marbleIdx: 0, entryCornerRel: 2 },
       phase: 'move',
       die: 6,
     })
@@ -436,7 +440,7 @@ describe('attack: legalMoves destination collisions (WahooTable UI ambiguity)', 
     expect(moves).toContainEqual({ marbleIdx: 1, kind: 'advance' })
     // Both are legal, materially different moves (one frees the center, one
     // advances a track marble) -- but they land on the same absolute hole.
-    expect(trackIndexFor(0, 38)).toBe(trackIndexFor(0, 32 + 6))
+    expect(trackIndexFor(0, 28)).toBe(trackIndexFor(0, 22 + 6))
     // Confirms WahooTable's destTargets map (keyed by dest hole) can only
     // ever surface ONE of these two as clickable; the other is legal per the
     // engine but permanently unreachable through the destination-click UI.

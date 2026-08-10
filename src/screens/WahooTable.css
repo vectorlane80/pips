@@ -172,6 +172,16 @@
   pointer-events: none;
 }
 
+/* Home-entrance holes: a thin double ring in the arm's color (--ring-color),
+   distinct from the come-out holes' solid ring. The cream gap matches the
+   cross so the two thin rings read as a pair. */
+.wh-hole--entrance {
+  box-shadow:
+    0 0 0 1.5px var(--ring-color),
+    0 0 0 3px #fbfaf6,
+    0 0 0 4.5px var(--ring-color);
+}
+
 /* ---- Center hole ---- */
 
 .wh-center {
