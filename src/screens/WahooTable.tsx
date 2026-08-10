@@ -399,12 +399,17 @@ export function WahooTable({
       {/* Error banner */}
       {notice && <div className="wh-error-banner">{notice}</div>}
 
-      {/* Main table card: flex row of the die rail + board, legend below */}
+      {/* Main table card: the board column (legend centered above the board, on
+          the board's width) with the die rail to its right. row-reverse puts
+          the rail (DOM-first of the row pair) on the board's right; on narrow
+          screens the rail wraps back to its own row above the board column. */}
       <div className="wh-table-card">
-        {/* Left rail: the house die (last-roller caption beneath it), the Roll
+        {/* Rail: the house die (last-roller caption beneath it), the Roll
             button, and the status lines, stacked in a ~200px column beside the
-            board. The die is presentational — no onClick. On narrow screens
-            (< 900px) the rail collapses back above the board. */}
+            board. row-reverse on the card puts it on the right; flex-start
+            pins the stack to the top. The die is presentational — no onClick.
+            On narrow screens (< 900px) the rail collapses back above the
+            board. */}
         <div className="wh-rail">
           <div className="wh-die-col">
             <Die
@@ -424,229 +429,238 @@ export function WahooTable({
           <div className="wh-status">{status}</div>
         </div>
 
-        {/* Board — clicking anywhere off a target or marble ring clears the selection */}
-        <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarbleIdx(null)}>
-          {boardReady && (
-            <>
-              {/* Solid cream cross under the holes; the felt shows around it and
-                  under the bases. Two passes per shape: stroked then fill-only,
-                  so interior strokes vanish and one outer outline remains. */}
-              <svg
-                className="wh-cross"
-                viewBox={`${-BOARD_SPAN / 2} ${-BOARD_SPAN / 2} ${BOARD_SPAN} ${BOARD_SPAN}`}
-                aria-hidden="true"
-              >
-                {CROSS_SHAPES.map((s, i) => (
-                  <CrossRect key={`o${i}`} shape={s} stroked />
-                ))}
-                {CROSS_SHAPES.map((s, i) => (
-                  <CrossRect key={`f${i}`} shape={s} stroked={false} />
-                ))}
-              </svg>
+        {/* Board column: the legend belongs to the board's column here, not the
+            card's — legend above board, both centered on the board's width, so
+            the legend's center coincides with the board's (the rail no longer
+            pulls it off-center). */}
+        <div className="wh-board-col">
+          {/* Legend: the player pills — the first thing read at game start */}
+          <div className="wh-legend">
+            {publicState.turn.playerOrder.map((pid) => {
+              const isTurn = pid === currentPlayer(publicState.turn)
+              return (
+                <div key={pid} className={`wh-seat-chip${isTurn ? ' wh-seat-chip--turn' : ''}`}>
+                  <span className="wh-seat-dot" style={{ background: seatColor(publicState, pid) }} />
+                  <span className="wh-seat-name">{names[pid] ?? pid}</span>
+                  {isTurn && <span className="wh-turn-tag">turn</span>}
+                </div>
+              )
+            })}
+          </div>
 
-              {/* 64 track holes, drilled into the cross. Come-out (entry) holes
-                  ring solid in their arm's color, home-entrance holes ring thin-
-                  double in the arm color, corner holes ring in the brand tint */}
-              {board.track.map((h, i) => {
-                const entryArm = entryByTrackIdx.get(i)
-                const entranceArm = entranceByTrackIdx.get(i)
-                if (entryArm !== undefined) {
-                  const color = seatedArms.has(entryArm) ? ARM_COLORS[entryArm] : GREY_BORDER
-                  return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={color} />
-                }
-                if (entranceArm !== undefined) {
-                  const color = seatedArms.has(entranceArm) ? ARM_COLORS[entranceArm] : GREY_BORDER
-                  return (
-                    <BoardHole
-                      key={`t${i}`}
-                      x={h.x}
-                      y={h.y}
-                      unit={unit}
-                      ringClass="wh-hole--entrance"
-                      ringColor={color}
-                    />
-                  )
-                }
-                const cornerRing = board.corners.includes(i) ? CORNER_RING : undefined
-                return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={cornerRing} />
-              })}
-
-              {/* Home lane holes: arm color at 45% + arm border; unseated arms grey */}
-              {board.homes.map((lane, arm) =>
-                lane.map((h, j) => {
-                  const seated = seatedArms.has(arm)
-                  return (
-                    <BoardHole
-                      key={`h${arm}-${j}`}
-                      x={h.x}
-                      y={h.y}
-                      unit={unit}
-                      fill={seated ? armFill(arm, 0.45) : 'var(--grey-fill)'}
-                      border={seated ? ARM_COLORS[arm] : GREY_BORDER}
-                    />
-                  )
-                }),
-              )}
-
-              {/* Base holes on the felt: cream fill, 3px arm ring; unseated arms grey */}
-              {board.bases.map((cluster, arm) =>
-                cluster.map((h, j) => {
-                  const seated = seatedArms.has(arm)
-                  return (
-                    <BoardHole
-                      key={`b${arm}-${j}`}
-                      x={h.x}
-                      y={h.y}
-                      unit={unit}
-                      fill="#fbfaf6"
-                      border={seated ? ARM_COLORS[arm] : GREY_BORDER}
-                      borderWidth={3}
-                    />
-                  )
-                }),
-              )}
-
-              {/* Center: hole with the brand ring, sized to CENTER_DIAMETER */}
-              <span
-                className="wh-center"
-                style={{ width: CENTER_DIAMETER * unit, height: CENTER_DIAMETER * unit }}
-              />
-
-              {/* Marbles: filled circles in seat color, ink border + hard shadow */}
-              {Object.entries(publicState.positions).map(([pid, positions]) =>
-                positions.map((_p, i) => {
-                  const h = marbleHole(board, publicState, pid, i)
-                  return (
-                    <span
-                      key={`${pid}-${i}`}
-                      className="wh-marble"
-                      style={{
-                        width: 0.85 * unit,
-                        height: 0.85 * unit,
-                        background: seatColor(publicState, pid),
-                        transform: `translate(calc(-50% + ${h.x * unit}px), calc(-50% + ${h.y * unit}px))`,
-                      }}
-                    />
-                  )
-                }),
-              )}
-
-              {/* Movable marbles: ring buttons. A plain click filters to that
-                  marble's targets; a candidate of the pending contested
-                  destination executes its move instead. */}
-              {movableMarbleIdxs.map((marbleIdx) => {
-                const h = marbleHole(board, publicState, localPlayerId, marbleIdx)
-                const isCandidate = candidateIdxs.has(marbleIdx)
-                const isSelected = selectedMarbleIdx === marbleIdx
-                return (
-                  <button
-                    key={`mr${marbleIdx}`}
-                    type="button"
-                    className={`wh-marble-ring${isCandidate ? ' wh-marble-ring--candidate' : isSelected ? ' wh-marble-ring--selected' : ''}`}
-                    style={{
-                      left: `calc(50% + ${h.x * unit}px)`,
-                      top: `calc(50% + ${h.y * unit}px)`,
-                      width: 0.96 * unit,
-                      height: 0.96 * unit,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (isCandidate && pendingContest) {
-                        const move = pendingContest.moves.find((m) => m.marbleIdx === marbleIdx)
-                        if (move) onMove(move)
-                      } else {
-                        setSelectedMarbleIdx(marbleIdx)
-                      }
-                    }}
-                    aria-label={isCandidate ? 'Move this marble to the shared destination' : 'Show this marble’s destinations'}
-                  />
-                )
-              })}
-
-              {/* Destination targets: unique holes click to move; shared holes
-                  click to enter marble-first selection instead. With a marble
-                  selected, only its destinations are shown — the contested one
-                  becomes pending, and clicking it confirms that marble's move. */}
-              {selectedMarbleIdx === null ? (
-                <>
-                  {uniqueTargets.map((t) => (
-                    <button
-                      key={`t${t.dest.x}:${t.dest.y}`}
-                      type="button"
-                      className="wh-target"
-                      style={{
-                        left: `calc(50% + ${t.dest.x * unit}px)`,
-                        top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: targetDiameter(board, t.dest, unit),
-                        height: targetDiameter(board, t.dest, unit),
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onMove(t.moves[0])
-                      }}
-                      aria-label="Move a marble here"
-                    />
+          {/* Board — clicking anywhere off a target or marble ring clears the selection */}
+          <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarbleIdx(null)}>
+            {boardReady && (
+              <>
+                {/* Solid cream cross under the holes; the felt shows around it and
+                    under the bases. Two passes per shape: stroked then fill-only,
+                    so interior strokes vanish and one outer outline remains. */}
+                <svg
+                  className="wh-cross"
+                  viewBox={`${-BOARD_SPAN / 2} ${-BOARD_SPAN / 2} ${BOARD_SPAN} ${BOARD_SPAN}`}
+                  aria-hidden="true"
+                >
+                  {CROSS_SHAPES.map((s, i) => (
+                    <CrossRect key={`o${i}`} shape={s} stroked />
                   ))}
-                  {contestedTargets.map((t) => (
-                    <button
-                      key={`c${t.dest.x}:${t.dest.y}`}
-                      type="button"
-                      className="wh-target wh-target--contested"
-                      style={{
-                        left: `calc(50% + ${t.dest.x * unit}px)`,
-                        top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: targetDiameter(board, t.dest, unit),
-                        height: targetDiameter(board, t.dest, unit),
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedMarbleIdx(t.moves[0].marbleIdx)
-                      }}
-                      aria-label="Shared destination — choose a marble"
-                    />
+                  {CROSS_SHAPES.map((s, i) => (
+                    <CrossRect key={`f${i}`} shape={s} stroked={false} />
                   ))}
-                </>
-              ) : (
-                selectedTargets.map((t) => {
-                  const isPending = pendingContest !== null
-                    && t.dest.x === pendingContest.dest.x
-                    && t.dest.y === pendingContest.dest.y
+                </svg>
+
+                {/* 64 track holes, drilled into the cross. Come-out (entry) holes
+                    ring solid in their arm's color, home-entrance holes ring thin-
+                    double in the arm color, corner holes ring in the brand tint */}
+                {board.track.map((h, i) => {
+                  const entryArm = entryByTrackIdx.get(i)
+                  const entranceArm = entranceByTrackIdx.get(i)
+                  if (entryArm !== undefined) {
+                    const color = seatedArms.has(entryArm) ? ARM_COLORS[entryArm] : GREY_BORDER
+                    return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={color} />
+                  }
+                  if (entranceArm !== undefined) {
+                    const color = seatedArms.has(entranceArm) ? ARM_COLORS[entranceArm] : GREY_BORDER
+                    return (
+                      <BoardHole
+                        key={`t${i}`}
+                        x={h.x}
+                        y={h.y}
+                        unit={unit}
+                        ringClass="wh-hole--entrance"
+                        ringColor={color}
+                      />
+                    )
+                  }
+                  const cornerRing = board.corners.includes(i) ? CORNER_RING : undefined
+                  return <BoardHole key={`t${i}`} x={h.x} y={h.y} unit={unit} shadow={cornerRing} />
+                })}
+
+                {/* Home lane holes: arm color at 45% + arm border; unseated arms grey */}
+                {board.homes.map((lane, arm) =>
+                  lane.map((h, j) => {
+                    const seated = seatedArms.has(arm)
+                    return (
+                      <BoardHole
+                        key={`h${arm}-${j}`}
+                        x={h.x}
+                        y={h.y}
+                        unit={unit}
+                        fill={seated ? armFill(arm, 0.45) : 'var(--grey-fill)'}
+                        border={seated ? ARM_COLORS[arm] : GREY_BORDER}
+                      />
+                    )
+                  }),
+                )}
+
+                {/* Base holes on the felt: cream fill, 3px arm ring; unseated arms grey */}
+                {board.bases.map((cluster, arm) =>
+                  cluster.map((h, j) => {
+                    const seated = seatedArms.has(arm)
+                    return (
+                      <BoardHole
+                        key={`b${arm}-${j}`}
+                        x={h.x}
+                        y={h.y}
+                        unit={unit}
+                        fill="#fbfaf6"
+                        border={seated ? ARM_COLORS[arm] : GREY_BORDER}
+                        borderWidth={3}
+                      />
+                    )
+                  }),
+                )}
+
+                {/* Center: hole with the brand ring, sized to CENTER_DIAMETER */}
+                <span
+                  className="wh-center"
+                  style={{ width: CENTER_DIAMETER * unit, height: CENTER_DIAMETER * unit }}
+                />
+
+                {/* Marbles: 3D-shaded circles in seat color (radial gradient via
+                    --marble-color), ink border + hard drop shadow */}
+                {Object.entries(publicState.positions).map(([pid, positions]) =>
+                  positions.map((_p, i) => {
+                    const h = marbleHole(board, publicState, pid, i)
+                    return (
+                      <span
+                        key={`${pid}-${i}`}
+                        className="wh-marble"
+                        style={{
+                          width: 0.85 * unit,
+                          height: 0.85 * unit,
+                          // The seat color feeds the CSS radial gradient (see
+                          // .wh-marble) — same color, spherical shading added.
+                          ...({ '--marble-color': seatColor(publicState, pid) } as CSSProperties),
+                          transform: `translate(calc(-50% + ${h.x * unit}px), calc(-50% + ${h.y * unit}px))`,
+                        }}
+                      />
+                    )
+                  }),
+                )}
+
+                {/* Movable marbles: ring buttons. A plain click filters to that
+                    marble's targets; a candidate of the pending contested
+                    destination executes its move instead. */}
+                {movableMarbleIdxs.map((marbleIdx) => {
+                  const h = marbleHole(board, publicState, localPlayerId, marbleIdx)
+                  const isCandidate = candidateIdxs.has(marbleIdx)
+                  const isSelected = selectedMarbleIdx === marbleIdx
                   return (
                     <button
-                      key={`s${t.dest.x}:${t.dest.y}`}
+                      key={`mr${marbleIdx}`}
                       type="button"
-                      className={`wh-target${isPending ? ' wh-target--contested wh-target--pending' : ''}`}
+                      className={`wh-marble-ring${isCandidate ? ' wh-marble-ring--candidate' : isSelected ? ' wh-marble-ring--selected' : ''}`}
                       style={{
-                        left: `calc(50% + ${t.dest.x * unit}px)`,
-                        top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: targetDiameter(board, t.dest, unit),
-                        height: targetDiameter(board, t.dest, unit),
+                        left: `calc(50% + ${h.x * unit}px)`,
+                        top: `calc(50% + ${h.y * unit}px)`,
+                        width: 0.96 * unit,
+                        height: 0.96 * unit,
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
-                        onMove(t.move)
+                        if (isCandidate && pendingContest) {
+                          const move = pendingContest.moves.find((m) => m.marbleIdx === marbleIdx)
+                          if (move) onMove(move)
+                        } else {
+                          setSelectedMarbleIdx(marbleIdx)
+                        }
                       }}
-                      aria-label="Move the selected marble here"
+                      aria-label={isCandidate ? 'Move this marble to the shared destination' : 'Show this marble’s destinations'}
                     />
                   )
-                })
-              )}
-            </>
-          )}
-        </div>
+                })}
 
-        {/* Legend */}
-        <div className="wh-legend">
-          {publicState.turn.playerOrder.map((pid) => {
-            const isTurn = pid === currentPlayer(publicState.turn)
-            return (
-              <div key={pid} className={`wh-seat-chip${isTurn ? ' wh-seat-chip--turn' : ''}`}>
-                <span className="wh-seat-dot" style={{ background: seatColor(publicState, pid) }} />
-                <span className="wh-seat-name">{names[pid] ?? pid}</span>
-                {isTurn && <span className="wh-turn-tag">turn</span>}
-              </div>
-            )
-          })}
+                {/* Destination targets: unique holes click to move; shared holes
+                    click to enter marble-first selection instead. With a marble
+                    selected, only its destinations are shown — the contested one
+                    becomes pending, and clicking it confirms that marble's move. */}
+                {selectedMarbleIdx === null ? (
+                  <>
+                    {uniqueTargets.map((t) => (
+                      <button
+                        key={`t${t.dest.x}:${t.dest.y}`}
+                        type="button"
+                        className="wh-target"
+                        style={{
+                          left: `calc(50% + ${t.dest.x * unit}px)`,
+                          top: `calc(50% + ${t.dest.y * unit}px)`,
+                          width: targetDiameter(board, t.dest, unit),
+                          height: targetDiameter(board, t.dest, unit),
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onMove(t.moves[0])
+                        }}
+                        aria-label="Move a marble here"
+                      />
+                    ))}
+                    {contestedTargets.map((t) => (
+                      <button
+                        key={`c${t.dest.x}:${t.dest.y}`}
+                        type="button"
+                        className="wh-target wh-target--contested"
+                        style={{
+                          left: `calc(50% + ${t.dest.x * unit}px)`,
+                          top: `calc(50% + ${t.dest.y * unit}px)`,
+                          width: targetDiameter(board, t.dest, unit),
+                          height: targetDiameter(board, t.dest, unit),
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedMarbleIdx(t.moves[0].marbleIdx)
+                        }}
+                        aria-label="Shared destination — choose a marble"
+                      />
+                    ))}
+                  </>
+                ) : (
+                  selectedTargets.map((t) => {
+                    const isPending = pendingContest !== null
+                      && t.dest.x === pendingContest.dest.x
+                      && t.dest.y === pendingContest.dest.y
+                    return (
+                      <button
+                        key={`s${t.dest.x}:${t.dest.y}`}
+                        type="button"
+                        className={`wh-target${isPending ? ' wh-target--contested wh-target--pending' : ''}`}
+                        style={{
+                          left: `calc(50% + ${t.dest.x * unit}px)`,
+                          top: `calc(50% + ${t.dest.y * unit}px)`,
+                          width: targetDiameter(board, t.dest, unit),
+                          height: targetDiameter(board, t.dest, unit),
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onMove(t.move)
+                        }}
+                        aria-label="Move the selected marble here"
+                      />
+                    )
+                  })
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 

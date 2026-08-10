@@ -1,5 +1,5 @@
 /* ===================================================================
-   WahooTable — marble race: die rail, board pane, legend
+   WahooTable — marble race: legend, board pane, die rail
    =================================================================== */
 
 .wh-table {
@@ -76,7 +76,10 @@
   margin-bottom: clamp(10px, 2vw, 18px);
 }
 
-/* ---- Main table card: flex row of die rail + board, legend below ---- */
+/* ---- Main table card: the board column (legend centered above the board)
+   with the die rail to its right. row-reverse puts the rail (DOM-first of the
+   row pair) on the board's right while keeping wrap order — on narrow screens
+   the rail wraps back to its own row above the board column. ---- */
 
 .wh-table-card {
   background: var(--surface);
@@ -85,13 +88,16 @@
   box-shadow: 0 10px 0 var(--ink);
   padding: clamp(16px, 2.4vw, 26px);
   display: flex;
+  flex-direction: row-reverse;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: center;
   gap: clamp(16px, 2.4vw, 26px);
 }
 
-/* ---- Left rail: die + caption, Roll button, status (fixed ~200px) ---- */
+/* ---- Rail (right of the board): die + caption, Roll button, status (fixed
+   ~200px). align-self: stretch keeps the column as tall as the board column
+   (legend + board); justify-content: flex-start pins the stack to the top. ---- */
 
 .wh-rail {
   flex: none;
@@ -99,7 +105,7 @@
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: clamp(12px, 1.6vw, 16px);
 }
 
@@ -136,8 +142,8 @@
   text-align: left;
 }
 
-/* Narrow screens (< 900px): the rail collapses back above the board as the
-   old centered cluster — die + Roll in a row, status centered beneath. */
+/* Narrow screens (< 900px): the rail collapses back above the board column as
+   the old centered cluster — die + Roll in a row, status centered beneath. */
 @media (max-width: 899px) {
   .wh-rail {
     flex-basis: 100%;
@@ -158,13 +164,27 @@
   }
 }
 
-/* ---- Board pane (square, card width minus the rail, up to 900px) ---- */
+/* ---- Board column: legend centered above the board, both on the board's
+   width. The legend lives in the board's column (not the card's row), so its
+   center coincides with the board's — the rail is the card's right sibling and
+   can't pull it off-center. The column takes the board's old flex slot (card
+   width minus the rail, up to 900px); the board fills it. ---- */
 
-.wh-board {
-  position: relative;
+.wh-board-col {
   flex: 1 1 0;
   min-width: 0;
   max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Board pane (square, fills the board column) ---- */
+
+.wh-board {
+  position: relative;
+  width: 100%;
   aspect-ratio: 1;
   border-radius: 24px;
   border: 4px solid var(--ink);
@@ -218,7 +238,10 @@
   pointer-events: none;
 }
 
-/* ---- Marbles ---- */
+/* ---- Marbles: 3D marble shading. The seat color arrives as
+   --marble-color (set inline per marble); the radial gradient adds the
+   highlight/lowlight around it, and the inset shadows a sheen — the hard
+   drop shadow is unchanged. Size/border semantics untouched. ---- */
 
 .wh-marble {
   position: absolute;
@@ -226,7 +249,17 @@
   top: 50%;
   border-radius: 50%;
   border: 2.5px solid var(--ink);
-  box-shadow: 0 3px 0 rgba(23, 23, 58, 0.45);
+  background: radial-gradient(
+    circle at 32% 30%,
+    color-mix(in srgb, var(--marble-color), white 70%) 0%,
+    color-mix(in srgb, var(--marble-color), white 25%) 22%,
+    var(--marble-color) 55%,
+    color-mix(in srgb, var(--marble-color), black 25%) 100%
+  );
+  box-shadow:
+    0 3px 0 rgba(23, 23, 58, 0.45),
+    inset -2px -3px 6px rgba(23, 23, 58, 0.25),
+    inset 2px 3px 4px rgba(255, 255, 255, 0.35);
   transition: transform 0.35s ease;
   pointer-events: none;
   z-index: 2;
@@ -333,7 +366,6 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
-  flex-basis: 100%;
 }
 
 .wh-seat-chip {
