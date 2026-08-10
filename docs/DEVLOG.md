@@ -1756,3 +1756,24 @@ shipping each verified charter promptly.
 - **Verified live:** 4-seat game — every base's lane is the arm feeding
   its corner; entrance + come-out rings sit on each seat's own edge
   above its corner, matching the reference photo.
+
+## 2026-08-09 — Wahoo topology v3 + house dice (specs 18j–18l, 18k2/18k3)
+
+- **User re-read of the designer's dot diagram proved it right where I'd
+  dismissed it**: arms are FIVE holes wide, track is 64 with SHARED
+  inner corners (quadrant 16 = 5 + tip corner + 3 middles + tip corner
+  + 5 + shared corner), the home entrance is the MIDDLE OF YOUR OWN TIP
+  ("the corner turn" — lane hangs tipward), and bases are diagonal
+  lines of 4. Constants now exported from the module (TRACK_LEN 64,
+  HOME_ENTRANCE_REL 57, lanes 58..61, corners rel {1,17,33,49},
+  shortcut entries {1,17} → exits {33,49}); rules/bot logic unchanged
+  in form. Migration took three dispatches (module, then two test-file
+  passes — the new literal types rejected every stale constant).
+- **Center hole shrunk** (1.5 → 0.9 units; the ring marks it, not the
+  girth).
+- **Die**: adopted the legacy dice language — same Die component at
+  full .die size, 7-frame flicker per roll, settle-jitter rotation,
+  roller caption, centered action cluster. No more corner afterthought.
+- 674 tests / tsc / build green; live-verified: board matches the dot
+  diagram feature-for-feature; die renders full-size with pips and
+  attribution.

@@ -2,13 +2,21 @@ import type { HostSession } from '../../engine/sync.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { createRng } from '../../engine/rng.ts'
 import { createTurnState, type TurnState } from '../../engine/turn-engine.ts'
-import { trackIndexFor } from './board.ts'
+import {
+  LANE_END,
+  LANE_START,
+  OWNER_TRACK_LEN,
+  SHORTCUT_ENTRIES,
+  SHORTCUT_EXITS,
+  trackIndexFor,
+} from './board.ts'
 
 export type WahooSeatCount = 2 | 3 | 4
 
-// marble position: -1 base, -2 center, 0..51 track (relative to own arm's
-// come-out hole), 52..55 home lane (52 outermost, adjacent to the home
-// entrance; 55 deepest, nearest the center)
+// marble position: -1 base, -2 center, 0..57 track (relative to own arm's
+// come-out hole: 0 = come-out, 57 = home entrance at the own-arm tip middle),
+// 58..61 home lane (58 outermost, adjacent to the home entrance; 61 deepest,
+// nearest the center)
 export type MarblePos = number
 
 export interface WahooPublicState {
@@ -16,7 +24,7 @@ export interface WahooPublicState {
   turn: TurnState<'roll' | 'move'> // phase 'roll' = awaiting ROLL, 'move' = die shown, awaiting MOVE
   seatArms: Record<string, number> // playerId -> arm 0..3
   positions: Record<string, MarblePos[]> // playerId -> 4 marbles
-  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 2 | 15 } | null
+  centerBy: { playerId: string; marbleIdx: number; entryCornerRel: 1 | 17 } | null
   die: number | null // current roll while phase 'move'
   sixStreak: number // consecutive 6s in the current player's chain
   lastMoved: { playerId: string; marbleIdx: number } | null // for the triple-six bust
@@ -51,18 +59,18 @@ export interface WahooSession {
   rng: () => number // host-only; drives the die rolls
 }
 
-// The two corners a player's marbles can shortcut into the center from, in
-// relative track coordinates. The other two corners (28, 41) are only ever
-// reached by EXITING the center.
-const SHORTCUT_CORNERS: ReadonlyArray<2 | 15> = [2, 15]
+// The two forward-diagonal corners a player's marbles can shortcut into the
+// center from (relative track coordinates). The other two corners (33, 49)
+// are only ever reached by EXITING the center — see exitTargetRel.
+// (SHORTCUT_ENTRIES lives in board.ts with the rest of the constant set.)
 
 // Relative track position of the exit corner for a center marble that entered
-// via the given corner: the diagonal opposite (entry 2 → 28, entry 15 → 41).
-export function exitTargetRel(entryCornerRel: 2 | 15): 28 | 41 {
-  return entryCornerRel === 2 ? 28 : 41
+// via the given corner: the diagonal opposite (entry 1 → 33, entry 17 → 49).
+export function exitTargetRel(entryCornerRel: 1 | 17): 33 | 49 {
+  return SHORTCUT_EXITS[entryCornerRel]
 }
 
-// Absolute track index (0..51) of a player's relative track position.
+// Absolute track index (0..63) of a player's relative track position.
 export function absoluteIndex(seatArms: Record<string, number>, playerId: string, rel: number): number {
   return trackIndexFor(seatArms[playerId], rel)
 }
@@ -124,7 +132,7 @@ export function createWahooGame(playerIds: string[], seed: number): WahooSession
 // relative coordinates converted to absolute, so cross-seat collisions count).
 function ownAt(positions: MarblePos[], arm: number, rel: number): boolean {
   const abs = trackIndexFor(arm, rel)
-  return positions.some((q) => q >= 0 && q <= 51 && trackIndexFor(arm, q) === abs)
+  return positions.some((q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(arm, q) === abs)
 }
 
 // Whether an own marble sits in any lane slot between `from` and `to`
@@ -153,22 +161,22 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     }
   }
 
-  // shortcut: track marble at p, corner c in {2, 15}, p <= c and the die lands
+  // shortcut: track marble at p, corner c in {1, 17}, p <= c and the die lands
   // exactly on the corner plus one step into the center. The path is a jump —
   // only the center's occupant matters.
   const centerByOwn = centerBy?.playerId === playerId
   if (!centerByOwn) {
     for (let i = 0; i < 4; i++) {
       const p = positions[i]
-      if (p < 0 || p > 51) continue
-      for (const c of SHORTCUT_CORNERS) {
+      if (p < 0 || p > OWNER_TRACK_LEN - 1) continue
+      for (const c of SHORTCUT_ENTRIES) {
         if (p <= c && die === c - p + 1) moves.push({ marbleIdx: i, kind: 'shortcut' })
       }
     }
   }
 
-  // exit: center marble of this player, die 1 or 6, diagonal corner free of
-  // own marbles (an opponent there is bumped).
+  // exit: center marble of this player, die 1 or 6, diagonal corner (33/49)
+  // free of own marbles (an opponent there is bumped).
   if ((die === 1 || die === 6) && centerBy?.playerId === playerId) {
     const target = exitTargetRel(centerBy.entryCornerRel)
     if (!positions.includes(target)) {
@@ -182,16 +190,19 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     const p = positions[i]
     if (p < 0) continue
     const to = p + die
-    if (to > 55) continue // overshoot past the deepest lane slot is illegal
-    if (p >= 52) {
+    if (to > LANE_END) continue // overshoot past the deepest lane slot is illegal
+    if (p >= LANE_START) {
       // lane-internal advance: no own marble in the path slots p+1..to
       if (!laneOccupied(positions, p + 1, to)) moves.push({ marbleIdx: i, kind: 'advance' })
-    } else if (to <= 51) {
+    } else if (to <= OWNER_TRACK_LEN - 1) {
       // track landing: must be free of own marbles in absolute terms
       if (!ownAt(positions, arm, to)) moves.push({ marbleIdx: i, kind: 'advance' })
     } else {
-      // entering the lane from the track: no own marble in lane slots 52..to
-      if (!laneOccupied(positions, 52, to)) moves.push({ marbleIdx: i, kind: 'advance' })
+      // entering the lane from the track: no own marble in lane slots
+      // LANE_START..to (the lane entry consumes the count exactly at the
+      // 0..57 → 58..61 boundary; a marble never lands on its own rel 58..63
+      // track holes)
+      if (!laneOccupied(positions, LANE_START, to)) moves.push({ marbleIdx: i, kind: 'advance' })
     }
   }
 
@@ -208,13 +219,13 @@ export function moveBumps(publicState: WahooPublicState, playerId: string, die: 
       (pid) =>
         pid !== playerId &&
         publicState.positions[pid].some(
-          (q) => q >= 0 && q <= 51 && trackIndexFor(publicState.seatArms[pid], q) === abs,
+          (q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(publicState.seatArms[pid], q) === abs,
         ),
     )
   if (move.kind === 'out') return opponentAt(trackIndexFor(arm, 0))
   if (move.kind === 'advance') {
     const to = publicState.positions[playerId][move.marbleIdx] + die
-    return to <= 51 && opponentAt(trackIndexFor(arm, to))
+    return to <= OWNER_TRACK_LEN - 1 && opponentAt(trackIndexFor(arm, to))
   }
   if (move.kind === 'shortcut') {
     return publicState.centerBy !== null && publicState.centerBy.playerId !== playerId

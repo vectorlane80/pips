@@ -2,7 +2,7 @@ import type { ActionOutcome, ActionValidator } from '../../engine/sync.ts'
 import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, extraTurn, setPhase } from '../../engine/turn-engine.ts'
-import { trackIndexFor } from './board.ts'
+import { LANE_START, OWNER_TRACK_LEN, trackIndexFor } from './board.ts'
 import {
   exitTargetRel,
   legalMoves,
@@ -34,7 +34,7 @@ function applyMove(
     for (const pid of Object.keys(others)) {
       if (pid === playerId) continue
       const idx = others[pid].findIndex(
-        (q) => q >= 0 && q <= 51 && trackIndexFor(publicState.seatArms[pid], q) === abs,
+        (q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(publicState.seatArms[pid], q) === abs,
       )
       if (idx !== -1) {
         bumpedId = pid
@@ -51,7 +51,7 @@ function applyMove(
   } else if (move.kind === 'advance') {
     const to = myPositions[move.marbleIdx] + die
     myPositions[move.marbleIdx] = to
-    if (to <= 51) bumpAt(trackIndexFor(arm, to))
+    if (to <= OWNER_TRACK_LEN - 1) bumpAt(trackIndexFor(arm, to))
   } else if (move.kind === 'shortcut') {
     const from = publicState.positions[playerId][move.marbleIdx]
     if (centerBy && centerBy.playerId !== playerId) {
@@ -60,7 +60,7 @@ function applyMove(
       others[bumpedId][centerBy.marbleIdx] = -1
     }
     myPositions[move.marbleIdx] = -2
-    centerBy = { playerId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 2 | 15 }
+    centerBy = { playerId, marbleIdx: move.marbleIdx, entryCornerRel: (from + die - 1) as 1 | 17 }
   } else {
     // exit: the center marble jumps to the diagonal corner.
     const target = exitTargetRel(centerBy!.entryCornerRel)
@@ -131,7 +131,7 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
 
       // Win check first: all four marbles in the lane ends the game now, even
       // if the die was a 6 that would have completed a bust chain.
-      if (positions[playerId].every((p) => p >= 52)) {
+      if (positions[playerId].every((p) => p >= LANE_START)) {
         return {
           ok: true,
           publicState: {

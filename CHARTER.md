@@ -25,17 +25,22 @@ wiring.
 - All state is PUBLIC (no hidden info): `HostSession` with 2–4 players,
   empty private states, ONE view broadcast to every guest — the simplest
   sync shape yet.
-- Distance-based state model kept from the handoff verbatim: per marble
-  `-1` base, `-2` center, `0..51` main track (relative to own entry),
-  `52..55` home lane. Geometry never touches game state.
+- Distance-based state model (constants exported from the module): per
+  marble `-1` base, `-2` center, `0..57` owner track path (relative to
+  own come-out), `58..61` home lane. TRACK_LEN 64. Geometry never
+  touches game state.
 
 ## Board geometry (the salvage, locked)
 
-`board.ts` defines ONE quadrant in unit coordinates and rotates it ×4:
-13 track holes per quadrant (5 out the arm's left edge, 3 across the
-tip, 5 back down the right edge → 52 total), home lane of 4 up the arm
-centerline, 2×2 base cluster in the outer corner region, shortcut-corner
-flag on the quadrant's inner-corner track hole, one shared center hole.
+`board.ts` defines ONE quadrant in unit coordinates and rotates it ×4,
+faithful to the designer's dot diagram (topology v3 after two user
+corrections): arms FIVE holes wide; 16 track holes per quadrant (5 up
+the edge, tip corner, 3 tip middles, tip corner, 5 down, one SHARED
+inner corner → 64 total); home lane of 4 hanging from the OWN TIP
+MIDDLE (the corner-turn entrance, rel 57); come-out just above the
+seat's own corner (rel 0); corners at rel {1,17,33,49}, shortcut
+entries {1,17} exiting diagonally at {33,49}; DIAGONAL 4-hole bases;
+one shared center hole.
 Unit tests assert: 52 unique track holes, uniform neighbor spacing,
 exact four-fold rotational symmetry, corners/center present, no
 overlaps. The table screen renders holes/marbles from this generator +
@@ -51,15 +56,13 @@ the distance model — pure view, same discipline as the dominoes snake.
   with all four marbles in their lane wins immediately.
 - **Center shortcut (user-corrected):** the center sits one step beyond
   a corner — a roll of exactly (distance-to-corner + 1) through one of
-  YOUR VALID corners may enter it as an alternative move (from the
-  corner itself that means a 1). Valid entry corners are the two whose
-  diagonal opposite is still forward progress — at relative track
-  distances 12 and 25; entering at 38/51 would exit backward and is
-  never offered. The center is a stop (max one marble, bump applies) and
-  remembers its entry corner; exit on a roll of 1 or 6 onto the
-  DIAGONALLY OPPOSITE corner (distance 38 or 51 respectively), then
-  travel normally. The 25→51 entry exits onto your home-branch corner —
-  the classic Wahoo play.
+  YOUR VALID corners may enter it as an alternative move. Valid entry
+  corners are the two whose diagonal opposite is still forward
+  progress — rel 1 and 17 under topology v3; entries at 33/49 would
+  exit backward and are never offered. The center is a stop (max one
+  marble, bump applies) and remembers its entry corner; exit on a 1 or
+  6 onto the DIAGONALLY OPPOSITE corner (rel 33 or 49), then travel
+  normally.
 - **Extra turn on a 6**, and THREE 6s in a row is a bust: the last
   marble you moved goes back to base and the turn passes (track the
   six-streak and last-moved marble within the turn chain).

@@ -70,6 +70,11 @@ function CrossRect({ shape, stroked }: { shape: (typeof CROSS_SHAPES)[number]; s
 
 // ---- Geometry helpers ----
 
+// The center hole's diameter in units: 0.9 vs 0.62 for track holes — larger
+// than a track hole but no longer oversized; the brand ring marks it special.
+// The center drop-target ring scales to this same size.
+const CENTER_DIAMETER = 0.9
+
 // The physical hole a marble currently occupies (-1 base, -2 center, 0..51
 // track relative to the arm's come-out, 52..55 home lane, outermost first).
 function marbleHole(board: WahooBoard, publicState: WahooPublicState, playerId: string, marbleIdx: number): Hole {
@@ -91,6 +96,14 @@ function destinationHole(board: WahooBoard, publicState: WahooPublicState, playe
   if (move.kind === 'exit') return board.track[exitTargetRel(publicState.centerBy!.entryCornerRel)]
   const to = publicState.positions[playerId][move.marbleIdx] + die
   return to <= 51 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - 52]
+}
+
+// Destination target ring diameter in units: the standard 0.68 ring on
+// track/lane/base holes; the center ring scales to the center hole so the
+// target frames it the way the standard ring frames a 0.62 track hole.
+function targetDiameter(board: WahooBoard, dest: Hole, unit: number): number {
+  const isCenter = dest.x === board.center.x && dest.y === board.center.y
+  return (isCenter ? CENTER_DIAMETER : 0.68) * unit
 }
 
 function BoardHole({ x, y, unit, fill = '#fff', border = 'rgba(23, 23, 58, 0.3)', borderWidth = 2, shadow, ringClass, ringColor, size = 0.62 }: {
@@ -189,6 +202,14 @@ export function WahooTable({
   // The most recent roll, kept so the die still shows a (muted) value between
   // turns — blank only before the first roll of the game.
   const [lastRoll, setLastRoll] = useState<{ die: number; by: string } | null>(null)
+  // Die flicker: non-null while a roll's 7×60ms random-face flicker runs, null
+  // once settled on the real value. useDiceAnimation keys on a values-join, so
+  // equal consecutive rolls wouldn't re-animate — keying on roll-event identity
+  // (see the lastEvent effect) re-flickers every genuine roll.
+  const [dieFlicker, setDieFlicker] = useState<number | null>(null)
+  // Small per-settle rotation jitter (±5°, the legacy dice games' feel).
+  const [dieRotation, setDieRotation] = useState(0)
+  const flickerRun = useRef(0)
   // Marble-first selection for shared (contested) destinations: null = plain
   // destination-click mode; a marble index narrows the visible targets to that
   // marble's moves (see destGroups/pendingContest below).
@@ -222,6 +243,24 @@ export function WahooTable({
         if (ev.kind === 'roll') {
           play('dice-roll')
           setLastRoll({ die: ev.die, by: ev.by })
+          // Replicate useDiceAnimation's flicker (7 frames × 60ms of random
+          // faces, then the real value) keyed to this roll event, so equal
+          // consecutive rolls re-animate. A newer roll bumps the run id, which
+          // strands any in-flight tick from an earlier run.
+          const id = ++flickerRun.current
+          let frame = 0
+          const tick = () => {
+            if (flickerRun.current !== id) return
+            if (frame < 7) {
+              setDieFlicker(1 + Math.floor(Math.random() * 6))
+              frame++
+              setTimeout(tick, 60)
+            } else {
+              setDieFlicker(null)
+              setDieRotation(Math.random() * 10 - 5)
+            }
+          }
+          tick()
         }
         else if (ev.kind === 'bust') play('farkle-bust')
         else if (ev.kind === 'move' || ev.kind === 'out' || ev.kind === 'shortcut' || ev.kind === 'exit') {
@@ -351,22 +390,28 @@ export function WahooTable({
 
       {/* Main table card */}
       <div className="wh-table-card">
-        {/* Action strip */}
+        {/* Action cluster: the house die (last-roller caption beneath it) sits
+            beside the Roll button, centered above the board; status stays in
+            the strip below. The die is presentational — no onClick. */}
         <div className="wh-action-strip">
-          <div className="wh-die-col">
-            <Die value={publicState.die ?? lastRoll?.die ?? 0} muted={publicState.die === null} />
-            {lastRoll !== null && (
-              <span className="wh-die-caption">
-                {lastRoll.by === localPlayerId ? 'You' : (names[lastRoll.by] ?? lastRoll.by)}
-              </span>
-            )}
-          </div>
-          <div className="wh-action-main">
+          <div className="wh-action-cluster">
+            <div className="wh-die-col">
+              <Die
+                value={dieFlicker ?? publicState.die ?? lastRoll?.die ?? 0}
+                muted={dieFlicker === null && !myMovePhase}
+                rotation={dieRotation}
+              />
+              {lastRoll !== null && (
+                <span className="wh-die-caption">
+                  {lastRoll.by === localPlayerId ? 'You' : (names[lastRoll.by] ?? lastRoll.by)}
+                </span>
+              )}
+            </div>
             <button type="button" className="btn btn-coral wh-roll-btn" onClick={onRoll} disabled={!canRoll}>
               Roll
             </button>
-            <div className="wh-status">{status}</div>
           </div>
+          <div className="wh-status">{status}</div>
         </div>
 
         {/* Board — clicking anywhere off a target or marble ring clears the selection */}
@@ -447,10 +492,10 @@ export function WahooTable({
                 }),
               )}
 
-              {/* Center: larger hole with the brand ring */}
+              {/* Center: hole with the brand ring, sized to CENTER_DIAMETER */}
               <span
                 className="wh-center"
-                style={{ width: 1.5 * unit, height: 1.5 * unit }}
+                style={{ width: CENTER_DIAMETER * unit, height: CENTER_DIAMETER * unit }}
               />
 
               {/* Marbles: filled circles in seat color, ink border + hard shadow */}
@@ -518,8 +563,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.68 * unit,
-                        height: 0.68 * unit,
+                        width: targetDiameter(board, t.dest, unit),
+                        height: targetDiameter(board, t.dest, unit),
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -536,8 +581,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.68 * unit,
-                        height: 0.68 * unit,
+                        width: targetDiameter(board, t.dest, unit),
+                        height: targetDiameter(board, t.dest, unit),
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
@@ -560,8 +605,8 @@ export function WahooTable({
                       style={{
                         left: `calc(50% + ${t.dest.x * unit}px)`,
                         top: `calc(50% + ${t.dest.y * unit}px)`,
-                        width: 0.68 * unit,
-                        height: 0.68 * unit,
+                        width: targetDiameter(board, t.dest, unit),
+                        height: targetDiameter(board, t.dest, unit),
                       }}
                       onClick={(e) => {
                         e.stopPropagation()
