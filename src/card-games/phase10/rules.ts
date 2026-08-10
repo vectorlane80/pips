@@ -109,7 +109,6 @@ function makeValidator(
           groups: { [nextOrder[0]]: [], [nextOrder[1]]: [] },
           hits: [],
           hasLaidPhase: { [nextOrder[0]]: false, [nextOrder[1]]: false },
-          skipUsed: { [nextOrder[0]]: false, [nextOrder[1]]: false },
           roundNumber: publicState.roundNumber + 1,
           roundOver: false,
           roundWinnerId: null,
@@ -318,18 +317,16 @@ function makeValidator(
         return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.groups, publicState.hits, publicState.hasLaidPhase, newDiscard)
       }
 
-      // A discarded Skip (first one this round by this player) skips the opponent's turn —
-      // in this 2-player game skipNext moves the index by 2, which lands back on the SAME
-      // player. Discarding a second Skip the same round discards normally, no further effect.
+      // Every discarded Skip skips the opponent's turn — in this 2-player game skipNext
+      // moves the index by 2, which lands back on the SAME player and gives them another turn.
       const discarded = newDiscard.cards[newDiscard.cards.length - 1]
-      const skipApplied = discarded.meta?.kind === 'skip' && !publicState.skipUsed[playerId]
+      const skipApplied = discarded.meta?.kind === 'skip'
       return {
         ok: true,
         publicState: {
           ...publicState,
           turn: skipApplied ? skipNext(publicState.turn, 'draw') : advanceTurn(publicState.turn, 'draw'),
           discardPile: newDiscard,
-          ...(skipApplied ? { skipUsed: { ...publicState.skipUsed, [playerId]: true } } : {}),
           handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
         },
         privateStates: { ...privateStates, [playerId]: { hand: newHand } },

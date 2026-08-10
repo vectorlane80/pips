@@ -7,6 +7,8 @@ import {
   isValidColorGroup,
   isValidRun,
   isValidSet,
+  orderColorGroupForDisplay,
+  orderRunForDisplay,
 } from './classify.ts'
 
 function numberCard(id: string, suit: string, rank: string): Card {
@@ -178,6 +180,56 @@ describe('isValidColorGroup', () => {
       numberCard('c2', 'red', '7'),
       skipCard('c3'),
     ])).toBe(false)
+  })
+})
+
+describe('display ordering', () => {
+  it('places a Wild in an internal run gap', () => {
+    const ordered = orderRunForDisplay([
+      numberCard('seven', 'green', '7'),
+      numberCard('nine', 'green', '9'),
+      wildCard('wild'),
+    ])
+
+    expect(ordered.map((c) => c.id)).toEqual(['seven', 'wild', 'nine'])
+  })
+
+  it('places an end-extension Wild after a run', () => {
+    const ordered = orderRunForDisplay([
+      numberCard('five', 'green', '5'),
+      numberCard('six', 'green', '6'),
+      numberCard('seven', 'green', '7'),
+      wildCard('wild'),
+    ])
+
+    expect(ordered.map((c) => c.id)).toEqual(['five', 'six', 'seven', 'wild'])
+  })
+
+  it('places Wilds in each of two run gaps', () => {
+    const ordered = orderRunForDisplay([
+      numberCard('two', 'green', '2'),
+      numberCard('five', 'green', '5'),
+      wildCard('wild-one'),
+      wildCard('wild-two'),
+    ])
+
+    expect(ordered.map((c) => c.id)).toEqual(['two', 'wild-one', 'wild-two', 'five'])
+  })
+
+  it('keeps an all-Wild run in its original order', () => {
+    const ordered = orderRunForDisplay([wildCard('wild-one'), wildCard('wild-two'), wildCard('wild-three')])
+
+    expect(ordered.map((c) => c.id)).toEqual(['wild-one', 'wild-two', 'wild-three'])
+  })
+
+  it('orders color-group naturals by rank and appends Wilds', () => {
+    const ordered = orderColorGroupForDisplay([
+      numberCard('nine', 'green', '9'),
+      numberCard('three', 'green', '3'),
+      wildCard('wild'),
+    ])
+
+    expect(ordered.map((c) => c.id)).toEqual(['three', 'nine', 'wild'])
   })
 })
 

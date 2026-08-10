@@ -95,9 +95,8 @@ Skip, 8 Wild), exactly 2 players.
   pile. Discarding one skips the opponent's next turn — implemented via
   `card-engine/turn-engine.ts`'s `skipNext`, whose 2-player behavior (index
   moves by 2, wrapping back to the SAME player) is exactly "skip the sole
-  opponent" in this 2-player game, needing no new turn-engine logic. Capped
-  at one skip actually applied per player per round (`skipUsed`); discarding
-  a second Skip the same round just discards normally, no further effect.
+  opponent" in this 2-player game, needing no new turn-engine logic. Every
+  discarded Skip applies this effect.
   With only one possible opponent, there's no "choose who to skip" UI moment
   to design — the design handoff flagged this as an open question, resolved
   by the game's own 2-player scope making it moot.
@@ -140,7 +139,7 @@ Skip, 8 Wild), exactly 2 players.
   considering the player who happened to go out.
 - **Between rounds**: `START_NEXT_ROUND` deals a fresh round (10 cards each,
   new starting discard), alternates who goes first, resets all round-scoped
-  state (`groups`, `hits`, `hasLaidPhase`, `skipUsed`), and carries
+  state (`groups`, `hits`, `hasLaidPhase`), and carries
   `phaseIdx`/`scores` forward untouched. Fires automatically in the live app
   (host-driven, after a short pause), same as Rummy.
 
@@ -180,7 +179,7 @@ satisfied, so a group's displayed phase number is never ambiguous even after
 exists specifically to fix, see §5), `hits` (an append-only list of
 `Phase10Hit` records, mirroring Rummy's `RummyLayoff`), `hasLaidPhase`
 (round-scoped), `phaseIdx` (0-based, PERSISTS across rounds — the whole point
-of a multi-round match), `skipUsed` (round-scoped), `scores` (match-scoped,
+of a multi-round match), `scores` (match-scoped,
 lower is better), `roundNumber`/`roundOver`/`roundWinnerId`/`matchWinnerId`,
 `handCounts` (same non-leaking opponent-hand-size mechanism as Rummy).
 
@@ -211,8 +210,7 @@ optionally hit, then discard):
 - **Already laid**: hit the first single hand card (never a Skip) that
   legally extends any group on the table, own or the opponent's — first
   legal match, not an optimizer.
-- **Otherwise, discard**: play an unused Skip first if one's in hand and not
-  yet used this round (a free tempo play — costs the opponent a turn for
+- **Otherwise, discard**: play a Skip first if one's in hand (a free tempo play — costs the opponent a turn for
   nothing); otherwise discard the lowest-"connectivity" number card (fewest
   same-rank/nearby-same-color neighbors in hand), tie-broken by highest
   `cardPenalty` (shed the most expensive isolated card first); an all-wild

@@ -59,7 +59,6 @@ function buildSession(config: {
   currentPlayerIndex?: number
   phaseIdx?: Record<string, number>
   hasLaidPhase?: Record<string, boolean>
-  skipUsed?: Record<string, boolean>
   groups?: Record<string, Phase10Group[]>
   hits?: Phase10Hit[]
   roundOver?: boolean
@@ -91,7 +90,6 @@ function buildSession(config: {
     hits: config.hits ?? [],
     hasLaidPhase: config.hasLaidPhase ?? { p1: false, p2: false },
     phaseIdx: config.phaseIdx ?? { p1: 0, p2: 0 },
-    skipUsed: config.skipUsed ?? { p1: false, p2: false },
     scores: { p1: 0, p2: 0 },
     roundNumber: 1,
     roundOver: config.roundOver ?? false,
@@ -434,81 +432,39 @@ describe('canCompletePhase / findPhaseSelection', () => {
 // ── tests: selectDiscard ─────────────────────────────────────
 
 describe('selectDiscard', () => {
-  it('discards an unused Skip first, even when other cards look more useful', () => {
+  it('discards a Skip first, even when other cards look more useful', () => {
     const hand = cardsByIds('p10-96', 'p10-8', 'p10-10', 'p10-12', 'p10-42')  // Skip + tight red 5-6-7 cluster
-    const game = buildSession({
-      p1HandCardIds: [],
-      p2HandCardIds: [],
-      discardCardIds: [],
-      stockCardIds: [],
-      phase: 'discard',
-      currentPlayerIndex: 0,
-    })
-    expect(selectDiscard(hand, game.session.publicState, 'p1')).toBe('p10-96')
+    expect(selectDiscard(hand)).toBe('p10-96')
   })
 
-  it('does NOT discard the Skip when skipUsed is already true — falls through to connectivity', () => {
+  it('discards a Skip regardless of previous skips this round', () => {
     const hand = cardsByIds('p10-96', 'p10-8', 'p10-10', 'p10-12', 'p10-42')  // Skip + red 5-6-7 + isolated blue 10
-    const game = buildSession({
-      p1HandCardIds: [],
-      p2HandCardIds: [],
-      discardCardIds: [],
-      stockCardIds: [],
-      phase: 'discard',
-      currentPlayerIndex: 0,
-      skipUsed: { p1: true, p2: false },
-    })
-    // blue 10 is the isolated card; the Skip stays
-    expect(selectDiscard(hand, game.session.publicState, 'p1')).toBe('p10-42')
+    expect(selectDiscard(hand)).toBe('p10-96')
   })
 
   it('discards the obviously isolated card from a tightly-clustered hand', () => {
     // red 5-6-7 all interconnect (same suit, within 3); blue 10 is disconnected
     const hand = cardsByIds('p10-8', 'p10-10', 'p10-12', 'p10-42')
-    const game = buildSession({
-      p1HandCardIds: [],
-      p2HandCardIds: [],
-      discardCardIds: [],
-      stockCardIds: [],
-      phase: 'discard',
-      currentPlayerIndex: 0,
-    })
-    expect(selectDiscard(hand, game.session.publicState, 'p1')).toBe('p10-42')
+    expect(selectDiscard(hand)).toBe('p10-42')
   })
 
   it('breaks connectivity ties by highest cardPenalty', () => {
     // red 2, blue 10, green 5 — all pairwise disconnected (different suits, no
     // rank matches), so all score 0. blue 10 costs 10 (rank > 9) vs 5 each → shed it.
     const hand = cardsByIds('p10-2', 'p10-42', 'p10-56')
-    const game = buildSession({
-      p1HandCardIds: [],
-      p2HandCardIds: [],
-      discardCardIds: [],
-      stockCardIds: [],
-      phase: 'discard',
-      currentPlayerIndex: 0,
-    })
-    expect(selectDiscard(hand, game.session.publicState, 'p1')).toBe('p10-42')
+    expect(selectDiscard(hand)).toBe('p10-42')
   })
 
   it('falls back to any card for an all-wild hand — never crashes', () => {
     const hand = cardsByIds('p10-100', 'p10-101', 'p10-102')
-    const game = buildSession({
-      p1HandCardIds: [],
-      p2HandCardIds: [],
-      discardCardIds: [],
-      stockCardIds: [],
-      phase: 'discard',
-      currentPlayerIndex: 0,
-    })
-    expect(selectDiscard(hand, game.session.publicState, 'p1')).toBe('p10-100')
+    expect(selectDiscard(hand)).toBe('p10-100')
   })
 })
 
 // ── tests: strategy discard path with a Skip in hand ─────────
 
 describe('phase10BotStrategy discard fallthrough', () => {
-  it('discards the unused Skip when nothing else is productive', () => {
+  it('discards a Skip when nothing else is productive', () => {
     // Not laid, and the hand cannot complete Phase 1 → discard, and the Skip
     // goes first (tempo play).
     const p1Hand = ['p10-96', 'p10-8', 'p10-10', 'p10-12', 'p10-42']
@@ -530,7 +486,7 @@ describe('phase10BotStrategy discard fallthrough', () => {
     expect(totalCards(result.game)).toBe(108)
   })
 
-  it('does not discard the Skip once skipUsed is true — connectivity discard instead', () => {
+  it('discards a Skip even after a previous Skip this round', () => {
     const p1Hand = ['p10-96', 'p10-8', 'p10-10', 'p10-12', 'p10-42']
     const game = buildSession({
       p1HandCardIds: p1Hand,
@@ -539,11 +495,9 @@ describe('phase10BotStrategy discard fallthrough', () => {
       stockCardIds: remainingDeckIds([...p1Hand, 'p10-24', 'p10-26', 'p10-28', 'p10-30', 'p10-34', 'p10-36', 'p10-38', 'p10-40', 'p10-44', 'p10-46', 'p10-94']),
       phase: 'discard',
       currentPlayerIndex: 0,
-      skipUsed: { p1: true, p2: false },
     })
 
-    // the isolated blue 10 is discarded, not the Skip
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'DISCARD_CARD', cardId: 'p10-42' })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'DISCARD_CARD', cardId: 'p10-96' })
   })
 })
 

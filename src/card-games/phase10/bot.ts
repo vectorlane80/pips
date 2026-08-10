@@ -86,16 +86,16 @@ function connectivityScore(card: Card, hand: Card[]): number {
 /**
  * Pick the least-useful card to discard.
  *
- * 1. Tempo play: an unused Skip this round goes out first — it costs the
+ * 1. Tempo play: a Skip goes out first — it costs the
  *    opponent a turn for free, so it is always at least tactically neutral.
  * 2. Otherwise, among the non-wild, non-skip (number) cards, discard the
  *    lowest-connectivity one; ties broken by highest cardPenalty (shed the most
  *    expensive isolated card first).
  * 3. Fallback (no number cards at all, e.g. an all-wild hand): any card.
  */
-export function selectDiscard(hand: Card[], publicState: Phase10PublicState, playerId: string): string {
+export function selectDiscard(hand: Card[]): string {
   const skip = hand.find((c) => c.meta?.kind === 'skip')
-  if (skip && !publicState.skipUsed[playerId]) return skip.id
+  if (skip) return skip.id
 
   const candidates = hand.filter((c) => c.meta?.kind === 'number')
   if (candidates.length > 0) {
@@ -194,5 +194,5 @@ export const phase10BotStrategy: BotStrategy<
   }
 
   // Case 5: nothing productive found — discard.
-  return { type: 'DISCARD_CARD', cardId: selectDiscard(hand, publicState, playerId) }
+  return { type: 'DISCARD_CARD', cardId: selectDiscard(hand) }
 }

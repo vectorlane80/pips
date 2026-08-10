@@ -8,6 +8,41 @@ export interface PhaseGroup {
   cards: Card[]
 }
 
+// Orders a valid run's cards for display: naturals ascending by rank, with
+// each Wild placed at the exact gap position it fills. Wilds beyond what's
+// needed to fill internal gaps are pure range-extensions with no single
+// correct side — split them deterministically, floor(extra/2) before the
+// naturals and the rest after. Deterministic and stable: the same card set
+// always produces the same order, unlike the broken NaN-comparator sort it
+// replaces.
+export function orderRunForDisplay(cards: Card[]): Card[] {
+  const naturals = cards.filter((c) => c.meta?.kind === 'number').sort((a, b) => Number(a.rank) - Number(b.rank))
+  const wilds = cards.filter((c) => c.meta?.kind !== 'number')
+  if (naturals.length === 0) return wilds
+  const minNum = Number(naturals[0].rank)
+  const maxNum = Number(naturals[naturals.length - 1].rank)
+  const byValue = new Map(naturals.map((c) => [Number(c.rank), c]))
+  const filled: Card[] = []
+  let wildIdx = 0
+  for (let v = minNum; v <= maxNum; v++) {
+    const natural = byValue.get(v)
+    filled.push(natural ?? wilds[wildIdx++])
+  }
+  const extra = wilds.slice(wildIdx)
+  const before = Math.floor(extra.length / 2)
+  return [...extra.slice(0, before), ...filled, ...extra.slice(before)]
+}
+
+// Orders a valid color group's cards for display: naturals ascending by
+// rank, then any Wilds appended at the end. A color group has no run
+// semantic (no "gap" a Wild fills), so this is simpler than orderRunForDisplay
+// — just deterministic instead of NaN-driven.
+export function orderColorGroupForDisplay(cards: Card[]): Card[] {
+  const naturals = cards.filter((c) => c.meta?.kind === 'number').sort((a, b) => Number(a.rank) - Number(b.rank))
+  const wilds = cards.filter((c) => c.meta?.kind !== 'number')
+  return [...naturals, ...wilds]
+}
+
 // True iff at least 2 cards, at least one natural (kind === 'number'), and every
 // natural shares the same rank. Wilds impose no constraint (they always fit);
 // a group made entirely of wilds is NOT valid.

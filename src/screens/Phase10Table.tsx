@@ -3,7 +3,7 @@ import type { Card } from '../card-engine/cards'
 import type { Phase10PublicState } from '../card-games/phase10/state'
 import { fullGroupCards } from '../card-games/phase10/state'
 import { currentPlayer } from '../engine/turn-engine'
-import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, type GroupType } from '../card-games/phase10/classify'
+import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, orderColorGroupForDisplay, orderRunForDisplay, type GroupType } from '../card-games/phase10/classify'
 import { PHASES, type PhaseRequirement } from '../card-games/phase10/phases'
 import { DealIntro } from '../components/DealIntro'
 import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phase10Card'
@@ -123,7 +123,8 @@ function sortGroupForDisplay(cards: Card[], type: GroupType): Card[] {
   if (type === 'set') {
     return [...cards].sort((a, b) => (COLOR_ORDER[a.suit] ?? 4) - (COLOR_ORDER[b.suit] ?? 4))
   }
-  return [...cards].sort((a, b) => Number(a.rank) - Number(b.rank))
+  if (type === 'run') return orderRunForDisplay(cards)
+  return orderColorGroupForDisplay(cards)
 }
 
 function layPhaseEnabled(selectedIds: string[], hand: Card[], requirement: PhaseRequirement): boolean {
@@ -389,6 +390,9 @@ export function Phase10Table({
       } else if (groupCount > p.groupCount || hitCount > p.hitCount) {
         play('card-play')
       }
+    }
+    if (!p.wasMyTurn && isMyTurn && !publicState.roundOver) {
+      play('die-select')
     }
     if (!p.roundOver && publicState.roundOver && publicState.roundWinnerId !== null) {
       play('round-win')

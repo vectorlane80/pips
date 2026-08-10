@@ -71,7 +71,6 @@ function buildSession(config: {
   scores?: Record<string, number>
   phaseIdx?: Record<string, number>
   hasLaidPhase?: Record<string, boolean>
-  skipUsed?: Record<string, boolean>
   groups?: Record<string, Phase10Group[]>
   hits?: Phase10Hit[]
   roundOver?: boolean
@@ -105,7 +104,6 @@ function buildSession(config: {
     hits: config.hits ?? [],
     hasLaidPhase: config.hasLaidPhase ?? { p1: false, p2: false },
     phaseIdx: config.phaseIdx ?? { p1: 0, p2: 0 },
-    skipUsed: config.skipUsed ?? { p1: false, p2: false },
     scores: config.scores ?? { p1: 0, p2: 0 },
     roundNumber: 1,
     roundOver: config.roundOver ?? false,
@@ -547,15 +545,13 @@ describe('Phase 10 integration harness', () => {
     expect(result.outcome.ok).toBe(true)
 
     const pub = result.game.session.publicState
-    expect(pub.skipUsed['p1']).toBe(true)
-    expect(pub.skipUsed['p2']).toBe(false)
     // skipNext with 2 players advances by 2 → lands back on p1 (p2's turn is skipped)
     expect(currentPlayer(pub.turn)).toBe('p1')
     expect(pub.turn.phase).toBe('draw')
     expect(totalCards(result.game)).toBe(108)
   })
 
-  it('discarding a second Skip the same round does NOT skip again', () => {
+  it('discarding a second Skip the same round skips again', () => {
     const p1Cards = ['p10-96', 'p10-97', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-8', 'p10-10', 'p10-12', 'p10-14']
     const p2Cards = ['p10-72', 'p10-73', 'p10-74', 'p10-75', 'p10-76', 'p10-77', 'p10-78', 'p10-79', 'p10-80', 'p10-81']
     const game = buildSession({
@@ -578,9 +574,7 @@ describe('Phase 10 integration harness', () => {
     expect(r3.outcome.ok).toBe(true)
 
     const pub = r3.game.session.publicState
-    // a second Skip discards normally — skipUsed stays capped, turn advances to p2
-    expect(pub.skipUsed['p1']).toBe(true)
-    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(currentPlayer(pub.turn)).toBe('p1')
     expect(pub.turn.phase).toBe('draw')
     expect(totalCards(r3.game)).toBe(108)
   })
@@ -831,7 +825,6 @@ describe('Phase 10 integration harness', () => {
     expect(pub.groups).toEqual({ p2: [], p1: [] })
     expect(pub.hits).toEqual([])
     expect(pub.hasLaidPhase).toEqual({ p2: false, p1: false })
-    expect(pub.skipUsed).toEqual({ p2: false, p1: false })
     expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(10)
     expect(cardCount(result.game.session.privateStates['p2'].hand)).toBe(10)
     expect(cardCount(pub.discardPile)).toBe(1)

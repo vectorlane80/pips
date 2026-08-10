@@ -39,9 +39,6 @@ export interface Phase10PublicState {
   hasLaidPhase: Record<string, boolean>    // this round only, reset each round
   phaseIdx: Record<string, number>         // 0-based (0 = Phase 1 .. 9 = Phase 10). PERSISTS
                                              // across rounds — never reset by START_NEXT_ROUND.
-  skipUsed: Record<string, boolean>        // keyed by the player who PLAYED a skip — caps at
-                                             // one skip actually applied per player per round
-                                             // (this round only, reset each round)
   scores: Record<string, number>           // match score, accumulates across rounds. LOWER IS
                                              // BETTER — the opposite convention from Rummy's
                                              // state.ts. There is NO target score to cross;
@@ -121,7 +118,6 @@ export function createPhase10Game(playerIds: [string, string], seed: number): Ph
     hits: [],
     hasLaidPhase: { [playerIds[0]]: false, [playerIds[1]]: false },
     phaseIdx: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
-    skipUsed: { [playerIds[0]]: false, [playerIds[1]]: false },
     scores: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
     roundNumber: 1,
     roundOver: false,
