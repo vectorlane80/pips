@@ -58,7 +58,13 @@ export const validateChessAction: ActionValidator<
         stage,
         turn,
         outcome,
-        lastMove: { by: playerId, san: result.san, check: chess.inCheck() },
+        lastMove: {
+          by: playerId,
+          san: result.san,
+          check: chess.inCheck(),
+          from: result.from,
+          to: result.to,
+        },
         drawOfferBy: null, // any move implicitly declines a pending draw offer
       },
       privateStates,

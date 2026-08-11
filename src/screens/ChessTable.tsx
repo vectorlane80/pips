@@ -42,6 +42,12 @@ const GLYPHS: Record<string, string> = {
 
 const PROMOTIONS = ['q', 'r', 'b', 'n'] as const
 
+// Algebraic square -> board grid coordinates, same convention as the render
+// loop below (row 0 = rank 8 at the top, col 0 = file a on the left).
+function squareToRowCol(square: string): { row: number; col: number } {
+  return { row: 8 - Number(square[1]), col: 'abcdefgh'.indexOf(square[0]) }
+}
+
 // ---- ChessTable ----
 
 export function ChessTable({
@@ -224,27 +230,41 @@ export function ChessTable({
             const isSelectable = cell !== null && publicState.stage === 'play' && myTurn && cell.color === seatToColor(mySeat)
             const isSelected = square === selectedSquare
             const isDest = destinations.has(square)
+            // The just-landed move's destination gets a fresh slot keyed by
+            // moveSig, so the CSS slide animation plays exactly once per move.
+            const origin =
+              lastMove !== null && lastMove.to === square ? squareToRowCol(lastMove.from) : null
             return (
               <div key={i} className="ch-cell" style={{ background: dark ? DARK_SQUARE : LIGHT_SQUARE }}>
                 {cell && (
-                  isSelectable ? (
-                    <button
-                      type="button"
-                      className="ch-piece"
-                      style={{ background: pieceColor }}
-                      onClick={() => {
-                        setPromotion(null)
-                        setSelectedSquare(cell.square)
-                      }}
-                      aria-label={isSelected ? 'Selected piece' : 'Select this piece'}
-                    >
-                      <span className="ch-glyph">{GLYPHS[cell.type]}</span>
-                    </button>
-                  ) : (
-                    <span className="ch-piece" style={{ background: pieceColor }}>
-                      <span className="ch-glyph">{GLYPHS[cell.type]}</span>
-                    </span>
-                  )
+                  <span
+                    key={origin !== null ? `${square}:${moveSig}` : square}
+                    className={origin !== null ? 'ch-piece-slot ch-piece-slot--sliding' : 'ch-piece-slot'}
+                    style={
+                      origin !== null
+                        ? { ['--dx' as string]: origin.col - col, ['--dy' as string]: origin.row - row }
+                        : undefined
+                    }
+                  >
+                    {isSelectable ? (
+                      <button
+                        type="button"
+                        className="ch-piece"
+                        style={{ background: pieceColor }}
+                        onClick={() => {
+                          setPromotion(null)
+                          setSelectedSquare(cell.square)
+                        }}
+                        aria-label={isSelected ? 'Selected piece' : 'Select this piece'}
+                      >
+                        <span className="ch-glyph">{GLYPHS[cell.type]}</span>
+                      </button>
+                    ) : (
+                      <span className="ch-piece" style={{ background: pieceColor }}>
+                        <span className="ch-glyph">{GLYPHS[cell.type]}</span>
+                      </span>
+                    )}
+                  </span>
                 )}
                 {isSelected && <span className="ch-ring ch-ring--selected" />}
                 {isDest && (
@@ -260,30 +280,10 @@ export function ChessTable({
           })}
         </div>
 
-        {/* Status + hint / promotion bar */}
+        {/* Status + hint (promotion renders as a fixed overlay below) */}
         <div className="ch-status">
           <div className="ch-status-text">{statusText}</div>
-          {promotion ? (
-            <div className="ch-promo">
-              {PROMOTIONS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className="ch-promo-piece"
-                  style={{ background: colors[localPlayerId] }}
-                  onClick={() => {
-                    onMove(promotion.from, promotion.to, p)
-                    setPromotion(null)
-                  }}
-                  aria-label={`Promote to ${p}`}
-                >
-                  <span className="ch-glyph">{GLYPHS[p]}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            hint && <div className="ch-hint">{hint}</div>
-          )}
+          {!promotion && hint && <div className="ch-hint">{hint}</div>}
         </div>
 
         {/* Controls: resign / draw offer */}
@@ -308,6 +308,34 @@ export function ChessTable({
           ) : null}
         </div>
       </div>
+
+      {/* Promotion overlay — fixed, centered, always on top. The move is
+          already committed (from/to chosen), so the backdrop is inert: the
+          player must pick a piece, there is no cancel path. */}
+      {promotion && (
+        <div className="overlay-backdrop">
+          <div className="overlay-panel">
+            <div className="ch-promo-label">Promote to:</div>
+            <div className="ch-promo">
+              {PROMOTIONS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="ch-promo-piece"
+                  style={{ background: colors[localPlayerId] }}
+                  onClick={() => {
+                    onMove(promotion.from, promotion.to, p)
+                    setPromotion(null)
+                  }}
+                  aria-label={`Promote to ${p}`}
+                >
+                  <span className="ch-glyph">{GLYPHS[p]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {rulesOpen && <ChessRulesOverlay onClose={() => setRulesOpen(false)} />}
     </div>

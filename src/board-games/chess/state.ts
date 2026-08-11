@@ -17,6 +17,8 @@ export interface LastChessMove {
   by: string
   san: string // algebraic notation of the move just made, for the status line
   check: boolean // does this move give check?
+  from: string // origin square of the move, as chess.js's move() returns it
+  to: string // destination square of the move, as chess.js's move() returns it
 }
 
 export interface ChessPublicState {

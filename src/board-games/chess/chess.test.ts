@@ -83,7 +83,7 @@ describe('MOVE validation', () => {
     expect(pub.turn.turnNumber).toBe(2)
     expect(pub.stage).toBe('play')
     expect(pub.outcome).toBeNull()
-    expect(pub.lastMove).toEqual({ by: 'p1', san: 'e4', check: false })
+    expect(pub.lastMove).toEqual({ by: 'p1', san: 'e4', check: false, from: 'e2', to: 'e4' })
   })
 
   it('the black player answers from the black side after white moves', () => {
@@ -92,7 +92,7 @@ describe('MOVE validation', () => {
     const r2 = applyChessAction(r1.game, 'p2', { type: 'MOVE', from: 'e7', to: 'e5' })
     expect(r2.outcome.ok).toBe(true)
     expect(currentPlayer(r2.game.session.publicState.turn)).toBe('p1')
-    expect(r2.game.session.publicState.lastMove).toEqual({ by: 'p2', san: 'e5', check: false })
+    expect(r2.game.session.publicState.lastMove).toEqual({ by: 'p2', san: 'e5', check: false, from: 'e7', to: 'e5' })
   })
 
   it('rejects a geometrically impossible move', () => {
@@ -147,7 +147,7 @@ describe('castling', () => {
     // The king moving consumes BOTH white rights; black's are untouched.
     expect(after.split(' ')[2]).toBe('kq')
     expect(after.split(' ')[0]).toContain('1RK1') // king on g1, rook on f1
-    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'O-O', check: false })
+    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'O-O', check: false, from: 'e1', to: 'g1' })
     expect(currentPlayer(r.game.session.publicState.turn)).toBe('p2')
   })
 
@@ -159,7 +159,7 @@ describe('castling', () => {
     // The king moving consumes BOTH white rights; black's are untouched.
     expect(after.split(' ')[2]).toBe('kq')
     expect(after.split(' ')[0]).toContain('2KR') // king on c1, rook on d1
-    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'O-O-O', check: false })
+    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'O-O-O', check: false, from: 'e1', to: 'c1' })
   })
 })
 
@@ -174,7 +174,7 @@ describe('en passant', () => {
     // exd6 removes the passed black d-pawn and leaves the white pawn on d6;
     // the other black pawns (a6, b7, c7, e7, f7, g7, h7) remain.
     expect(after.split(' ')[0]).toBe('rnbqkbnr/1pp1pppp/p2P4/8/8/8/PPPP1PPP/RNBQKBNR')
-    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'exd6', check: false })
+    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'exd6', check: false, from: 'e5', to: 'd6' })
   })
 })
 
@@ -189,7 +189,7 @@ describe('promotion', () => {
     const r = applyChessAction(game, 'p1', { type: 'MOVE', from: 'a7', to: 'a8', promotion: 'q' })
     expect(r.outcome.ok).toBe(true)
     expect(r.game.session.publicState.fen.split(' ')[0]).toBe('Q7/7k/8/8/8/8/8/7K')
-    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'a8=Q', check: false })
+    expect(r.game.session.publicState.lastMove).toEqual({ by: 'p1', san: 'a8=Q', check: false, from: 'a7', to: 'a8' })
   })
 
   it('an invalid promotion piece is rejected', () => {
@@ -222,7 +222,7 @@ describe('game end', () => {
     const pub = game.session.publicState
     expect(pub.stage).toBe('over')
     expect(pub.outcome).toEqual({ kind: 'checkmate', winnerSeat: 1 })
-    expect(pub.lastMove).toEqual({ by: 'p2', san: 'Qh4#', check: true })
+    expect(pub.lastMove).toEqual({ by: 'p2', san: 'Qh4#', check: true, from: 'd8', to: 'h4' })
   })
 
   it('stalemate ends the game with no winner', () => {
@@ -233,7 +233,7 @@ describe('game end', () => {
     const pub = r.game.session.publicState
     expect(pub.stage).toBe('over')
     expect(pub.outcome).toEqual({ kind: 'stalemate' })
-    expect(pub.lastMove).toEqual({ by: 'p1', san: 'Qf7', check: false })
+    expect(pub.lastMove).toEqual({ by: 'p1', san: 'Qf7', check: false, from: 'f6', to: 'f7' })
     expect(currentPlayer(pub.turn)).toBe('p1') // turn untouched when the game ends
   })
 
