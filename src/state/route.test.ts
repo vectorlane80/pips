@@ -21,6 +21,10 @@ describe('gameFromPath', () => {
     expect(gameFromPath('/pips/mexican-train')).toBe('mexican-train')
   })
 
+  it('accepts /pips/chess', () => {
+    expect(gameFromPath('/pips/chess')).toBe('chess')
+  })
+
   it('accepts /<segment> without the /pips base', () => {
     expect(gameFromPath('/wahoo')).toBe('wahoo')
   })
@@ -56,12 +60,14 @@ describe('decideBoot', () => {
     expect(decideBoot('/pips/wahoo', '', true)).toEqual({ kind: 'host', game: 'wahoo' })
     expect(decideBoot('/pips/checkers', '', true)).toEqual({ kind: 'host', game: 'checkers' })
     expect(decideBoot('/pips/mexican-train', '', true)).toEqual({ kind: 'host', game: 'mexican-train' })
+    expect(decideBoot('/pips/chess', '', true)).toEqual({ kind: 'host', game: 'chess' })
   })
 
   it('asks for a name before hosting when no name exists', () => {
     expect(decideBoot('/pips/wahoo', '', false)).toEqual({ kind: 'shelf-needs-name', game: 'wahoo' })
     expect(decideBoot('/pips/checkers', '', false)).toEqual({ kind: 'shelf-needs-name', game: 'checkers' })
     expect(decideBoot('/pips/mexican-train', '', false)).toEqual({ kind: 'shelf-needs-name', game: 'mexican-train' })
+    expect(decideBoot('/pips/chess', '', false)).toEqual({ kind: 'shelf-needs-name', game: 'chess' })
   })
 
   it('falls back to the shelf with no join code and no game path', () => {

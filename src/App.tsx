@@ -77,6 +77,14 @@ import { MexicanTrainTable } from './screens/MexicanTrainTable'
 import { MexicanTrainResults } from './screens/MexicanTrainResults'
 import { MexicanTrainRoom } from './screens/MexicanTrainRoom'
 
+// ---- Chess (separate parallel session, per CHARTER.md resolution #7) ----
+import { createChessGame, type ChessSession, type ChessPublicState, type ChessAction, type ChessDifficulty } from './board-games/chess/state'
+import { applyChessAction, runChessBotTurn } from './board-games/chess/rules'
+import { makeEasyChessBotStrategy, makeNormalChessBotStrategy } from './board-games/chess/bot'
+import { ChessTable } from './screens/ChessTable'
+import { ChessResults } from './screens/ChessResults'
+import { ChessRoom } from './screens/ChessRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
@@ -90,6 +98,7 @@ type CheckersView =
 type MTView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
+type ChessView = { revision: number; publicState: ChessPublicState; opponentName: string }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -179,6 +188,17 @@ export default function App() {
   const [mtSeats, setMTSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [mtDropped, setMTDropped] = useState<string[]>([])
 
+  // ---- Chess ----
+  const [chessRole, setChessRole] = useState<'host' | 'guest' | null>(null)
+  const [chessCode, setChessCode] = useState('')
+  const [chessLocalPlayerId, setChessLocalPlayerId] = useState<string | null>(null)
+  const [chessOpponentId, setChessOpponentId] = useState<string | null>(null)
+  const [chessOpponentName, setChessOpponentName] = useState('')
+  const [chessView, setChessView] = useState<ChessView | null>(null)
+  const [chessConnection, setChessConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [chessWaiting, setChessWaiting] = useState(false)
+  const [chessDifficulty, setChessDifficulty] = useState<ChessDifficulty>('easy')
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -240,6 +260,14 @@ export default function App() {
   const mtNamesRef = useRef<Record<string, string>>({})
   const mtBotSeatsRef = useRef<Set<string>>(new Set())
   const mtDroppedRef = useRef<string[]>([])
+  const chessSessionRef = useRef<ChessSession | null>(null)
+  const chessHostRef = useRef<HostHandle<ChessView> | null>(null)
+  const chessGuestRef = useRef<GuestHandle<ChessAction> | null>(null)
+  const chessBotBusyRef = useRef(false)
+  const chessLocalPlayerIdRef = useRef<string | null>(null)
+  const chessOpponentIdRef = useRef<string | null>(null)
+  const chessOpponentNameRef = useRef('')
+  const chessDifficultyRef = useRef<ChessDifficulty>('easy')
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -263,6 +291,8 @@ export default function App() {
     wahooGuestRef.current?.destroy()
     checkersHostRef.current?.destroy()
     checkersGuestRef.current?.destroy()
+    chessHostRef.current?.destroy()
+    chessGuestRef.current?.destroy()
   }, [])
 
   // ---- Routing ----
@@ -330,13 +360,14 @@ export default function App() {
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
     if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
     if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
+    if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView])
+  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -365,6 +396,7 @@ export default function App() {
       case 'wahoo': startWahooHost(); return
       case 'checkers': startCheckersHost(); return
       case 'mexican-train': startMTHost(); return
+      case 'chess': startChessHost(); return
     }
   }
 
@@ -587,6 +619,25 @@ export default function App() {
     mtBotBusyRef.current = false
     mtBotSeatsRef.current.clear()
     mtNamesRef.current = {}
+    // Chess
+    chessHostRef.current?.destroy()
+    chessHostRef.current = null
+    chessGuestRef.current?.destroy()
+    chessGuestRef.current = null
+    chessSessionRef.current = null
+    setChessRole(null)
+    setChessCode('')
+    setChessLocalPlayerId(null)
+    chessLocalPlayerIdRef.current = null
+    setChessOpponentId(null)
+    chessOpponentIdRef.current = null
+    setChessOpponentName('')
+    chessOpponentNameRef.current = ''
+    setChessView(null)
+    setChessConnection('connected')
+    setChessWaiting(false)
+    setChessDifficulty('easy')
+    chessDifficultyRef.current = 'easy'
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -2024,6 +2075,188 @@ export default function App() {
 
   // ---- End Mexican Train helpers ----
 
+  // ---- Chess helpers ----
+
+  function chessActorKey(ch: ChessSession): string {
+    const ps = ch.session.publicState
+    return `${ps.stage}:${ps.turn.turnNumber}`
+  }
+
+  function chessStale(key: string) {
+    return !chessSessionRef.current || chessActorKey(chessSessionRef.current) !== key
+  }
+
+  function chessUpdateViews() {
+    const session = chessSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, chessLocalPlayerIdRef.current!)
+    setChessView({ revision: hostSnap.revision, publicState: hostSnap.publicState, opponentName: chessOpponentNameRef.current })
+    const opponentId = chessOpponentIdRef.current
+    if (opponentId && opponentId !== 'bot') {
+      const guestSnap = deriveSnapshot(session.session, opponentId)
+      chessHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, opponentName: name })
+    }
+  }
+
+  function startChessHost() {
+    const code = `CH-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setChessRole('host')
+    writeNameCookie(name)
+    pushGameUrl('chess')
+    setChessCode(code)
+    setChessLocalPlayerId(hostId)
+    chessLocalPlayerIdRef.current = hostId
+    setChessWaiting(true)
+    setError(null)
+    chessHostRef.current = createHost<ChessView, ChessAction>(code, {
+      onJoin(guestId, guestName) {
+        if (chessSessionRef.current) {
+          chessHostRef.current?.reject(guestId, 'That Chess table is already full.')
+          return
+        }
+        const seed = Math.floor(Math.random() * 2147483647)
+        chessSessionRef.current = createChessGame([hostId, guestId], chessDifficultyRef.current, seed)
+        setChessOpponentId(guestId)
+        chessOpponentIdRef.current = guestId
+        setChessOpponentName(guestName)
+        chessOpponentNameRef.current = guestName
+        setChessWaiting(false)
+        chessUpdateViews()
+      },
+      onAction(guestId, action) {
+        if (!chessSessionRef.current || guestId !== chessOpponentIdRef.current) return
+        const result = applyChessAction(chessSessionRef.current!, guestId, action)
+        if (!result.outcome.ok) return
+        chessSessionRef.current = result.game
+        chessUpdateViews()
+      },
+      onLeave(guestId) {
+        // Guest left mid-match: match cannot continue with only 1 player.
+        if (guestId !== chessOpponentIdRef.current) return
+        setError('Opponent left the room.')
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+  }
+
+  function addChessHouseBot() {
+    if (chessRole !== 'host' || !chessLocalPlayerId || !chessWaiting) return
+    const botId = 'bot'
+    const botName = randomBotName([name.trim()])
+    const seed = Math.floor(Math.random() * 2147483647)
+    // No placement phase (unlike Battleship): if the bot were to move first
+    // it's black (seat 1) and never does — the bot-loop effect picks it up
+    // next tick anyway, so no immediate first move is hand-fired here.
+    chessSessionRef.current = createChessGame([chessLocalPlayerId, botId], chessDifficultyRef.current, seed)
+    setChessOpponentId(botId)
+    chessOpponentIdRef.current = botId
+    setChessOpponentName(botName)
+    chessOpponentNameRef.current = botName
+    setChessWaiting(false)
+    chessUpdateViews()
+  }
+
+  async function runChessBot(botId: string, key: string) {
+    while (!chessStale(key)) {
+      await wait(BASE_MS)
+      if (chessStale(key)) return
+      const session = chessSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play') return
+      if (currentPlayer(ps.turn) !== botId) return
+      // 'hard' is not selectable (spec 28) — a stale session could still carry
+      // it, so fall through to normal rather than crash on an unknown branch.
+      const strategy = ps.difficulty === 'easy'
+        ? makeEasyChessBotStrategy(session.rng)
+        : makeNormalChessBotStrategy()
+      const result = runChessBotTurn(session, botId, strategy)
+      if (!result.outcome.ok) return
+      chessSessionRef.current = result.game
+      const snap = deriveSnapshot(result.game.session, chessLocalPlayerId!)
+      setChessView({ revision: snap.revision, publicState: snap.publicState, opponentName: chessOpponentNameRef.current })
+    }
+  }
+
+  async function runChessBotsIfNeeded() {
+    if (chessBotBusyRef.current) return
+    const session = chessSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    if (chessOpponentId !== 'bot') return
+    if (currentPlayer(ps.turn) !== 'bot') return
+    chessBotBusyRef.current = true
+    const key = chessActorKey(session)
+    try {
+      await runChessBot('bot', key)
+    } finally {
+      chessBotBusyRef.current = false
+      setTimeout(() => runChessBotsIfNeeded(), 50)
+    }
+  }
+
+  function startChessGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<ChessView, ChessAction>(code, name.trim(), {
+      onState(view) {
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setChessView(view)
+        setChessOpponentName(view.opponentName)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setChessConnection('connected')
+      },
+      onDisconnected() {
+        setChessConnection('disconnected')
+      },
+    })
+    chessGuestRef.current = handle
+    setChessRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('chess')
+    setChessCode(code)
+    handle.peerId.then((id) => { setChessLocalPlayerId(id); chessLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function chessDispatch(action: ChessAction) {
+    if (chessRole === 'host' && chessLocalPlayerId) {
+      const result = applyChessAction(chessSessionRef.current!, chessLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      chessSessionRef.current = result.game
+      chessUpdateViews()
+    } else if (chessRole === 'guest') {
+      chessGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function chessRematch() {
+    if (chessRole !== 'host' || !chessSessionRef.current || !chessLocalPlayerId) return
+    const ps = chessSessionRef.current.session.publicState
+    if (ps.stage !== 'over') return
+    const prevRevision = chessSessionRef.current.session.revision
+    const playerIds = [...ps.seatOrder] as [string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createChessGame(playerIds, ps.difficulty, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    chessSessionRef.current = next
+    chessUpdateViews()
+  }
+
+  // ---- End Chess helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -2381,11 +2614,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mtRole, mtView])
 
+  // ---- Chess effects (host-only) ----
+
+  // Bot turn trigger. The actor key is stage + turnNumber, and every accepted
+  // action advances turnNumber (except draw-offer bookkeeping, which the bot
+  // never proposes), so the inner loop paces each bot move.
+  useEffect(() => {
+    if (chessRole !== 'host' || !chessView) return
+    runChessBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chessRole, chessView])
+
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, and Mexican Train are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole) {
+  // Checkers, Mexican Train, and Chess are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole) {
     return (
       <Landing
         name={name}
@@ -2401,6 +2645,7 @@ export default function App() {
           else if (code.startsWith('WH-')) startWahooGuest(code)
           else if (code.startsWith('CK-')) startCheckersGuest(code)
           else if (code.startsWith('MT-')) startMTGuest(code)
+          else if (code.startsWith('CH-')) startChessGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -2411,6 +2656,7 @@ export default function App() {
         onPickWahoo={startWahooHost}
         onPickCheckers={startCheckersHost}
         onPickMexicanTrain={startMTHost}
+        onPickChess={startChessHost}
         error={error}
       />
     )
@@ -2972,6 +3218,74 @@ export default function App() {
           onLeave={resetToEntry}
         />
       </>
+    )
+  }
+
+  // ---- Chess session active ----
+  // Chess waiting screen (host waiting for opponent) — mirrors the shared Room.tsx /
+  // RummyRoom.tsx / Phase10Room.tsx / BattleshipRoom.tsx layout so the start flow
+  // doesn't feel like a different app.
+  if (chessRole === 'host' && chessWaiting) {
+    return (
+      <ChessRoom
+        code={chessCode}
+        localName={name}
+        notice={error}
+        difficulty={chessDifficulty}
+        onSetDifficulty={(d) => { setChessDifficulty(d); chessDifficultyRef.current = d }}
+        onAddHouseBot={addChessHouseBot}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Chess match results
+  if (chessView && chessView.publicState.stage === 'over' && chessView.publicState.outcome) {
+    return (
+      <ChessResults
+        localPlayerId={chessLocalPlayerId ?? ''}
+        localName={name}
+        opponentName={chessOpponentName}
+        publicState={chessView.publicState}
+        isHost={chessRole === 'host'}
+        notice={error}
+        onRematch={chessRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Chess table (active match). Board is public — nothing to hide per player.
+  if (chessView && chessLocalPlayerId) {
+    const opponentId = chessView.publicState.seatOrder.find((id) => id !== chessLocalPlayerId) ?? ''
+    // Seat colors, same two-color assignment the other 2-player engine games
+    // use: local player green, opponent the chess brand cyan (matches what
+    // ChessResults already assumes internally).
+    const chessColors = {
+      [chessLocalPlayerId]: 'var(--green-text)',
+      [opponentId]: '#0891b2',
+    }
+    const chessNames = {
+      [chessLocalPlayerId]: name,
+      [opponentId]: chessOpponentName,
+    }
+    return (
+      <ChessTable
+        code={chessCode}
+        localPlayerId={chessLocalPlayerId}
+        names={chessNames}
+        colors={chessColors}
+        connection={chessConnection}
+        notice={error}
+        publicState={chessView.publicState}
+        onMove={(from, to, promotion) => chessDispatch({ type: 'MOVE', from, to, ...(promotion !== undefined ? { promotion } : {}) })}
+        onResign={() => chessDispatch({ type: 'RESIGN' })}
+        onOfferDraw={() => chessDispatch({ type: 'OFFER_DRAW' })}
+        onAcceptDraw={() => chessDispatch({ type: 'ACCEPT_DRAW' })}
+        onDeclineDraw={() => chessDispatch({ type: 'DECLINE_DRAW' })}
+        onOpenRules={() => {}}
+        onLeave={resetToEntry}
+      />
     )
   }
 

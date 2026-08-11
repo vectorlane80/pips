@@ -5,9 +5,9 @@ account, no sign-in, nothing to install. Each game lives at its own
 URL (`/pips/<game>`) — refresh lands you on that game's fresh room,
 and Back returns to the shelf.
 
-Twelve games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
-**Rummy**, **Phase 10**, **Battleship**, **Dominoes**, **Wahoo**, **Checkers**, and
-**Mexican Train**. Farkle and Yahtzee seat up to 8, Wahoo seats 2–4, Mexican Train
+Thirteen games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
+**Rummy**, **Phase 10**, **Battleship**, **Dominoes**, **Wahoo**, **Checkers**,
+**Mexican Train**, and **Chess**. Farkle and Yahtzee seat up to 8, Wahoo seats 2–4, Mexican Train
 seats 2–8; the rest are two-player (for now). Every game can be played solo
 against house bots.
 

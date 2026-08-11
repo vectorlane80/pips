@@ -2,7 +2,7 @@ import type { Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -17,11 +17,12 @@ export function Landing({
   onPickWahoo: () => void
   onPickCheckers: () => void
   onPickMexicanTrain: () => void
+  onPickChess: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
   const canJoin = ready && joinCode.trim().length > 0
-  // One data-driven shelf list — the designer's order (Chess deferred), each
+  // One data-driven shelf list — the designer's order, each
   // chip carrying its title, player range, tile color, and pick handler.
   const SHELF = [
     { title: 'Farkle', note: '2–8 players', color: '#6c4cff', onClick: () => onPickGame('farkle') },
@@ -33,6 +34,7 @@ export function Landing({
     { title: 'Mexican Train', note: '2–8 players', color: '#c2410c', onClick: onPickMexicanTrain },
     { title: 'Wahoo', note: '2–4 players', color: '#9333ea', onClick: onPickWahoo },
     { title: 'Checkers', note: '2 players', color: '#b45309', onClick: onPickCheckers },
+    { title: 'Chess', note: '2 players', color: '#0891b2', onClick: onPickChess },
     { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },
     { title: 'Rummy', note: '2 players', color: '#1aa06d', onClick: onPickRummy },
     { title: 'Phase 10', note: '2 players', color: '#ff9f1c', onClick: onPickPhase10 },
