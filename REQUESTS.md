@@ -56,3 +56,19 @@
       is the precise handoff: what exists, what doesn't, and the one
       non-obvious pattern (the stock-visible-to-nobody closure wrapper) the
       next implementation needs to reuse rather than reinvent.
+
+- [ ] 2026-08-10 overnight, Checkers + Mexican Train charter — **commit the
+      charter**: both games verified in the tree (772 tests / tsc / build
+      green, four Oscar reviews — module CLEAN ×2, wiring CLEAN, MT
+      screens+wiring APPROVE — plus two visual reviews with all findings
+      fixed, live full checkers match + multi-round MT soak). Everything
+      is uncommitted awaiting your morning look. Suggested: one commit per
+      milestone (checkers module / checkers screens+wiring / MT module /
+      MT screens+wiring+peer.sendTo) or a single charter commit — say
+      which and "push".
+- [ ] 2026-08-10, non-blocking — MT double-horn on a blocked round (opened
+      + blocked both fire train-horn per spec wording); if it sounds silly
+      in practice, one line drops the second horn.
+- [ ] 2026-08-10, non-blocking — one unexplained full page reload bounced
+      the app to the shelf during the first checkers live match; never
+      reproduced across hours of subsequent soak. Watch for it.

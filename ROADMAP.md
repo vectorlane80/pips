@@ -55,3 +55,14 @@ Charter: Wahoo — see `CHARTER.md`.
 ## Done (prior charters)
 - Engine-core promotion (2026-08-09) — committed 41fa325/12e3d22, pushed.
 - Connect 4 (2026-08-08); Card engine + Rummy + Phase 10 (08-05..07).
+
+## Charter: Checkers + Mexican Train (2026-08-10) — in progress
+- [x] M1 checkers module — spec 20, 35 tests (731 total), Oscar CLEAN.
+- [x] M2 checkers screens + wiring — specs 21/21b, live 3-game match vs bot,
+      Oscar visual review (ring fix applied). 732 tests.
+- [x] M3 mexican train module — spec 22, 39 tests (771 total), prototype
+      deadlock/deal bugs fixed by design. Oscar review in flight.
+- [x] M4 mexican train screens + wiring — specs 23/23b + HostHandle.sendTo,
+      live 3-round soak, Oscar code APPROVE + visual review (track-height
+      and star fixes applied). 772 tests.
+- [x] M5 landing count label — folded into 21b ("11 games").

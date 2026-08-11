@@ -1873,3 +1873,57 @@ shipping each verified charter promptly.
   correct for all ten games. Two finds fixed: cookie now
   encode/decodeURIComponent (';' names can't corrupt it) + junk-path
   URL cleanup on shelf boot. 696 tests / tsc / build green.
+
+## Charter: Checkers + Mexican Train — cycles 1–2, 2026-08-10 (overnight)
+- **Shipped (uncommitted, awaiting morning review): Checkers complete.**
+  Module spec 20 (35 tests, Oscar adversarial review CLEAN — probed chain
+  bypass, wraparound, forged payloads, aliasing), screens spec 21 (one
+  tsc-error continuation), wiring spec 21b (one full-exploration restart —
+  flash burned 25 iterations reading before editing; continued to green).
+  Live-verified: full 3-game match vs bot (captures, a bot multi-jump
+  chain, crowning, auto NEXT_GAME, starter alternation, results 3–0,
+  rematch reset) plus deep-link boot at /pips/checkers. Oscar VISUAL
+  review: 7/8 PASS, one real finding — ink selection ring invisible on
+  dark squares — fixed (white ring), re-verified on screen. 732 tests at
+  that point.
+- **Shipped: Mexican Train module (spec 22, 39 tests, 771 total).** All
+  five prototype defects from the extraction fixed by design: engine
+  pulled pre-deal, rotating starter, double-followup deadlock closed
+  (DRAW/PASS escape paths proven in tests), lowest-pips winner with
+  earliest-seat tie-break. Oscar code review of MT module + checkers
+  wiring dispatched (running).
+- **In flight:** MT screens spec 23 (full train treatment: SVG loco,
+  signals, track beds, wheel'd tile-cars, ghost-car targets, depot) —
+  first attempt died on ECONNRESET after its read phase, relaunched.
+  Wiring spec 23b written and queued; it adds `sendTo(guestId, state)` to
+  HostHandle because a 3-guest game with private hands cannot ship them
+  over the existing broadcast-only API (the 2-player games only got away
+  with it because the sole guest was the only listener).
+- **Environment incident:** macOS revoked the app's Desktop-folder TCC
+  grant mid-session (every process EPERM'd on open/getcwd); user re-granted
+  + app restart fixed it. One unexplained full page reload mid-live-match
+  bounced the app to the shelf; not reproduced since — watch for it.
+
+## Charter: Checkers + Mexican Train — cycle 3, 2026-08-10 late (overnight)
+- **Shipped: Mexican Train complete (specs 23/23b).** Full train treatment
+  screens (SVG locos, signals, track beds, wheel'd tile-cars with couplers
+  + ResizeObserver wrap detection, ghost-car targets, depot) and the Wahoo-
+  pattern 4-seat wiring. `HostHandle.sendTo` added to peer.ts — 3 guests
+  with private hands can't share one broadcast; per-guest snapshots at
+  game phase, roster broadcast in lobby.
+- **Live soak:** auto-player ground through 3+ rounds at MT-WAVE-91 —
+  round transitions (engine 12→11→10), scores accumulating ascending, a
+  go-out round, opened trains (signals flipped), draw gating, zero console
+  errors, no stalls. Ghost targets matched module legality exactly (3
+  lanes for 10|12: own + mex + the one open train).
+- **Oscar code review (MT screens+wiring): APPROVE, no blockers.** Privacy
+  traced clean (per-guest sendTo, single revision counter); actor key
+  proven to change on every accepted action branch; auto-PASS/bot-loop/
+  round-advance race-safe. Nits: Math.random seat shuffle wants a comment
+  (dispatched), dropped-guest sendTo no-op waste (accepted), colors prop
+  had no real Wahoo precedent (accepted — implementer's scheme is sound).
+- **Oscar visual review: one flag** — mex loco's white star was a 9px
+  smudge (stroke swallowed the fill; the "rust" color complaint is just
+  brand #c2410c, correct per handoff). Fix dispatched (bigger star,
+  thinner stroke). Empty-lane track squash found live and fixed
+  (min-height 64px). README updated to twelve games.

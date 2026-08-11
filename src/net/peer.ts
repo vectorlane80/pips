@@ -21,6 +21,7 @@ export interface HostCallbacks<_TState, TAction> {
 
 export interface HostHandle<TState> {
   broadcast: (state: TState) => void
+  sendTo: (guestId: string, state: TState) => void
   reject: (guestId: string, reason: string) => void
   destroy: () => void
 }
@@ -51,6 +52,11 @@ export function createHost<TState, TAction>(code: string, callbacks: HostCallbac
       conns.forEach((conn) => {
         if (conn.open) conn.send(msg)
       })
+    },
+    sendTo(guestId, state) {
+      assertWireSafe(state, 'HostHandle.sendTo')
+      const conn = conns.get(guestId)
+      if (conn?.open) conn.send({ kind: 'state', state })
     },
     reject(guestId, reason) {
       const conn = conns.get(guestId)

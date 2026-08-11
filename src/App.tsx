@@ -61,6 +61,22 @@ import { WahooTable } from './screens/WahooTable'
 import { WahooResults } from './screens/WahooResults'
 import { WahooRoom } from './screens/WahooRoom'
 
+// ---- Checkers (separate parallel session, per CHARTER.md resolution #7) ----
+import { createCheckersGame, type CheckersSession, type CheckersPublicState, type CheckersAction } from './board-games/checkers/state'
+import { applyCheckersAction, runCheckersBotTurn } from './board-games/checkers/rules'
+import { makeCheckersBotStrategy } from './board-games/checkers/bot'
+import { CheckersTable } from './screens/CheckersTable'
+import { CheckersResults } from './screens/CheckersResults'
+import { CheckersRoom } from './screens/CheckersRoom'
+
+// ---- Mexican Train (separate parallel session, per CHARTER.md resolution #7) ----
+import { createMexicanTrainGame, handHasLegalPlay, type MTSession, type MTPublicState, type MTTile, type MTAction } from './board-games/mexican-train/state'
+import { applyMTAction, runMTBotTurn } from './board-games/mexican-train/rules'
+import { mexicanTrainBotStrategy } from './board-games/mexican-train/bot'
+import { MexicanTrainTable } from './screens/MexicanTrainTable'
+import { MexicanTrainResults } from './screens/MexicanTrainResults'
+import { MexicanTrainRoom } from './screens/MexicanTrainRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
@@ -68,6 +84,12 @@ type DominoesView = { revision: number; publicState: DominoesPublicState; privat
 type WahooView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: WahooPublicState; names: Record<string, string> }
+type CheckersView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: CheckersPublicState; names: Record<string, string> }
+type MTView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -137,6 +159,26 @@ export default function App() {
   const [wahooSeats, setWahooSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
   const [wahooDropped, setWahooDropped] = useState<string[]>([])
 
+  // ---- Checkers ----
+  const [checkersRole, setCheckersRole] = useState<'host' | 'guest' | null>(null)
+  const [checkersCode, setCheckersCode] = useState('')
+  const [checkersLocalPlayerId, setCheckersLocalPlayerId] = useState<string | null>(null)
+  const [checkersView, setCheckersView] = useState<CheckersView | null>(null)
+  const [checkersConnection, setCheckersConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [checkersStarted, setCheckersStarted] = useState(false)
+  const [checkersSeats, setCheckersSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
+  // ---- Mexican Train ----
+  const [mtRole, setMTRole] = useState<'host' | 'guest' | null>(null)
+  const [mtCode, setMTCode] = useState('')
+  const [mtLocalPlayerId, setMTLocalPlayerId] = useState<string | null>(null)
+  const [mtView, setMTView] = useState<MTView | null>(null)
+  const [mtConnection, setMTConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [mtNotice, setMTNotice] = useState<string | null>(null)
+  const [mtStarted, setMTStarted] = useState(false)
+  const [mtSeats, setMTSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [mtDropped, setMTDropped] = useState<string[]>([])
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -180,6 +222,24 @@ export default function App() {
   const wahooNamesRef = useRef<Record<string, string>>({})
   const wahooBotSeatsRef = useRef<Set<string>>(new Set())
   const wahooDroppedRef = useRef<string[]>([])
+  const checkersSessionRef = useRef<CheckersSession | null>(null)
+  const checkersHostRef = useRef<HostHandle<CheckersView> | null>(null)
+  const checkersGuestRef = useRef<GuestHandle<CheckersAction> | null>(null)
+  const checkersBotBusyRef = useRef(false)
+  const checkersLocalPlayerIdRef = useRef<string | null>(null)
+  const checkersSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const checkersStartedRef = useRef(false)
+  const checkersNamesRef = useRef<Record<string, string>>({})
+  const mtSessionRef = useRef<MTSession | null>(null)
+  const mtHostRef = useRef<HostHandle<MTView> | null>(null)
+  const mtGuestRef = useRef<GuestHandle<MTAction> | null>(null)
+  const mtBotBusyRef = useRef(false)
+  const mtLocalPlayerIdRef = useRef<string | null>(null)
+  const mtSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const mtStartedRef = useRef(false)
+  const mtNamesRef = useRef<Record<string, string>>({})
+  const mtBotSeatsRef = useRef<Set<string>>(new Set())
+  const mtDroppedRef = useRef<string[]>([])
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -201,6 +261,8 @@ export default function App() {
     dominoesGuestRef.current?.destroy()
     wahooHostRef.current?.destroy()
     wahooGuestRef.current?.destroy()
+    checkersHostRef.current?.destroy()
+    checkersGuestRef.current?.destroy()
   }, [])
 
   // ---- Routing ----
@@ -266,13 +328,15 @@ export default function App() {
     if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
     if (dominoesRole && dominoesView && dominoesView.publicState.stage !== 'over') return 'dominoes'
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
+    if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
+    if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView])
+  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -299,6 +363,8 @@ export default function App() {
       case 'battleship': startBattleshipHost(); return
       case 'dominoes': startDominoesHost(); return
       case 'wahoo': startWahooHost(); return
+      case 'checkers': startCheckersHost(); return
+      case 'mexican-train': startMTHost(); return
     }
   }
 
@@ -481,6 +547,46 @@ export default function App() {
     wahooBotBusyRef.current = false
     wahooBotSeatsRef.current.clear()
     wahooNamesRef.current = {}
+    // Checkers
+    checkersHostRef.current?.destroy()
+    checkersHostRef.current = null
+    checkersGuestRef.current?.destroy()
+    checkersGuestRef.current = null
+    checkersSessionRef.current = null
+    setCheckersRole(null)
+    setCheckersCode('')
+    setCheckersLocalPlayerId(null)
+    checkersLocalPlayerIdRef.current = null
+    setCheckersView(null)
+    setCheckersConnection('connected')
+    setCheckersStarted(false)
+    checkersStartedRef.current = false
+    setCheckersSeats([])
+    checkersSeatsRef.current = []
+    checkersBotBusyRef.current = false
+    checkersNamesRef.current = {}
+    // Mexican Train
+    mtHostRef.current?.destroy()
+    mtHostRef.current = null
+    mtGuestRef.current?.destroy()
+    mtGuestRef.current = null
+    mtSessionRef.current = null
+    setMTRole(null)
+    setMTCode('')
+    setMTLocalPlayerId(null)
+    mtLocalPlayerIdRef.current = null
+    setMTView(null)
+    setMTConnection('connected')
+    setMTNotice(null)
+    setMTStarted(false)
+    mtStartedRef.current = false
+    setMTSeats([])
+    mtSeatsRef.current = []
+    setMTDropped([])
+    mtDroppedRef.current = []
+    mtBotBusyRef.current = false
+    mtBotSeatsRef.current.clear()
+    mtNamesRef.current = {}
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -1441,6 +1547,476 @@ export default function App() {
 
   // ---- End Wahoo helpers ----
 
+  // ---- Checkers helpers ----
+
+  function checkersActorKey(ck: CheckersSession): string {
+    const ps = ck.session.publicState
+    return `${ps.stage}:${ps.turn.turnNumber}`
+  }
+
+  function checkersStale(key: string) {
+    return !checkersSessionRef.current || checkersActorKey(checkersSessionRef.current) !== key
+  }
+
+  function checkersBroadcast() {
+    if (!checkersStartedRef.current) {
+      const view: CheckersView = {
+        kind: 'lobby',
+        roster: checkersSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === checkersLocalPlayerIdRef.current })),
+      }
+      setCheckersView(view)
+      checkersHostRef.current?.broadcast(view)
+      return
+    }
+    const snap = deriveSnapshot(checkersSessionRef.current!.session, checkersLocalPlayerIdRef.current!)
+    const view: CheckersView = {
+      kind: 'game',
+      revision: snap.revision,
+      publicState: snap.publicState,
+      names: { ...checkersNamesRef.current },
+    }
+    setCheckersView(view)
+    checkersHostRef.current?.broadcast(view)
+  }
+
+  function startCheckersHost() {
+    const code = `CK-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setCheckersRole('host')
+    writeNameCookie(name)
+    pushGameUrl('checkers')
+    setCheckersCode(code)
+    setCheckersLocalPlayerId(hostId)
+    checkersLocalPlayerIdRef.current = hostId
+    setCheckersStarted(false)
+    checkersStartedRef.current = false
+    setCheckersSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    checkersSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    setError(null)
+    checkersHostRef.current = createHost<CheckersView, CheckersAction>(code, {
+      onJoin(guestId, guestName) {
+        if (checkersStartedRef.current) {
+          checkersHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (checkersSeatsRef.current.length >= 2) {
+          checkersHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        checkersSeatsRef.current = [...checkersSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setCheckersSeats(checkersSeatsRef.current)
+        checkersBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!checkersStartedRef.current) return
+        const session = checkersSessionRef.current
+        if (!session) return
+        if (!checkersSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyCheckersAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        checkersSessionRef.current = result.game
+        checkersBroadcast()
+      },
+      onLeave(guestId) {
+        if (!checkersStartedRef.current) {
+          checkersSeatsRef.current = checkersSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setCheckersSeats(checkersSeatsRef.current)
+          checkersBroadcast()
+          return
+        }
+        // Guest left mid-match: match cannot continue with only 1 player.
+        if (!checkersSeatsRef.current.some((s) => s.playerId === guestId)) return
+        setError('Opponent left the room.')
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    checkersBroadcast()
+  }
+
+  function addCheckersHouseBot() {
+    if (checkersRole !== 'host' || checkersStartedRef.current) return
+    if (checkersSeatsRef.current.length >= 2) return
+    const botId = 'bot'
+    const botName = randomBotName(checkersSeatsRef.current.map((s) => s.name))
+    checkersSeatsRef.current = [...checkersSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setCheckersSeats(checkersSeatsRef.current)
+    checkersBroadcast()
+  }
+
+  function checkersStart() {
+    if (checkersRole !== 'host' || checkersStartedRef.current) return
+    const seats = checkersSeatsRef.current
+    if (seats.length !== 2) return
+    const seed = Math.floor(Math.random() * 2147483647)
+    checkersSessionRef.current = createCheckersGame([seats[0].playerId, seats[1].playerId], seed)
+    checkersNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    checkersStartedRef.current = true
+    setCheckersStarted(true)
+    checkersBroadcast()
+  }
+
+  async function runCheckersBot(botId: string, key: string) {
+    while (!checkersStale(key)) {
+      await wait(BASE_MS)
+      if (checkersStale(key)) return
+      const session = checkersSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play') return
+      if (currentPlayer(ps.turn) !== botId) return
+      const result = runCheckersBotTurn(session, botId, makeCheckersBotStrategy(session.rng))
+      if (!result.outcome.ok) return
+      checkersSessionRef.current = result.game
+      const snap = deriveSnapshot(result.game.session, checkersLocalPlayerId!)
+      setCheckersView({ kind: 'game', revision: snap.revision, publicState: snap.publicState, names: { ...checkersNamesRef.current } })
+    }
+  }
+
+  async function runCheckersBotsIfNeeded() {
+    if (checkersBotBusyRef.current) return
+    const session = checkersSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    if (currentPlayer(ps.turn) !== 'bot') return
+    checkersBotBusyRef.current = true
+    const key = checkersActorKey(session)
+    try {
+      await runCheckersBot('bot', key)
+    } finally {
+      checkersBotBusyRef.current = false
+      setTimeout(() => runCheckersBotsIfNeeded(), 50)
+    }
+  }
+
+  function startCheckersGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<CheckersView, CheckersAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setCheckersView(view)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setCheckersView(view)
+        setCheckersStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setCheckersConnection('connected')
+      },
+      onDisconnected() {
+        setCheckersConnection('disconnected')
+      },
+    })
+    checkersGuestRef.current = handle
+    setCheckersRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('checkers')
+    setCheckersCode(code)
+    handle.peerId.then((id) => { setCheckersLocalPlayerId(id); checkersLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function checkersDispatch(action: CheckersAction) {
+    if (checkersRole === 'host' && checkersLocalPlayerId) {
+      const session = checkersSessionRef.current
+      if (!session) return
+      const result = applyCheckersAction(session, checkersLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      checkersSessionRef.current = result.game
+      checkersBroadcast()
+    } else if (checkersRole === 'guest') {
+      checkersGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function checkersRematch() {
+    if (checkersRole !== 'host' || !checkersSessionRef.current) return
+    const ps = checkersSessionRef.current.session.publicState
+    if (ps.stage !== 'over') return
+    const prevRevision = checkersSessionRef.current.session.revision
+    const playerIds = [...ps.turn.playerOrder] as [string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createCheckersGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    checkersSessionRef.current = next
+    checkersBroadcast()
+  }
+
+  // ---- End Checkers helpers ----
+
+  // ---- Mexican Train helpers ----
+
+  // Seat inks, fixed per seat index 0..3 — the same per-seat palette Wahoo
+  // assigns by arm index at game start.
+  const MT_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+
+  function mtActorKey(mt: MTSession): string {
+    const ps = mt.session.publicState
+    const handCountsSum = Object.values(ps.handCounts).reduce((sum, n) => sum + n, 0)
+    return `${ps.stage}:${ps.turn.turnNumber}:${handCountsSum}:${ps.boneyardCount}:${ps.doublePending}`
+  }
+
+  function mtStale(key: string) {
+    return !mtSessionRef.current || mtActorKey(mtSessionRef.current) !== key
+  }
+
+  // Hands are PRIVATE and up to 3 guests can be seated, so a single broadcast
+  // cannot carry every hand (any guest would see the others'). Lobby phase →
+  // broadcast the roster view; game phase → per-guest sendTo with only that
+  // guest's own hand. The host's own view comes from its local snapshot.
+  function mtBroadcast() {
+    if (!mtStartedRef.current) {
+      const view: MTView = {
+        kind: 'lobby',
+        roster: mtSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === mtLocalPlayerIdRef.current })),
+      }
+      setMTView(view)
+      mtHostRef.current?.broadcast(view)
+      return
+    }
+    const session = mtSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, mtLocalPlayerIdRef.current!)
+    setMTView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      hand: hostSnap.privateState!.hand.cards,
+      names: { ...mtNamesRef.current },
+    })
+    const names = { ...mtNamesRef.current }
+    for (const seat of mtSeatsRef.current) {
+      if (seat.playerId === mtLocalPlayerIdRef.current) continue
+      if (mtBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      mtHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        hand: guestSnap.privateState!.hand.cards,
+        names,
+      })
+    }
+  }
+
+  function startMTHost() {
+    const code = `MT-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setMTRole('host')
+    writeNameCookie(name)
+    pushGameUrl('mexican-train')
+    setMTCode(code)
+    setMTLocalPlayerId(hostId)
+    mtLocalPlayerIdRef.current = hostId
+    setMTStarted(false)
+    mtStartedRef.current = false
+    setMTSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    mtSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    mtDroppedRef.current = []
+    setMTDropped([])
+    setMTNotice(null)
+    setError(null)
+    mtHostRef.current = createHost<MTView, MTAction>(code, {
+      onJoin(guestId, guestName) {
+        if (mtStartedRef.current) {
+          mtHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (mtSeatsRef.current.length >= 4) {
+          mtHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        mtSeatsRef.current = [...mtSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setMTSeats(mtSeatsRef.current)
+        mtBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!mtStartedRef.current) return
+        const session = mtSessionRef.current
+        if (!session) return
+        if (!mtSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyMTAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        mtSessionRef.current = result.mt
+        mtBroadcast()
+      },
+      onLeave(guestId) {
+        if (!mtStartedRef.current) {
+          mtSeatsRef.current = mtSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setMTSeats(mtSeatsRef.current)
+          mtBroadcast()
+          return
+        }
+        const seat = mtSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setMTNotice(`${seat.name} disconnected.`)
+        if (!mtDroppedRef.current.includes(guestId)) {
+          mtDroppedRef.current = [...mtDroppedRef.current, guestId]
+          setMTDropped(mtDroppedRef.current)
+        }
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    mtBroadcast()
+  }
+
+  function addMTHouseBot() {
+    if (mtRole !== 'host' || mtStartedRef.current) return
+    if (mtSeatsRef.current.length >= 4) return
+    const botId = `bot-${mtSeatsRef.current.length}`
+    const botName = randomBotName(mtSeatsRef.current.map((s) => s.name))
+    mtSeatsRef.current = [...mtSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setMTSeats(mtSeatsRef.current)
+    mtBotSeatsRef.current.add(botId)
+    mtBroadcast()
+  }
+
+  function mtStart() {
+    if (mtRole !== 'host' || mtStartedRef.current) return
+    const seats = mtSeatsRef.current
+    if (seats.length !== 4) return
+    const playerIds = seats.map((s) => s.playerId) as [string, string, string, string]
+    // Deliberately outside the seeded rng: host-only, one-time, and seatOrder is sent to guests — it must not shift the seeded deal.
+    for (let i = playerIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
+    }
+    const seed = Math.floor(Math.random() * 2147483647)
+    mtSessionRef.current = createMexicanTrainGame(playerIds, seed)
+    mtNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    mtStartedRef.current = true
+    setMTStarted(true)
+    mtDroppedRef.current = []
+    setMTDropped([])
+    mtBroadcast()
+  }
+
+  function mtReplaceWithBot(playerId: string) {
+    if (mtRole !== 'host' || !mtStartedRef.current) return
+    // Ref-guard (not the state value): a double-click before React re-renders
+    // would otherwise read the stale dropped list twice and replace twice.
+    if (!mtDroppedRef.current.includes(playerId)) return
+    mtBotSeatsRef.current.add(playerId)
+    mtNamesRef.current = { ...mtNamesRef.current, [playerId]: `${mtNamesRef.current[playerId]} (bot)` }
+    mtDroppedRef.current = mtDroppedRef.current.filter((id) => id !== playerId)
+    setMTDropped(mtDroppedRef.current)
+    mtBroadcast()
+    runMTBotsIfNeeded()
+  }
+
+  async function runMTBots(botId: string, key: string) {
+    while (!mtStale(key)) {
+      await wait(BASE_MS)
+      if (mtStale(key)) return
+      const session = mtSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play') return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!mtBotSeatsRef.current.has(botId)) return
+      const result = runMTBotTurn(session, botId, mexicanTrainBotStrategy)
+      if (!result.outcome.ok) return
+      mtSessionRef.current = result.mt
+      mtBroadcast()
+    }
+  }
+
+  async function runMTBotsIfNeeded() {
+    if (mtBotBusyRef.current) return
+    const session = mtSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    const currentId = currentPlayer(ps.turn)
+    if (!mtBotSeatsRef.current.has(currentId)) return
+    mtBotBusyRef.current = true
+    const key = mtActorKey(session)
+    try {
+      await runMTBots(currentId, key)
+    } finally {
+      mtBotBusyRef.current = false
+      setTimeout(() => runMTBotsIfNeeded(), 50)
+    }
+  }
+
+  function startMTGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<MTView, MTAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setMTView(view)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setMTView(view)
+        setMTStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setMTConnection('connected')
+      },
+      onDisconnected() {
+        setMTConnection('disconnected')
+      },
+    })
+    mtGuestRef.current = handle
+    setMTRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('mexican-train')
+    setMTCode(code)
+    handle.peerId.then((id) => { setMTLocalPlayerId(id); mtLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function mtDispatch(action: MTAction) {
+    if (mtRole === 'host' && mtLocalPlayerId) {
+      const session = mtSessionRef.current
+      if (!session) return
+      const result = applyMTAction(session, mtLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      mtSessionRef.current = result.mt
+      mtBroadcast()
+    } else if (mtRole === 'guest') {
+      mtGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function mtRematch() {
+    if (mtRole !== 'host' || !mtSessionRef.current) return
+    const ps = mtSessionRef.current.session.publicState
+    if (ps.stage !== 'over') return
+    const prevRevision = mtSessionRef.current.session.revision
+    const playerIds = [...ps.seatOrder] as [string, string, string, string]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createMexicanTrainGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    mtSessionRef.current = next
+    mtBroadcast()
+  }
+
+  // ---- End Mexican Train helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -1702,10 +2278,104 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wahooRole, wahooView])
 
+  // ---- Checkers effects (host-only) ----
+
+  // Bot turn trigger. The actor key is stage + turnNumber, and a chain jump
+  // keeps both stable (same player, same turn), so the inner loop keeps
+  // acting until the chain ends — every link of a multi-jump is paced like
+  // any other bot move. chainCell/lastMove are in the deps too so a chain
+  // continuation re-checks even if the view reference were unchanged.
+  useEffect(() => {
+    if (checkersRole !== 'host' || !checkersView) return
+    runCheckersBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkersRole, checkersView, checkersView?.kind === 'game' ? checkersView.publicState.chainCell : null, checkersView?.kind === 'game' ? checkersView.publicState.lastMove : null])
+
+  // Game-end advance: when stage is 'gameEnd' and there's no match winner
+  // yet, the host auto-issues NEXT_GAME after the same pause pattern
+  // dominoes uses for START_NEXT_ROUND. Stage 'over' → results screen.
+  useEffect(() => {
+    if (checkersRole !== 'host' || !checkersView) return
+    if (checkersView.kind === 'game' && checkersView.publicState.stage === 'gameEnd' && !checkersView.publicState.matchWinnerId) {
+      const t = setTimeout(() => {
+        const result = applyCheckersAction(checkersSessionRef.current!, checkersLocalPlayerId!, { type: 'NEXT_GAME' })
+        if (result.outcome.ok) {
+          checkersSessionRef.current = result.game
+          checkersBroadcast()
+        }
+      }, ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkersRole, checkersView?.kind === 'game' ? checkersView.publicState.stage : null, checkersView?.kind === 'game' ? checkersView.publicState.matchWinnerId : null])
+
+  // ---- Mexican Train effects (host-only) ----
+
+  // Bot turn trigger. The actor key includes the hand-count sum, boneyard
+  // count, and double-pending, so every accepted action bumps it (a double
+  // keeps the turn; a playable draw keeps the turn) — the inner loop paces
+  // each step.
+  useEffect(() => {
+    if (mtRole !== 'host' || !mtView) return
+    runMTBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mtRole, mtView])
+
+  // Auto-pass housekeeping (prototype-deadlock fix, second half): when the
+  // boneyard is empty and the current player — human or bot — has no legal
+  // play, the host applies PASS for them after BASE_MS (the module validates
+  // it). Bots would PASS via strategy anyway; this covers humans and keeps
+  // one code path. Humans with a boneyard still draw manually via the button.
+  useEffect(() => {
+    if (mtRole !== 'host' || !mtView || mtView.kind !== 'game') return
+    if (mtView.publicState.stage !== 'play') return
+    const session = mtSessionRef.current
+    if (!session) return
+    if (mtView.publicState.boneyardCount > 0) return
+    const currentId = currentPlayer(mtView.publicState.turn)
+    const snap = deriveSnapshot(session.session, currentId)
+    const hand = snap.privateState?.hand.cards ?? []
+    const seat = mtView.publicState.seatOrder.indexOf(currentId)
+    if (handHasLegalPlay(hand, seat, mtView.publicState)) return
+    const t = setTimeout(() => {
+      const live = mtSessionRef.current
+      if (!live) return
+      const ps = live.session.publicState
+      if (ps.stage !== 'play' || currentPlayer(ps.turn) !== currentId) return
+      const result = applyMTAction(live, currentId, { type: 'PASS' })
+      if (result.outcome.ok) {
+        mtSessionRef.current = result.mt
+        mtBroadcast()
+      }
+    }, BASE_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mtRole, mtView])
+
+  // Round advance: stage 'roundEnd' → host auto-deals the next round after the
+  // dominoes pause. Stage 'over' → MexicanTrainResults.
+  useEffect(() => {
+    if (mtRole !== 'host' || !mtView || mtView.kind !== 'game') return
+    if (mtView.publicState.stage === 'roundEnd' && !mtView.publicState.matchWinnerId) {
+      const t = setTimeout(() => {
+        const session = mtSessionRef.current
+        if (!session) return
+        const result = applyMTAction(session, mtLocalPlayerId!, { type: 'START_NEXT_ROUND' })
+        if (result.outcome.ok) {
+          mtSessionRef.current = result.mt
+          mtBroadcast()
+        }
+      }, ROUND_PAUSE_MS)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mtRole, mtView])
+
   // ---- Render ----
 
-  // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, and Wahoo are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole) {
+  // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
+  // Checkers, and Mexican Train are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole) {
     return (
       <Landing
         name={name}
@@ -1719,6 +2389,8 @@ export default function App() {
           else if (code.startsWith('BS-')) startBattleshipGuest(code)
           else if (code.startsWith('DM-')) startDominoesGuest(code)
           else if (code.startsWith('WH-')) startWahooGuest(code)
+          else if (code.startsWith('CK-')) startCheckersGuest(code)
+          else if (code.startsWith('MT-')) startMTGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -1727,6 +2399,8 @@ export default function App() {
         onPickBattleship={startBattleshipHost}
         onPickDominoes={startDominoesHost}
         onPickWahoo={startWahooHost}
+        onPickCheckers={startCheckersHost}
+        onPickMexicanTrain={startMTHost}
         error={error}
       />
     )
@@ -2128,6 +2802,163 @@ export default function App() {
           onRoll={() => wahooDispatch({ type: 'ROLL' })}
           onMove={(move) => wahooDispatch({ type: 'MOVE', move })}
           onOpenRules={() => {}}
+          onLeave={resetToEntry}
+        />
+      </>
+    )
+  }
+
+  // ---- Checkers session active ----
+  // Checkers lobby — host sees seats from state; guests see the lobby view the
+  // host broadcasts (buttons hidden either way).
+  if (checkersRole && !checkersStarted) {
+    const roster = checkersRole === 'host'
+      ? checkersSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === checkersLocalPlayerId }))
+      : (checkersView?.kind === 'lobby' ? checkersView.roster : [])
+    return (
+      <CheckersRoom
+        code={checkersCode}
+        localName={name}
+        isHost={checkersRole === 'host'}
+        seats={roster}
+        notice={error}
+        onAddHouseBot={addCheckersHouseBot}
+        onStartGame={checkersStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Checkers match results
+  if (checkersView?.kind === 'game' && checkersView.publicState.stage === 'over' && checkersView.publicState.matchWinnerId) {
+    const opponentId = checkersView.publicState.seatOrder.find((id) => id !== checkersLocalPlayerId) ?? ''
+    const opponentName = checkersView.names[opponentId] ?? opponentId
+    return (
+      <CheckersResults
+        localPlayerId={checkersLocalPlayerId ?? ''}
+        localName={name}
+        opponentName={opponentName}
+        publicState={checkersView.publicState}
+        isHost={checkersRole === 'host'}
+        notice={error}
+        onRematch={checkersRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Checkers table (active match). Board is public — nothing to hide per player.
+  if (checkersView?.kind === 'game' && checkersLocalPlayerId) {
+    const opponentId = checkersView.publicState.seatOrder.find((id) => id !== checkersLocalPlayerId) ?? ''
+    // Seat colors, same two-color assignment the other 2-player engine games
+    // use: local player green, opponent the checkers brand amber.
+    const checkersColors = {
+      [checkersLocalPlayerId]: 'var(--green-text)',
+      [opponentId]: '#b45309',
+    }
+    return (
+      <CheckersTable
+        code={checkersCode}
+        localPlayerId={checkersLocalPlayerId}
+        names={checkersView.names}
+        colors={checkersColors}
+        connection={checkersConnection}
+        notice={error}
+        publicState={checkersView.publicState}
+        onMove={(from, to) => checkersDispatch({ type: 'MOVE', from, to })}
+        onOpenRules={() => {}}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Mexican Train session active ----
+  // Mexican Train lobby — exactly 4 seats. Host sees seats from state; guests
+  // see the lobby view the host broadcasts (buttons hidden either way).
+  if (mtRole && !mtStarted) {
+    const roster = mtRole === 'host'
+      ? mtSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === mtLocalPlayerId }))
+      : (mtView?.kind === 'lobby' ? mtView.roster : [])
+    return (
+      <MexicanTrainRoom
+        code={mtCode}
+        localName={name}
+        isHost={mtRole === 'host'}
+        seats={roster}
+        notice={mtNotice ?? error}
+        onAddHouseBot={addMTHouseBot}
+        onStartGame={mtStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Mexican Train match results
+  if (mtView?.kind === 'game' && mtView.publicState.stage === 'over' && mtView.publicState.matchWinnerId) {
+    const mtColors = Object.fromEntries(mtView.publicState.seatOrder.map((id, i) => [id, MT_SEAT_INKS[i]]))
+    return (
+      <MexicanTrainResults
+        localPlayerId={mtLocalPlayerId ?? ''}
+        localName={name}
+        names={mtView.names}
+        colors={mtColors}
+        publicState={mtView.publicState}
+        isHost={mtRole === 'host'}
+        notice={mtNotice ?? error}
+        onRematch={mtRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Mexican Train table (active game). Host-only: a "replace with a bot"
+  // banner above the table for every guest seat that disconnected mid-match.
+  if (mtView?.kind === 'game' && mtLocalPlayerId) {
+    const mtColors = Object.fromEntries(mtView.publicState.seatOrder.map((id, i) => [id, MT_SEAT_INKS[i]]))
+    return (
+      <>
+        {mtRole === 'host' && mtDropped.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            background: 'var(--coral)',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 'clamp(14px, 1.8vw, 17px)',
+            padding: '10px 22px',
+            borderRadius: 999,
+            border: '3px solid var(--ink)',
+            boxShadow: '0 5px 0 var(--ink)',
+            marginBottom: 'clamp(10px, 2vw, 18px)',
+          }}>
+            {mtDropped.map((pid) => (
+              <button
+                key={pid}
+                type="button"
+                className="btn pill-small"
+                style={{ background: '#fff', color: 'var(--coral)' }}
+                onClick={() => mtReplaceWithBot(pid)}
+              >
+                Replace {mtView.names[pid] ?? pid} with a bot
+              </button>
+            ))}
+          </div>
+        )}
+        <MexicanTrainTable
+          code={mtCode}
+          localPlayerId={mtLocalPlayerId}
+          names={mtView.names}
+          colors={mtColors}
+          connection={mtConnection}
+          notice={mtNotice ?? error}
+          publicState={mtView.publicState}
+          hand={mtView.hand}
+          onPlayTile={(tileId, lane) => mtDispatch({ type: 'PLAY_TILE', tileId, lane })}
+          onDraw={() => mtDispatch({ type: 'DRAW_TILE' })}
           onLeave={resetToEntry}
         />
       </>

@@ -1,0 +1,249 @@
+/* ===================================================================
+   CheckersTable — 8×8 board, scoreboard cards, selection rings
+   =================================================================== */
+
+.ck-table {
+  --ck-brand: #b45309;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.ck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.ck-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ck-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--ck-brand);
+}
+
+.ck-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.ck-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ck-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.ck-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Error banner ---- */
+
+.ck-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Main table card ---- */
+
+.ck-main-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Scoreboard cards (one per player, above the board) ---- */
+
+.ck-scores {
+  display: flex;
+  justify-content: center;
+  gap: clamp(10px, 2vw, 18px);
+  margin-bottom: clamp(14px, 2vw, 22px);
+}
+
+.ck-score-card {
+  flex: 1 1 0;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface);
+  border: 3px solid var(--ink);
+  border-radius: 18px;
+  padding: 10px 16px;
+  color: var(--ink);
+}
+
+/* The current player's card fills with their seat color (white text) */
+.ck-score-card--turn {
+  color: #fff;
+}
+
+.ck-score-card--turn .ck-score-sub {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ck-score-name {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.ck-score-count {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ck-score-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+/* ---- Board ---- */
+
+.ck-board {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  max-width: 460px;
+  width: 100%;
+  margin: 0 auto;
+  aspect-ratio: 1;
+  border: 4px solid var(--ink);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.ck-cell {
+  position: relative;
+}
+
+/* ---- Pieces ---- */
+
+.ck-piece {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 74%;
+  height: 74%;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  box-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.3),
+    inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: default;
+}
+
+button.ck-piece {
+  cursor: pointer;
+}
+
+.ck-crown {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* ---- Selection + destination rings ---- */
+
+.ck-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ck-ring--selected {
+  border: 3px solid #fff;
+}
+
+.ck-dest {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  border: 3px solid var(--ck-brand);
+  background: rgba(180, 83, 9, 0.2);
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+/* ---- Status + hint ---- */
+
+.ck-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: clamp(14px, 2vw, 22px);
+  text-align: center;
+}
+
+.ck-status-text {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ck-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}

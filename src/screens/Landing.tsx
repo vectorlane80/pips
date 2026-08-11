@@ -4,7 +4,7 @@ import { Wordmark } from '../components/Wordmark'
 const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -17,10 +17,15 @@ export function Landing({
   onPickBattleship: () => void
   onPickDominoes: () => void
   onPickWahoo: () => void
+  onPickCheckers: () => void
+  onPickMexicanTrain: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
   const canJoin = ready && joinCode.trim().length > 0
+  // Count of tiles on the shelf: the GAMES loop below plus the hardcoded
+  // tiles rendered under it (Rummy, Phase 10, Battleship, Dominoes, Wahoo, Checkers, Mexican Train).
+  const shelfCount = GAMES.length + 7
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,72px) clamp(18px,5vw,48px) 72px' }}>
@@ -76,7 +81,11 @@ export function Landing({
         <div style={{ flex: '1 1 340px', maxWidth: 560 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
             <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
-            {!ready && (
+            {ready ? (
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
+                {shelfCount} games
+              </span>
+            ) : (
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
                 type a name to start one
               </span>
@@ -204,6 +213,46 @@ export function Landing({
               </span>
               <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
                 2–4 players
+              </span>
+            </button>
+            <button
+              type="button"
+              className="shelf-tile"
+              disabled={!ready}
+              onClick={onPickCheckers}
+              style={{
+                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                background: ready ? '#b45309' : 'var(--grey-fill)',
+                color: ready ? '#fff' : 'var(--disabled-text)',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Checkers</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                Jump the diagonals, crown a king
+              </span>
+              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                2 players
+              </span>
+            </button>
+            <button
+              type="button"
+              className="shelf-tile"
+              disabled={!ready}
+              onClick={onPickMexicanTrain}
+              style={{
+                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
+                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
+                background: ready ? '#c2410c' : 'var(--grey-fill)',
+                color: ready ? '#fff' : 'var(--disabled-text)',
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Mexican Train</span>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
+                Build your train, dodge the pips
+              </span>
+              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
+                4 players
               </span>
             </button>
           </div>

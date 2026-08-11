@@ -22,12 +22,18 @@ import dominoesShuffling from '../assets/sounds/dominoes-shuffling.mp3'
 import dominoDraw from '../assets/sounds/domino-draw.mp3'
 import dominoPlay from '../assets/sounds/domino-play.mp3'
 import knock from '../assets/sounds/knock.mp3'
+import checkerMove from '../assets/sounds/checker-moving.mp3'
+import checkerJump from '../assets/sounds/checker-jumping-over.mp3'
+import kingMe from '../assets/sounds/king-me.mp3'
+import trainHorn from '../assets/sounds/train-horn.mp3'
 
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'drawn-x' | 'drawn-circle' | 'piece-drop' | 'farkle-bust' | 'bank-points'
   | 'hot-dice' | 'card-draw' | 'card-play' | 'shuffle' | 'letter-correct'
   | 'letter-wrong' | 'round-win' | 'game-win' | 'error' | 'ship-hit' | 'ship-miss' | 'ship-sunk'
   | 'domino-shuffle' | 'domino-draw' | 'domino-play' | 'knock'
+  | 'checker-move' | 'checker-jump' | 'king-me'
+  | 'train-horn'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -53,6 +59,10 @@ const SOUND_FILES: Record<SoundName, string> = {
   'domino-draw': dominoDraw,
   'domino-play': dominoPlay,
   'knock': knock,
+  'checker-move': checkerMove,
+  'checker-jump': checkerJump,
+  'king-me': kingMe,
+  'train-horn': trainHorn,
 }
 
 const COOKIE_NAME = 'pips-sound'

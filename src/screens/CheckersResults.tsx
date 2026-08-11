@@ -1,0 +1,159 @@
+import { useEffect } from 'react'
+import type { CheckersPublicState } from '../board-games/checkers/state'
+import { useSound } from '../hooks/useSound'
+
+// ---- Props ----
+
+export interface CheckersResultsProps {
+  localPlayerId: string
+  localName: string
+  opponentName: string
+  publicState: CheckersPublicState
+  isHost: boolean
+  notice?: string | null
+  onRematch: () => void
+  onBackToShelf: () => void
+}
+
+// ---- Row colour per player ----
+// Local player → var(--green-text), opponent → the checkers brand amber.
+
+const LOCAL_COLOR = 'var(--green-text)'
+const OPPONENT_COLOR = '#b45309'
+
+function playerColor(playerId: string, localPlayerId: string): string {
+  return playerId === localPlayerId ? LOCAL_COLOR : OPPONENT_COLOR
+}
+
+// ---- CheckersResults ----
+
+export function CheckersResults({
+  localPlayerId,
+  localName,
+  opponentName,
+  publicState,
+  isHost,
+  notice,
+  onRematch,
+  onBackToShelf,
+}: CheckersResultsProps) {
+  const { play } = useSound()
+  useEffect(() => { play('game-win') }, [])
+
+  // Only render when the match is over
+  if (publicState.stage !== 'over' || publicState.matchWinnerId === null) return null
+
+  const winnerId = publicState.matchWinnerId
+  const winnerName = winnerId === localPlayerId ? localName : opponentName
+  const isLocalWinner = winnerId === localPlayerId
+  const headline = isLocalWinner ? 'You take it!' : `${winnerName} takes it!`
+  const headlineColor = isLocalWinner ? LOCAL_COLOR : OPPONENT_COLOR
+
+  const loserId = publicState.seatOrder.find((id) => id !== winnerId) ?? ''
+  const a = publicState.gamesWon[winnerId] ?? 0
+  const b = publicState.gamesWon[loserId] ?? 0
+  const lede = `${winnerName} took the match ${a}–${b}.`
+
+  // Build ranked rows (2 players)
+  interface RankedRow {
+    id: string
+    name: string
+    score: number
+  }
+
+  const rows: RankedRow[] = [
+    { id: winnerId, name: winnerName, score: a },
+    { id: loserId, name: loserId === localPlayerId ? localName : opponentName, score: b },
+  ].sort((x, y) => y.score - x.score)
+
+  return (
+    <div style={{
+      maxWidth: 1120, margin: '0 auto',
+      padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px',
+    }}>
+      {notice && (
+        <div style={{
+          textAlign: 'center',
+          background: 'var(--coral)',
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: 'clamp(14px, 1.8vw, 17px)',
+          padding: '10px 22px',
+          borderRadius: 999,
+          border: '3px solid var(--ink)',
+          boxShadow: '0 5px 0 var(--ink)',
+          marginBottom: 'clamp(10px, 2vw, 18px)',
+        }}>
+          {notice}
+        </div>
+      )}
+      <span className="chip" style={{ background: OPPONENT_COLOR, color: '#fff' }}>
+        Checkers · match over
+      </span>
+
+      <h1 style={{
+        fontSize: 'clamp(46px,10vw,116px)', fontWeight: 700, lineHeight: 0.92,
+        letterSpacing: '-0.035em', color: headlineColor,
+        margin: '16px 0 8px',
+      }}>
+        {headline}
+      </h1>
+
+      <p style={{ fontSize: 'clamp(17px, 2.4vw, 24px)', fontWeight: 600, margin: 0 }}>
+        {lede}
+      </p>
+
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 10,
+        maxWidth: 660, marginTop: 24,
+      }}>
+        {rows.map((row, i) => {
+          const isWinner = row.id === winnerId
+          const color = playerColor(row.id, localPlayerId)
+          return (
+            <div
+              key={row.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 16,
+                padding: '14px 20px', borderRadius: 20,
+                border: '4px solid var(--ink)',
+                background: isWinner ? color : '#fff',
+                color: isWinner ? '#fff' : 'var(--ink)',
+              }}
+            >
+              <span style={{ fontWeight: 700, width: 22 }}>{i + 1}</span>
+              <span style={{ fontWeight: 700, fontSize: 18, flex: 1 }}>{row.name}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, opacity: 0.85 }}>
+                games won
+              </span>
+              <span style={{ fontSize: 32, fontWeight: 700 }}>{row.score}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: 12, fontSize: 14, fontWeight: 600, color: 'var(--muted-text)' }}>
+        best of five
+      </div>
+
+      <div style={{
+        display: 'flex', gap: 12, marginTop: 32,
+        alignItems: 'center', flexWrap: 'wrap',
+      }}>
+        {isHost && (
+          <button type="button" className="btn btn-coral btn-lg" onClick={onRematch}>
+            Again
+          </button>
+        )}
+        <button type="button" className="btn btn-lg" onClick={onBackToShelf}>
+          Back to the shelf
+        </button>
+        {!isHost && (
+          <span style={{ color: 'var(--muted-text)', fontSize: 14 }}>
+            Waiting for the host to start a rematch…
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
