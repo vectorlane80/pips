@@ -1,7 +1,5 @@
-import { GAME_BLURB, GAME_COLOR, GAME_LABEL, GAME_PLAYER_RANGE, type Game } from '../types'
+import type { Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
-
-const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 
 export function Landing({
   name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, error,
@@ -23,9 +21,22 @@ export function Landing({
 }) {
   const ready = name.trim().length > 0
   const canJoin = ready && joinCode.trim().length > 0
-  // Count of tiles on the shelf: the GAMES loop below plus the hardcoded
-  // tiles rendered under it (Rummy, Phase 10, Battleship, Dominoes, Wahoo, Checkers, Mexican Train).
-  const shelfCount = GAMES.length + 7
+  // One data-driven shelf list — the designer's order (Chess deferred), each
+  // chip carrying its title, player range, tile color, and pick handler.
+  const SHELF = [
+    { title: 'Farkle', note: '2–8 players', color: '#6c4cff', onClick: () => onPickGame('farkle') },
+    { title: 'Yahtzee', note: '2–8 players', color: '#0fb5a0', onClick: () => onPickGame('yahtzee') },
+    { title: 'Tic Tac Toe', note: '2 players', color: '#ff9f1c', onClick: () => onPickGame('ttt') },
+    { title: 'Connect 4', note: '2 players', color: '#2f6fed', onClick: () => onPickGame('connect4') },
+    { title: 'Battleship', note: '2 players', color: '#1a6fae', onClick: onPickBattleship },
+    { title: 'Dominoes', note: '2 players', color: '#5b5bd6', onClick: onPickDominoes },
+    { title: 'Mexican Train', note: '4 players', color: '#c2410c', onClick: onPickMexicanTrain },
+    { title: 'Wahoo', note: '2–4 players', color: '#9333ea', onClick: onPickWahoo },
+    { title: 'Checkers', note: '2 players', color: '#b45309', onClick: onPickCheckers },
+    { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },
+    { title: 'Rummy', note: '2 players', color: '#1aa06d', onClick: onPickRummy },
+    { title: 'Phase 10', note: '2 players', color: '#ff9f1c', onClick: onPickPhase10 },
+  ]
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,72px) clamp(18px,5vw,48px) 72px' }}>
@@ -36,7 +47,7 @@ export function Landing({
         margin: '20px 0 0', fontWeight: 700, maxWidth: '18ch',
       }}
       >
-        Small games. <span style={{ color: 'var(--violet)' }}>One code.</span> Whoever's around.
+        Small games. <span style={{ color: 'var(--violet)' }}>One code.</span>
       </h1>
       <p style={{
         fontSize: 'clamp(16px,1.9vw,18px)', lineHeight: 1.5, maxWidth: '46ch',
@@ -67,7 +78,7 @@ export function Landing({
                 style={{ marginTop: 6 }}
                 value={joinCode}
                 onChange={(e) => onJoinCodeChange(e.target.value.toUpperCase())}
-                placeholder="BONE-47"
+                placeholder="GG-CODE-52"
               />
             </label>
             <button type="button" className="btn btn-coral" style={{ height: 52 }} disabled={!canJoin} onClick={onJoin}>
@@ -79,182 +90,50 @@ export function Landing({
         </div>
 
         <div style={{ flex: '1 1 340px', maxWidth: 560 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
             {ready ? (
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
-                {shelfCount} games
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--faint-text)' }}>
+                {SHELF.length} games
               </span>
             ) : (
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--faint-text)' }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--faint-text)' }}>
                 type a name to start one
               </span>
             )}
           </div>
-          <div className="shelf-grid">
-            {GAMES.map((g) => (
+          <style>{`
+            .shelf-chip { cursor: pointer; }
+            .shelf-chip:hover:not(:disabled) { filter: brightness(1.04); }
+            .shelf-chip:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 var(--tile-shadow, var(--ink)); }
+            .shelf-chip:disabled { cursor: not-allowed; }
+          `}</style>
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+            gap: 8, marginTop: 12, maxHeight: 290, overflowY: 'auto', paddingRight: 4,
+          }}
+          >
+            {SHELF.map((item) => (
               <button
-                key={g}
+                key={item.title}
                 type="button"
-                className="shelf-tile"
+                className="shelf-chip"
                 disabled={!ready}
-                onClick={() => onPickGame(g)}
+                onClick={item.onClick}
                 style={{
                   ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
                   ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                  background: ready ? GAME_COLOR[g] : 'var(--grey-fill)',
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  textAlign: 'left', padding: '10px 12px', borderRadius: 14,
+                  border: '3px solid var(--tile-border)', boxShadow: '0 4px 0 var(--tile-shadow)',
+                  background: ready ? item.color : 'var(--grey-fill)',
                   color: ready ? '#fff' : 'var(--disabled-text)',
                 }}
               >
-                <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>{GAME_LABEL[g]}</span>
-                <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                  {GAME_BLURB[g]}
-                </span>
-                <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                  {GAME_PLAYER_RANGE[g]}
-                </span>
+                <span style={{ flex: 1, fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{item.title}</span>
+                <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.8, whiteSpace: 'nowrap' }}>{item.note}</span>
               </button>
             ))}
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickRummy}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? 'var(--green-text)' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Rummy</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Draw, meld, discard — go out first
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickPhase10}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#6c4cff' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Phase 10</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Ten phases, first to finish wins
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickBattleship}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#1a6fae' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Battleship</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Place your fleet, call your shots, sink all five.
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickDominoes}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#5b5bd6' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Dominoes</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Match ends, bank the fives.
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickWahoo}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#9333ea' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Wahoo</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Race your marbles home — bump anyone in the way.
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2–4 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickCheckers}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#b45309' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Checkers</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Jump the diagonals, crown a king
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                2 players
-              </span>
-            </button>
-            <button
-              type="button"
-              className="shelf-tile"
-              disabled={!ready}
-              onClick={onPickMexicanTrain}
-              style={{
-                ['--tile-border' as string]: ready ? 'var(--ink)' : 'var(--grey-border)',
-                ['--tile-shadow' as string]: ready ? 'var(--ink)' : 'var(--grey-border-4)',
-                background: ready ? '#c2410c' : 'var(--grey-fill)',
-                color: ready ? '#fff' : 'var(--disabled-text)',
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 19, fontWeight: 700 }}>Mexican Train</span>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 400, lineHeight: 1.35, opacity: 0.85, marginTop: 2 }}>
-                Build your train, dodge the pips
-              </span>
-              <span className="shelf-tile-note" style={{ display: 'block', fontSize: 12, fontWeight: 500 }}>
-                4 players
-              </span>
-            </button>
           </div>
         </div>
       </div>
