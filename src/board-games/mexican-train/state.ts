@@ -10,8 +10,15 @@ import { dealCards, shuffleDeck } from '../../card-engine/deck.ts'
 // Round r (0-based) plays on engine value 12 - r.
 export const MT_ENGINE_SEQ = [12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
+export const MT_MIN_SEATS = 2
+export const MT_MAX_SEATS = 8
+
+// Published double-12 hand sizes keyed by seat count — the flat 13 can't deal
+// 8 hands from the 90 tiles left after the engine pull.
+export const MT_HAND_SIZES: Record<number, number> = { 2: 16, 3: 16, 4: 15, 5: 14, 6: 12, 7: 10, 8: 9 }
+
 export type MTStage = 'play' | 'roundEnd' | 'over'
-export type MTLaneKey = 'p0' | 'p1' | 'p2' | 'p3' | 'mex'
+export type MTLaneKey = 'mex' | `p${number}`
 export interface MTTile {
   id: string   // `${a}-${b}`, a <= b
   a: number
@@ -41,16 +48,16 @@ export interface LastMTAction {
 export interface MTPublicState {
   stage: MTStage
   turn: TurnState<'play'>
-  seatOrder: [string, string, string, string]   // index = seat; lane 'p<i>' belongs to seatOrder[i]
-  round: number                          // 0-based, 0..12
-  engine: number                         // MT_ENGINE_SEQ[round]
-  trains: Record<MTLaneKey, MTPlacedTile[]>
-  open: Record<'p0' | 'p1' | 'p2' | 'p3', boolean>
+  seatOrder: string[]                   // index = seat; lane 'p<i>' belongs to seatOrder[i]
+  round: number                         // 0-based, 0..12
+  engine: number                        // MT_ENGINE_SEQ[round]
+  trains: Record<string, MTPlacedTile[]> // exactly seatOrder.length seat lanes + 'mex'
+  open: Record<string, boolean>         // one key per seat lane
   boneyardCount: number
   handCounts: Record<string, number>
-  doublePending: boolean                 // current player owes an extra play
-  passStreak: number                     // consecutive pass-opens; 4 ends the round blocked
-  scores: Record<string, number>         // running pips, lower wins
+  doublePending: boolean                // current player owes an extra play
+  passStreak: number                    // consecutive pass-opens; seatOrder.length ends the round blocked
+  scores: Record<string, number>        // running pips, lower wins
   roundResult: MTRoundResult | null
   matchWinnerId: string | null
   lastAction: LastMTAction | null
@@ -90,9 +97,9 @@ export interface MTDeal {
 
 // Shared deal logic used both for the first round and every subsequent round (via START_NEXT_ROUND).
 // The engine double is pulled out of the full set FIRST (never dealt), the remaining 90 are
-// shuffled, 13 go to each of the 4 seats, and the last 38 form the boneyard.
+// shuffled, MT_HAND_SIZES[seatCount] go to each seat, and the rest form the boneyard.
 export function dealMTRound(
-  playerIds: [string, string, string, string],
+  playerIds: string[],
   round: number,
   rng: () => number,
 ): MTDeal {
@@ -102,7 +109,7 @@ export function dealMTRound(
   let remaining = shuffled
   const hands: Record<string, Zone<MTTile>> = {}
   for (const playerId of playerIds) {
-    const { dealt, remaining: rest } = dealCards(remaining, 13)
+    const { dealt, remaining: rest } = dealCards(remaining, MT_HAND_SIZES[playerIds.length])
     hands[playerId] = addCards(createHand<MTTile>(playerId), dealt)
     remaining = rest
   }
@@ -110,10 +117,7 @@ export function dealMTRound(
   return { hands, boneyard, engine }
 }
 
-export function createMexicanTrainGame(
-  playerIds: [string, string, string, string],
-  seed: number,
-): MTSession {
+export function createMexicanTrainGame(playerIds: string[], seed: number): MTSession {
   const rng = createRng(seed)
   const { hands, boneyard, engine } = dealMTRound(playerIds, 0, rng)
   const turn = createTurnState<'play'>(playerIds, 'play')   // round 0 starter is seat 0
@@ -131,8 +135,8 @@ export function createMexicanTrainGame(
     seatOrder: playerIds,
     round: 0,
     engine,
-    trains: { p0: [], p1: [], p2: [], p3: [], mex: [] },
-    open: { p0: false, p1: false, p2: false, p3: false },
+    trains: createMTTrains(playerIds.length),
+    open: createMTOpen(playerIds.length),
     boneyardCount: cardCount(boneyard),
     handCounts,
     doublePending: false,
@@ -143,6 +147,21 @@ export function createMexicanTrainGame(
     lastAction: null,
   }
   return { session: createHostSession(publicState, privateStates), boneyard, rng }
+}
+
+// Empty board builders: exactly seatCount 'p<i>' lanes plus 'mex' for trains,
+// and one 'p<i>' key per seat for open. Used at deal time (round 0 and every
+// START_NEXT_ROUND) so both stay in lockstep with the seat count.
+export function createMTTrains(seatCount: number): Record<string, MTPlacedTile[]> {
+  const trains: Record<string, MTPlacedTile[]> = { mex: [] }
+  for (let i = 0; i < seatCount; i++) trains['p' + i] = []
+  return trains
+}
+
+export function createMTOpen(seatCount: number): Record<string, boolean> {
+  const open: Record<string, boolean> = {}
+  for (let i = 0; i < seatCount; i++) open['p' + i] = false
+  return open
 }
 
 // The pip a new tile must match on that lane: the last placed tile's outer, or the engine
@@ -158,8 +177,8 @@ export function laneEnd(publicState: MTPublicState, lane: MTLaneKey): number {
 export function legalLanes(tile: MTTile, seat: number, publicState: MTPublicState): MTLaneKey[] {
   const ownLane = ('p' + seat) as MTLaneKey
   const candidates: MTLaneKey[] = ['mex', ownLane]
-  for (let i = 0; i < 4; i++) {
-    if (i !== seat && publicState.open[('p' + i) as 'p0' | 'p1' | 'p2' | 'p3']) {
+  for (let i = 0; i < publicState.seatOrder.length; i++) {
+    if (i !== seat && publicState.open['p' + i]) {
       candidates.push(('p' + i) as MTLaneKey)
     }
   }

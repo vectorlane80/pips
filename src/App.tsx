@@ -70,7 +70,7 @@ import { CheckersResults } from './screens/CheckersResults'
 import { CheckersRoom } from './screens/CheckersRoom'
 
 // ---- Mexican Train (separate parallel session, per CHARTER.md resolution #7) ----
-import { createMexicanTrainGame, handHasLegalPlay, type MTSession, type MTPublicState, type MTTile, type MTAction } from './board-games/mexican-train/state'
+import { createMexicanTrainGame, handHasLegalPlay, MT_MAX_SEATS, MT_MIN_SEATS, type MTSession, type MTPublicState, type MTTile, type MTAction } from './board-games/mexican-train/state'
 import { applyMTAction, runMTBotTurn } from './board-games/mexican-train/rules'
 import { mexicanTrainBotStrategy } from './board-games/mexican-train/bot'
 import { MexicanTrainTable } from './screens/MexicanTrainTable'
@@ -1758,9 +1758,9 @@ export default function App() {
 
   // ---- Mexican Train helpers ----
 
-  // Seat inks, fixed per seat index 0..3 — the same per-seat palette Wahoo
+  // Seat inks, fixed per seat index 0..7 — the same per-seat palette Wahoo
   // assigns by arm index at game start.
-  const MT_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+  const MT_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0', '#f97316', '#64748b']
 
   function mtActorKey(mt: MTSession): string {
     const ps = mt.session.publicState
@@ -1772,7 +1772,7 @@ export default function App() {
     return !mtSessionRef.current || mtActorKey(mtSessionRef.current) !== key
   }
 
-  // Hands are PRIVATE and up to 3 guests can be seated, so a single broadcast
+  // Hands are PRIVATE and up to 7 guests can be seated, so a single broadcast
   // cannot carry every hand (any guest would see the others'). Lobby phase →
   // broadcast the roster view; game phase → per-guest sendTo with only that
   // guest's own hand. The host's own view comes from its local snapshot.
@@ -1833,7 +1833,7 @@ export default function App() {
           mtHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
           return
         }
-        if (mtSeatsRef.current.length >= 4) {
+        if (mtSeatsRef.current.length >= MT_MAX_SEATS) {
           mtHostRef.current?.reject(guestId, 'Table is full.')
           return
         }
@@ -1875,7 +1875,7 @@ export default function App() {
 
   function addMTHouseBot() {
     if (mtRole !== 'host' || mtStartedRef.current) return
-    if (mtSeatsRef.current.length >= 4) return
+    if (mtSeatsRef.current.length >= MT_MAX_SEATS) return
     const botId = `bot-${mtSeatsRef.current.length}`
     const botName = randomBotName(mtSeatsRef.current.map((s) => s.name))
     mtSeatsRef.current = [...mtSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
@@ -1887,8 +1887,8 @@ export default function App() {
   function mtStart() {
     if (mtRole !== 'host' || mtStartedRef.current) return
     const seats = mtSeatsRef.current
-    if (seats.length !== 4) return
-    const playerIds = seats.map((s) => s.playerId) as [string, string, string, string]
+    if (seats.length < MT_MIN_SEATS || seats.length > MT_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
     // Deliberately outside the seeded rng: host-only, one-time, and seatOrder is sent to guests — it must not shift the seeded deal.
     for (let i = playerIds.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
@@ -1930,6 +1930,13 @@ export default function App() {
       if (!result.outcome.ok) return
       mtSessionRef.current = result.mt
       mtBroadcast()
+      // A pass-open is a honk: leave clear air (on top of the normal per-action
+      // beat) before the next bot acts, so consecutive stuck bots don't pile
+      // their horns into one rush.
+      if (result.mt.session.publicState.lastAction?.kind === 'pass-open') {
+        await wait(BASE_MS * 0.8)
+        if (mtStale(key)) return
+      }
     }
   }
 
@@ -2007,7 +2014,7 @@ export default function App() {
     const ps = mtSessionRef.current.session.publicState
     if (ps.stage !== 'over') return
     const prevRevision = mtSessionRef.current.session.revision
-    const playerIds = [...ps.seatOrder] as [string, string, string, string]
+    const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
     const next = createMexicanTrainGame(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
@@ -2337,6 +2344,9 @@ export default function App() {
     const hand = snap.privateState?.hand.cards ?? []
     const seat = mtView.publicState.seatOrder.indexOf(currentId)
     if (handHasLegalPlay(hand, seat, mtView.publicState)) return
+    // Chained stuck players: when the PREVIOUS action was also a pass-open,
+    // stretch the auto-pass beat so the horns don't pile up.
+    const delay = mtView.publicState.lastAction?.kind === 'pass-open' ? BASE_MS * 1.6 : BASE_MS
     const t = setTimeout(() => {
       const live = mtSessionRef.current
       if (!live) return
@@ -2347,7 +2357,7 @@ export default function App() {
         mtSessionRef.current = result.mt
         mtBroadcast()
       }
-    }, BASE_MS)
+    }, delay)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mtRole, mtView])
@@ -2873,7 +2883,7 @@ export default function App() {
   }
 
   // ---- Mexican Train session active ----
-  // Mexican Train lobby — exactly 4 seats. Host sees seats from state; guests
+  // Mexican Train lobby — 2 to 8 seats. Host sees seats from state; guests
   // see the lobby view the host broadcasts (buttons hidden either way).
   if (mtRole && !mtStarted) {
     const roster = mtRole === 'host'

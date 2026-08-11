@@ -23,7 +23,7 @@ export function MexicanTrainRulesOverlay({ onClose }: { onClose: () => void }) {
           <button type="button" className="btn pill-small" onClick={onClose}>Close</button>
         </div>
         <p style={{ color: 'var(--body-text)', lineHeight: 1.5, marginTop: 14 }}>
-          Double-12 set, four players, thirteen tiles each. Each round starts from a double
+          Double-12 set, two to eight players — hands scale with the table (16 tiles at two down to 9 at eight). Each round starts from a double
           'engine' — everyone builds their own train off it, and anyone can play on the shared
           Mexican train. Lowest total pips after all thirteen rounds wins.
         </p>

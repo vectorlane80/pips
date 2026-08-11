@@ -8,7 +8,7 @@ and Back returns to the shelf.
 Twelve games: **Farkle**, **Yahtzee**, **Tic Tac Toe**, **Hangman**, **Connect 4**,
 **Rummy**, **Phase 10**, **Battleship**, **Dominoes**, **Wahoo**, **Checkers**, and
 **Mexican Train**. Farkle and Yahtzee seat up to 8, Wahoo seats 2–4, Mexican Train
-seats exactly 4; the rest are two-player (for now). Every game can be played solo
+seats 2–8; the rest are two-player (for now). Every game can be played solo
 against house bots.
 
 Rummy and Phase 10 are built on a reusable card-game engine (`src/card-engine/`),

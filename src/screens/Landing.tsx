@@ -30,7 +30,7 @@ export function Landing({
     { title: 'Connect 4', note: '2 players', color: '#2f6fed', onClick: () => onPickGame('connect4') },
     { title: 'Battleship', note: '2 players', color: '#1a6fae', onClick: onPickBattleship },
     { title: 'Dominoes', note: '2 players', color: '#5b5bd6', onClick: onPickDominoes },
-    { title: 'Mexican Train', note: '4 players', color: '#c2410c', onClick: onPickMexicanTrain },
+    { title: 'Mexican Train', note: '2–8 players', color: '#c2410c', onClick: onPickMexicanTrain },
     { title: 'Wahoo', note: '2–4 players', color: '#9333ea', onClick: onPickWahoo },
     { title: 'Checkers', note: '2 players', color: '#b45309', onClick: onPickCheckers },
     { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },

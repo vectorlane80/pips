@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   MT_ENGINE_SEQ,
+  MT_HAND_SIZES,
+  MT_MAX_SEATS,
+  MT_MIN_SEATS,
   createMexicanTrainGame,
   createMexicanTrainSet,
+  createMTOpen,
+  createMTTrains,
   dealMTRound,
   handHasLegalPlay,
   laneEnd,
@@ -26,7 +31,6 @@ import { addCards, cardCount, createHand, createPublicZone } from '../../card-en
 const PLAYERS: [string, string, string, string] = ['p1', 'p2', 'p3', 'p4']
 const emptyTrains = (): Record<MTLaneKey, MTPlacedTile[]> => ({ p0: [], p1: [], p2: [], p3: [], mex: [] })
 const emptyOpen = (): Record<'p0' | 'p1' | 'p2' | 'p3', boolean> => ({ p0: false, p1: false, p2: false, p3: false })
-const zeroScores = (): Record<string, number> => ({ p1: 0, p2: 0, p3: 0, p4: 0 })
 
 function tile(a: number, b: number): MTTile {
   const lo = Math.min(a, b)
@@ -44,12 +48,13 @@ function placed(inner: number, outer: number, isDouble = false): MTPlacedTile {
 
 // Hand-built session with a known board, hands, and boneyard (dominoes-test style).
 function buildGame(config: {
+  players?: string[]
   stage?: MTPublicState['stage']
   currentIndex?: number
   round?: number
   engine?: number
-  trains?: Partial<Record<MTLaneKey, MTPlacedTile[]>>
-  open?: Partial<Record<'p0' | 'p1' | 'p2' | 'p3', boolean>>
+  trains?: Record<string, MTPlacedTile[]>
+  open?: Record<string, boolean>
   hands?: Record<string, MTTile[]>
   boneyard?: MTTile[]
   scores?: Record<string, number>
@@ -59,7 +64,8 @@ function buildGame(config: {
   matchWinnerId?: string | null
   lastAction?: LastMTAction | null
 } = {}): MTSession {
-  const turn = createTurnState<'play'>(PLAYERS, 'play')
+  const players = config.players ?? PLAYERS
+  const turn = createTurnState<'play'>(players, 'play')
   if (config.currentIndex != null) {
     ;(turn as { currentIndex: number }).currentIndex = config.currentIndex
   }
@@ -71,7 +77,7 @@ function buildGame(config: {
   }
   const privateStates: Record<string, MTPrivateState> = {}
   const handCounts: Record<string, number> = {}
-  for (const p of PLAYERS) {
+  for (const p of players) {
     privateStates[p] = { hand: addCards(createHand<MTTile>(p), hands[p]) }
     handCounts[p] = hands[p].length
   }
@@ -79,16 +85,16 @@ function buildGame(config: {
   const publicState: MTPublicState = {
     stage: config.stage ?? 'play',
     turn,
-    seatOrder: PLAYERS,
+    seatOrder: players,
     round: config.round ?? 0,
     engine: config.engine ?? 12,
-    trains: { ...emptyTrains(), ...config.trains },
-    open: { ...emptyOpen(), ...config.open },
+    trains: { ...createMTTrains(players.length), ...config.trains },
+    open: { ...createMTOpen(players.length), ...config.open },
     boneyardCount: boneyard.cards.length,
     handCounts,
     doublePending: config.doublePending ?? false,
     passStreak: config.passStreak ?? 0,
-    scores: config.scores ?? zeroScores(),
+    scores: config.scores ?? Object.fromEntries(players.map((p) => [p, 0])),
     roundResult: config.roundResult ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
     lastAction: config.lastAction ?? null,
@@ -116,16 +122,16 @@ describe('createMexicanTrainSet', () => {
 })
 
 describe('deal', () => {
-  it('deals 13/13/13/13, leaves 38 in the boneyard, and never deals the engine double', () => {
+  it('deals 15/15/15/15, leaves 30 in the boneyard, and never deals the engine double', () => {
     const mt = createMexicanTrainGame(PLAYERS, 42)
     const pub = mt.session.publicState
     expect(pub.engine).toBe(12)
-    expect(pub.boneyardCount).toBe(38)
+    expect(pub.boneyardCount).toBe(30)
     for (const p of PLAYERS) {
-      expect(pub.handCounts[p]).toBe(13)
-      expect(mt.session.privateStates[p].hand.cards).toHaveLength(13)
+      expect(pub.handCounts[p]).toBe(15)
+      expect(mt.session.privateStates[p].hand.cards).toHaveLength(15)
     }
-    expect(mt.boneyard.cards).toHaveLength(38)
+    expect(mt.boneyard.cards).toHaveLength(30)
     const dealt = new Set([
       ...mt.session.privateStates.p1.hand.cards,
       ...mt.session.privateStates.p2.hand.cards,
@@ -152,8 +158,8 @@ describe('deal', () => {
   it('dealMTRound picks the engine from MT_ENGINE_SEQ for the round', () => {
     const r5 = dealMTRound(PLAYERS, 5, createRng(1))
     expect(r5.engine).toBe(7)
-    expect(r5.boneyard.cards).toHaveLength(38)
-    for (const p of PLAYERS) expect(r5.hands[p].cards).toHaveLength(13)
+    expect(r5.boneyard.cards).toHaveLength(30)
+    for (const p of PLAYERS) expect(r5.hands[p].cards).toHaveLength(15)
     const dealt5 = new Set([
       ...r5.hands.p1.cards, ...r5.hands.p2.cards, ...r5.hands.p3.cards, ...r5.hands.p4.cards,
       ...r5.boneyard.cards,
@@ -167,6 +173,51 @@ describe('deal', () => {
       ...r12.boneyard.cards,
     ].map((t) => t.id))
     expect(dealt12.has('0-0')).toBe(false)
+  })
+
+  it('exposes the published hand-size table and seat bounds for 2–8', () => {
+    expect(MT_HAND_SIZES).toEqual({ 2: 16, 3: 16, 4: 15, 5: 14, 6: 12, 7: 10, 8: 9 })
+    expect(MT_MIN_SEATS).toBe(2)
+    expect(MT_MAX_SEATS).toBe(8)
+  })
+
+  it('deals a 2-player game 16/16 with 58 in the boneyard', () => {
+    const mt = createMexicanTrainGame(['p1', 'p2'], 42)
+    const pub = mt.session.publicState
+    expect(pub.engine).toBe(12)
+    expect(pub.seatOrder).toEqual(['p1', 'p2'])
+    expect(pub.boneyardCount).toBe(58)
+    expect(mt.boneyard.cards).toHaveLength(58)
+    expect(pub.handCounts).toEqual({ p1: 16, p2: 16 })
+    expect(mt.session.privateStates.p1.hand.cards).toHaveLength(16)
+    expect(mt.session.privateStates.p2.hand.cards).toHaveLength(16)
+    expect(pub.trains).toEqual(createMTTrains(2))
+    expect(pub.open).toEqual(createMTOpen(2))
+    const dealt = new Set([
+      ...mt.session.privateStates.p1.hand.cards,
+      ...mt.session.privateStates.p2.hand.cards,
+      ...mt.boneyard.cards,
+    ].map((t) => t.id))
+    expect(dealt.size).toBe(90)
+    expect(dealt.has('12-12')).toBe(false)
+  })
+
+  it('deals an 8-player game 9 each with 18 in the boneyard and lanes p0–p7 present', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
+    const mt = createMexicanTrainGame(ids, 42)
+    const pub = mt.session.publicState
+    expect(pub.boneyardCount).toBe(18)
+    expect(mt.boneyard.cards).toHaveLength(18)
+    expect(pub.handCounts).toEqual(Object.fromEntries(ids.map((id) => [id, 9])))
+    expect(Object.keys(pub.trains).sort()).toEqual(['mex', 'p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
+    expect(Object.keys(pub.open).sort()).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'])
+    for (const p of ids) expect(mt.session.privateStates[p].hand.cards).toHaveLength(9)
+    const dealt = new Set([
+      ...ids.flatMap((p) => mt.session.privateStates[p].hand.cards),
+      ...mt.boneyard.cards,
+    ].map((t) => t.id))
+    expect(dealt.size).toBe(90)
+    expect(dealt.has('12-12')).toBe(false)
   })
 })
 
@@ -385,6 +436,50 @@ describe('blocked round', () => {
     expect(pub.scores).toEqual({ p1: 6, p2: 14, p3: 3, p4: 9 })
     expect(pub.matchWinnerId).toBeNull()
   })
+
+  it('2 players block after 2 passes and the starter alternates by round', () => {
+    const dm = buildGame({
+      players: ['p1', 'p2'],
+      hands: { p1: tiles([[1, 1]]), p2: tiles([[2, 2]]) },   // 2 and 4 pips, nothing matches the 12 engine
+      boneyard: [],
+    })
+    let r = applyMTAction(dm, 'p1', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    expect(r.mt.session.publicState.passStreak).toBe(1)
+    r = applyMTAction(r.mt, 'p2', { type: 'PASS' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.mt.session.publicState
+    expect(pub.stage).toBe('roundEnd')
+    expect(pub.roundResult).toEqual({ kind: 'blocked', outPlayerId: null, pips: { p1: 2, p2: 4 } })
+    expect(pub.scores).toEqual({ p1: 2, p2: 4 })
+    // round 1 starts at seat 1 % 2 = 1
+    const next = applyMTAction(r.mt, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(next.outcome.ok).toBe(true)
+    expect(currentPlayer(next.mt.session.publicState.turn)).toBe('p2')
+  })
+
+  it('8 players block after 8 passes', () => {
+    const ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
+    const dm = buildGame({
+      players: ids,
+      hands: Object.fromEntries(ids.map((id, i) => [id, tiles([[i + 1, i + 1]])])),
+      boneyard: [],
+    })
+    let r = applyMTAction(dm, 'p1', { type: 'PASS' })
+    for (const id of ids.slice(1)) {
+      expect(r.outcome.ok).toBe(true)
+      r = applyMTAction(r.mt, id, { type: 'PASS' })
+    }
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.mt.session.publicState
+    expect(pub.stage).toBe('roundEnd')
+    expect(pub.roundResult).toEqual({
+      kind: 'blocked',
+      outPlayerId: null,
+      pips: Object.fromEntries(ids.map((id, i) => [id, (i + 1) * 2])),
+    })
+    expect(pub.matchWinnerId).toBeNull()
+  })
 })
 
 describe('doubles', () => {
@@ -536,11 +631,11 @@ describe('START_NEXT_ROUND', () => {
     expect(pub.passStreak).toBe(0)
     expect(pub.roundResult).toBeNull()
     expect(pub.lastAction).toBeNull()
-    expect(pub.boneyardCount).toBe(38)
-    expect(pub.handCounts).toEqual({ p1: 13, p2: 13, p3: 13, p4: 13 })
+    expect(pub.boneyardCount).toBe(30)
+    expect(pub.handCounts).toEqual({ p1: 15, p2: 15, p3: 15, p4: 15 })
     expect(pub.scores).toEqual({ p1: 3, p2: 1, p3: 5, p4: 2 })
-    for (const p of PLAYERS) expect(cardCount(r.mt.session.privateStates[p].hand)).toBe(13)
-    expect(r.mt.boneyard.cards).toHaveLength(38)
+    for (const p of PLAYERS) expect(cardCount(r.mt.session.privateStates[p].hand)).toBe(15)
+    expect(r.mt.boneyard.cards).toHaveLength(30)
     const dealt = new Set([
       ...r.mt.session.privateStates.p1.hand.cards,
       ...r.mt.session.privateStates.p2.hand.cards,
@@ -696,6 +791,35 @@ describe('bot', () => {
     let actions = 0
     while (mt.session.publicState.matchWinnerId === null && actions < 5000) {
       const pub = mt.session.publicState
+      if (pub.stage === 'roundEnd') {
+        const r = applyMTAction(mt, 'p1', { type: 'START_NEXT_ROUND' })
+        expect(r.outcome.ok).toBe(true)
+        mt = r.mt
+        actions++
+        continue
+      }
+      const player = currentPlayer(pub.turn)
+      const r = runMTBotTurn(mt, player, mexicanTrainBotStrategy)
+      expect(r.outcome.ok).toBe(true)
+      mt = r.mt
+      actions++
+    }
+    expect(mt.session.publicState.stage).toBe('over')
+    expect(mt.session.publicState.matchWinnerId).not.toBeNull()
+    expect(actions).toBeLessThan(5000)
+  })
+
+  it('a 3-player bot match runs all 13 rounds with the starter rotating r % 3', () => {
+    const starters = ['p1', 'p2', 'p3']
+    let mt = createMexicanTrainGame(starters, 7)
+    let actions = 0
+    let round = 0
+    while (mt.session.publicState.matchWinnerId === null && actions < 5000) {
+      const pub = mt.session.publicState
+      if (pub.stage === 'play' && pub.round === round) {
+        expect(currentPlayer(pub.turn)).toBe(starters[round % 3])
+        round++
+      }
       if (pub.stage === 'roundEnd') {
         const r = applyMTAction(mt, 'p1', { type: 'START_NEXT_ROUND' })
         expect(r.outcome.ok).toBe(true)

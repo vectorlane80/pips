@@ -103,8 +103,8 @@
   gap: clamp(16px, 2.4vw, 26px);
 }
 
-/* ---- Rail (right of the board): four seat cards + the status line in a
-   fixed ~200px column. align-self: stretch keeps the column as tall as the
+/* ---- Rail (right of the board): one seat card per seat + the status line in
+   a fixed ~200px column. align-self: stretch keeps the column as tall as the
    board column. ---- */
 
 .mt-rail {
@@ -290,6 +290,13 @@
 
 /* ---- Locomotive ---- */
 
+/* The dock is a positioned span that reserves the loco's label-row slot, so
+   the open-train slide can transform the loco without reflowing the row. */
+.mt-loco-dock {
+  position: relative;
+  flex: none;
+}
+
 .mt-loco {
   width: 64px;
   height: 40px;
@@ -297,33 +304,57 @@
   filter: drop-shadow(0 3px 0 rgba(23, 23, 58, 0.25));
 }
 
-/* ---- Signal post: 2px ink mast, 12px disc; coral when closed, green when
-   open (0.2s transition) ---- */
+/* Open lane: the engine "rolls out" onto the line — 14px slide with a small
+   overshoot bounce — then idles with a gentle bob. Closing (the owner plays
+   on it) transitions back the same way. The Mexican train is always open but
+   never gets the modifier: it has no closed state to animate from. */
+.mt-loco-dock--open .mt-loco {
+  transform: translateX(14px);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: mt-chug 1.6s ease-in-out infinite;
+}
+
+/* Bobs on top of the 14px X offset — both transforms composed here so the
+   idle motion never clobbers the slide. */
+@keyframes mt-chug {
+  0%,
+  100% {
+    transform: translateX(14px) translateY(0);
+  }
+  50% {
+    transform: translateX(14px) translateY(-1.5px);
+  }
+}
+
+/* ---- Signal post: 2.5px ink mast, 20px disc with a hard mini-shadow; coral
+   when closed, green when open (0.2s transition). The whole post (38px) stays
+   shorter than the loco (40px) so it never overpowers it. ---- */
 
 .mt-signal {
   position: relative;
-  width: 14px;
-  height: 34px;
+  width: 22px;
+  height: 38px;
   flex: none;
 }
 
 .mt-signal-mast {
   position: absolute;
-  left: 6px;
-  top: 16px;
+  left: 9.75px; /* centered under the 20px disc */
+  top: 12px;
   bottom: 0;
-  width: 2px;
+  width: 2.5px;
   background: var(--ink);
 }
 
 .mt-signal-disc {
   position: absolute;
   left: 1px;
-  top: 4px;
-  width: 12px;
-  height: 12px;
+  top: 0;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   border: 2.5px solid var(--ink);
+  box-shadow: 0 2px 0 var(--ink);
   background: var(--coral);
   transition: background 0.2s;
 }

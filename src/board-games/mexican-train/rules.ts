@@ -3,7 +3,7 @@ import { applyAction } from '../../engine/sync.ts'
 import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, createTurnState } from '../../engine/turn-engine.ts'
 import { cardCount, moveCards, removeCardsById, topCard, type Zone } from '../../card-engine/zones.ts'
-import { dealMTRound, handHasLegalPlay, laneEnd, legalLanes } from './state.ts'
+import { createMTOpen, createMTTrains, dealMTRound, handHasLegalPlay, laneEnd, legalLanes } from './state.ts'
 import type {
   MTAction,
   MTLaneKey,
@@ -15,8 +15,6 @@ import type {
   MTStage,
   MTTile,
 } from './state.ts'
-
-type OpenKey = 'p0' | 'p1' | 'p2' | 'p3'
 
 // Adds each player's remaining pip total to the running scores (the out-player's is 0) and
 // closes the round: 'roundEnd', or 'over' with the lowest-total winner after round 12 (ties
@@ -75,9 +73,9 @@ function makeValidator(
       const nextRound = publicState.round + 1
       const { hands, boneyard: newBoneyard, engine } = dealMTRound(publicState.seatOrder, nextRound, rng)
       setBoneyard(newBoneyard)
-      // The new round's starter is seat (round + 1) % 4.
+      // The new round's starter is seat (round + 1) % seatCount.
       let turn = createTurnState<'play'>(publicState.seatOrder, 'play')
-      for (let i = 0; i < nextRound % 4; i++) turn = advanceTurn(turn, 'play')
+      for (let i = 0; i < nextRound % publicState.seatOrder.length; i++) turn = advanceTurn(turn, 'play')
       const handCounts: Record<string, number> = {}
       const newPrivateStates: Record<string, MTPrivateState> = {}
       for (const seatedPlayer of publicState.seatOrder) {
@@ -92,8 +90,8 @@ function makeValidator(
           turn,
           round: nextRound,
           engine,
-          trains: { p0: [], p1: [], p2: [], p3: [], mex: [] },
-          open: { p0: false, p1: false, p2: false, p3: false },
+          trains: createMTTrains(publicState.seatOrder.length),
+          open: createMTOpen(publicState.seatOrder.length),
           boneyardCount: cardCount(newBoneyard),
           handCounts,
           doublePending: false,
@@ -109,7 +107,7 @@ function makeValidator(
     if (currentPlayer(publicState.turn) !== playerId) return { ok: false, reason: 'not your turn' }
 
     const seat = publicState.seatOrder.indexOf(playerId)
-    const ownLane = ('p' + seat) as OpenKey
+    const ownLane = ('p' + seat) as MTLaneKey
     const myHand = privateStates[playerId].hand
 
     if (action.type === 'PLAY_TILE') {
@@ -125,7 +123,7 @@ function makeValidator(
         outer: end === tile.a ? tile.b : tile.a,
         isDouble: tile.a === tile.b,
       }
-      const newTrains: Record<MTLaneKey, MTPlacedTile[]> = {
+      const newTrains: Record<string, MTPlacedTile[]> = {
         ...publicState.trains,
         [action.lane]: [...publicState.trains[action.lane], placedTile],
       }
@@ -210,7 +208,7 @@ function makeValidator(
         passStreak: publicState.passStreak + 1,
         lastAction: { by: playerId, kind: 'pass-open', tile: null, lane: null, double: false, opened: ownLane },
       }
-      if (newPublicState.passStreak >= 4) {
+      if (newPublicState.passStreak >= publicState.seatOrder.length) {
         return finishRound(newPublicState, privateStates, 'blocked', null)
       }
       return {

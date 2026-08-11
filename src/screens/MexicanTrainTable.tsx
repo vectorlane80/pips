@@ -27,7 +27,6 @@ export interface MexicanTrainTableProps {
 // ---- Brand + seat helpers ----
 
 const MEX_COLOR = '#c2410c'
-type OpenKey = 'p0' | 'p1' | 'p2' | 'p3'
 
 // ---- Numeral tile (placed cars + the station's engine double) ----
 
@@ -138,12 +137,12 @@ export function MexicanTrainTable({
   // Lane order: your train first, then the other seats in seat order, then mex.
   const laneOrder = useMemo<MTLaneKey[]>(() => {
     const rest: MTLaneKey[] = []
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < publicState.seatOrder.length; i++) {
       const lane = ('p' + i) as MTLaneKey
       if (lane !== myLane) rest.push(lane)
     }
     return [myLane, ...rest, 'mex']
-  }, [myLane])
+  }, [myLane, publicState.seatOrder])
 
   // ---- Local state ----
   const { play, enabled, setEnabled } = useSound()
@@ -295,7 +294,7 @@ export function MexicanTrainTable({
           right; on narrow screens the rail wraps back to its own row above the
           board column. */}
       <div className="mt-table-card">
-        {/* Rail: four seat cards + the general status line, in a ~200px column */}
+        {/* Rail: one seat card per seat + the general status line, in a ~200px column */}
         <div className="mt-rail">
           {publicState.seatOrder.map((playerId) => {
             const isTurn = playerId === currentPlayer(publicState.turn)
@@ -345,7 +344,7 @@ export function MexicanTrainTable({
               const seatIdx = isMex ? -1 : Number(lane.slice(1))
               const playerId = isMex ? null : publicState.seatOrder[seatIdx]
               const color = isMex ? MEX_COLOR : (colors[playerId!] ?? 'var(--slate-pip)')
-              const open = isMex ? true : publicState.open[lane as OpenKey]
+              const open = isMex ? true : publicState.open[lane]
               const label = isMex
                 ? 'Mexican train'
                 : seatIdx === mySeat
@@ -355,7 +354,9 @@ export function MexicanTrainTable({
               return (
                 <div key={lane} className="mt-lane">
                   <div className="mt-lane-label">
-                    <Loco color={color} star={isMex} />
+                    <span className={`mt-loco-dock${!isMex && open ? ' mt-loco-dock--open' : ''}`}>
+                      <Loco color={color} star={isMex} />
+                    </span>
                     <Signal open={open} />
                     <span className="mt-lane-name">{label}</span>
                   </div>

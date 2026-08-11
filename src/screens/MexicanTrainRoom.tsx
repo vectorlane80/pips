@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { MexicanTrainRulesOverlay } from './MexicanTrainRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import { MT_MAX_SEATS, MT_MIN_SEATS } from '../board-games/mexican-train/state'
 
 export interface MexicanTrainRoomProps {
   code: string
@@ -12,8 +13,6 @@ export interface MexicanTrainRoomProps {
   onStartGame: () => void        // host-only
   onLeave: () => void
 }
-
-const MAX_SEATS = 4
 
 export function MexicanTrainRoom({
   code,
@@ -36,7 +35,7 @@ export function MexicanTrainRoom({
   }
 
   const hostName = seats.find((s) => s.isHost)?.name ?? 'the host'
-  const slots = Array.from({ length: MAX_SEATS }, (_, i) => seats[i] ?? null)
+  const slots = Array.from({ length: MT_MAX_SEATS }, (_, i) => seats[i] ?? null)
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
@@ -90,10 +89,10 @@ export function MexicanTrainRoom({
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
-              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= MAX_SEATS}>
+              <button type="button" className="btn btn-lg" onClick={onAddHouseBot} disabled={seats.length >= MT_MAX_SEATS}>
                 Add house bot
               </button>
-              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < MAX_SEATS}>
+              <button type="button" className="btn btn-coral btn-lg" onClick={onStartGame} disabled={seats.length < MT_MIN_SEATS}>
                 Start game
               </button>
             </div>
@@ -102,9 +101,9 @@ export function MexicanTrainRoom({
               Waiting for {hostName} to start…
             </p>
           )}
-          {seats.length < MAX_SEATS && (
+          {seats.length < MT_MAX_SEATS && (
             <p style={{ marginTop: 14, fontSize: 14, color: 'var(--muted-text)' }}>
-              Mexican Train seats exactly four — bots fill the empty chairs.
+              Two to eight seats — bots can fill any of them.
             </p>
           )}
         </div>
