@@ -399,17 +399,17 @@ export function WahooTable({
       {/* Error banner */}
       {notice && <div className="wh-error-banner">{notice}</div>}
 
-      {/* Main table card: the board column (legend centered above the board, on
-          the board's width) with the die rail to its right. row-reverse puts
-          the rail (DOM-first of the row pair) on the board's right; on narrow
-          screens the rail wraps back to its own row above the board column. */}
+      {/* Main table card: the board column with the die rail to its right.
+          row-reverse puts the rail (DOM-first of the row pair) on the board's
+          right; on narrow screens the rail wraps back to its own row above
+          the board column. */}
       <div className="wh-table-card">
         {/* Rail: the house die (last-roller caption beneath it), the Roll
-            button, and the status lines, stacked in a ~200px column beside the
-            board. row-reverse on the card puts it on the right; flex-start
-            pins the stack to the top. The die is presentational — no onClick.
-            On narrow screens (< 900px) the rail collapses back above the
-            board. */}
+            button, the player legend, and the status lines, stacked in a
+            ~200px column beside the board. row-reverse on the card puts it on
+            the right; flex-start pins the stack to the top. The die is
+            presentational — no onClick. On narrow screens (< 900px) the rail
+            collapses back above the board. */}
         <div className="wh-rail">
           <div className="wh-die-col">
             <Die
@@ -426,15 +426,8 @@ export function WahooTable({
           <button type="button" className="btn btn-coral wh-roll-btn" onClick={onRoll} disabled={!canRoll}>
             Roll
           </button>
-          <div className="wh-status">{status}</div>
-        </div>
-
-        {/* Board column: the legend belongs to the board's column here, not the
-            card's — legend above board, both centered on the board's width, so
-            the legend's center coincides with the board's (the rail no longer
-            pulls it off-center). */}
-        <div className="wh-board-col">
-          {/* Legend: the player pills — the first thing read at game start */}
+          {/* Legend: the player pills, stacked beneath the die/Roll so the
+              whole rail (die, Roll, players) fits beside the board on screen */}
           <div className="wh-legend">
             {publicState.turn.playerOrder.map((pid) => {
               const isTurn = pid === currentPlayer(publicState.turn)
@@ -447,7 +440,10 @@ export function WahooTable({
               )
             })}
           </div>
+          <div className="wh-status">{status}</div>
+        </div>
 
+        <div className="wh-board-col">
           {/* Board — clicking anywhere off a target or marble ring clears the selection */}
           <div className="wh-board" ref={boardRef} onClick={() => setSelectedMarbleIdx(null)}>
             {boardReady && (

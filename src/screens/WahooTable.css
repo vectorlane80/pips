@@ -95,9 +95,9 @@
   gap: clamp(16px, 2.4vw, 26px);
 }
 
-/* ---- Rail (right of the board): die + caption, Roll button, status (fixed
-   ~200px). align-self: stretch keeps the column as tall as the board column
-   (legend + board); justify-content: flex-start pins the stack to the top. ---- */
+/* ---- Rail (right of the board): die + caption, Roll button, player legend,
+   status (fixed ~200px). align-self: stretch keeps the column as tall as the
+   board column; justify-content: flex-start pins the stack to the top. ---- */
 
 .wh-rail {
   flex: none;
@@ -162,13 +162,16 @@
     flex-basis: 100%;
     text-align: center;
   }
+  .wh-legend {
+    flex-basis: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 }
 
-/* ---- Board column: legend centered above the board, both on the board's
-   width. The legend lives in the board's column (not the card's row), so its
-   center coincides with the board's — the rail is the card's right sibling and
-   can't pull it off-center. The column takes the board's old flex slot (card
-   width minus the rail, up to 900px); the board fills it. ---- */
+/* ---- Board column: the board's flex slot (card width minus the rail, up to
+   900px); the board fills it. ---- */
 
 .wh-board-col {
   flex: 1 1 0;
@@ -359,13 +362,13 @@
   }
 }
 
-/* ---- Legend ---- */
+/* ---- Legend (in the rail: one pill per row, under the die/Roll) ---- */
 
 .wh-legend {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .wh-seat-chip {
