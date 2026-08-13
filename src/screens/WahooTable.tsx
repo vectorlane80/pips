@@ -101,7 +101,7 @@ function destinationHole(board: WahooBoard, publicState: WahooPublicState, playe
   const arm = publicState.seatArms[playerId]
   if (move.kind === 'out') return board.track[trackIndexFor(arm, 0)]
   if (move.kind === 'shortcut') return board.center
-  if (move.kind === 'exit') return board.track[exitTargetRel(publicState.centerBy!.entryCornerRel)]
+  if (move.kind === 'exit') return board.track[trackIndexFor(arm, exitTargetRel(publicState.centerBy!.entryCornerRel))]
   const to = publicState.positions[playerId][move.marbleIdx] + die
   return to <= OWNER_TRACK_LEN - 1 ? board.track[trackIndexFor(arm, to)] : board.homes[arm][to - LANE_START]
 }
