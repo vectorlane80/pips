@@ -58,6 +58,15 @@ export function FarkleTable({
     soundSigRef.current = { valuesKey, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
   }, [valuesKey, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
 
+  // Auto-advance after my own farkle: wait ~1.8s so the bust sound lands, then hand
+  // the dice to the next player. The manual 'End turn' button stays as a skip-the-wait.
+  useEffect(() => {
+    if (isMyTurn && f.farkle) {
+      const t = setTimeout(() => onEndTurn(), 1800)
+      return () => clearTimeout(t)
+    }
+  }, [isMyTurn, f.farkle])
+
   const trigIdx = f.finalTrigger ? room.seats.findIndex((s) => s.id === f.finalTrigger) : -1
 
   const remaining = f.dice.length - selected.length

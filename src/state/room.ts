@@ -231,6 +231,21 @@ function farkleToggle(state: RoomState, by: string, dieId: number): RoomState {
   return { ...state, farkle: { ...f, dice } }
 }
 
+// Ends the match if the final lap just completed (turn arrived back at the
+// seat that first crossed the winning score). Shared by every farkle
+// action that can advance the turn — a bust must trigger this exactly
+// like a bank does, or a farkle during the final lap silently skips it.
+function checkFarkleMatchEnd(
+  seats: RoomState['seats'],
+  turnIdx: number,
+  finalRound: boolean,
+  finalTrigger: string | null,
+): { winnerId: string } | null {
+  if (!finalRound || seats[turnIdx]?.id !== finalTrigger) return null
+  const winnerId = [...seats].sort((a, b) => b.score - a.score)[0].id
+  return { winnerId }
+}
+
 function farkleBank(state: RoomState, by: string): RoomState {
   if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
   const f = state.farkle
@@ -251,9 +266,9 @@ function farkleBank(state: RoomState, by: string): RoomState {
   let finalTrigger = f.finalTrigger
   if (!finalRound && newScore >= f.winningScore) { finalRound = true; finalTrigger = by }
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
-  if (finalRound && state.seats[turnIdx]?.id === finalTrigger) {
-    const winnerId = [...seats].sort((a, b) => b.score - a.score)[0].id
-    return { ...state, seats, screen: 'results', winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [] } }
+  const ended = checkFarkleMatchEnd(seats, turnIdx, finalRound, finalTrigger)
+  if (ended) {
+    return { ...state, seats, screen: 'results', winnerId: ended.winnerId, farkle: { ...f, log, turnScore: 0, dice: [], kept: [] } }
   }
   return { ...state, seats, turnIdx, farkle: { ...f, log, turnScore: 0, dice: [], kept: [], farkle: false, finalRound, finalTrigger, round, status: 'Six dice, ready.' } }
 }
@@ -262,7 +277,10 @@ function farkleEndTurn(state: RoomState, by: string): RoomState {
   if (state.screen !== 'farkle' || !isFarkleTurn(state, by)) return state
   const f = state.farkle
   const { turnIdx, round } = advanceTurn(state.seats, state.turnIdx, f.round)
-  return { ...state, turnIdx, farkle: { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.' } }
+  const nextFarkle = { ...f, farkle: false, dice: [], kept: [], round, status: 'Six dice, ready.' }
+  const ended = checkFarkleMatchEnd(state.seats, turnIdx, f.finalRound, f.finalTrigger)
+  if (ended) return { ...state, turnIdx, screen: 'results', winnerId: ended.winnerId, farkle: nextFarkle }
+  return { ...state, turnIdx, farkle: nextFarkle }
 }
 
 // ---------- Yahtzee ----------

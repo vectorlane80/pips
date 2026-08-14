@@ -131,6 +131,39 @@ describe('farkle — held dice survive a busted roll', () => {
   })
 })
 
+describe('farkle — a bust during the final lap ends the match', () => {
+  function finalLapRoom(): RoomState {
+    let room = makeRoom('TEST-2', 'farkle', 'Host', 'h1')
+    room = addSeat(room, 'g1', 'Guest', false)
+    room = addSeat(room, 'g2', 'Guest 2', false)
+    // h1 already banked past winningScore; the final lap is under way.
+    return {
+      ...room,
+      screen: 'farkle' as const,
+      seats: room.seats.map((s) => (s.id === 'h1' ? { ...s, score: 10500 } : s)),
+      farkle: { ...room.farkle, finalRound: true, finalTrigger: 'h1' },
+    }
+  }
+
+  it('ends the match when the farkle brings the turn back to the trigger seat', () => {
+    // g2 is the last seat before the turn returns to h1 (the trigger seat)
+    const room = { ...finalLapRoom(), turnIdx: 2 }
+    const result = applyAction(room, { type: 'farkleEndTurn' }, 'g2')
+
+    expect(result.screen).toBe('results')
+    expect(result.winnerId).toBe('h1')
+  })
+
+  it('keeps going when the next turn belongs to a non-trigger seat', () => {
+    const room = { ...finalLapRoom(), turnIdx: 1 }
+    const result = applyAction(room, { type: 'farkleEndTurn' }, 'g1')
+
+    expect(result.screen).toBe('farkle')
+    expect(result.turnIdx).toBe(2)
+    expect(result.winnerId).toBeNull()
+  })
+})
+
 describe('connect4', () => {
   function connect4Room(): RoomState {
     let room = makeRoom('TEST-3', 'connect4', 'Host', 'h1')
