@@ -48,9 +48,21 @@ The wire format stores arms as flat `{inner, outer, isDouble}` lists —
 geometry is 100% view-side. `layout.ts` lays each arm outward, doubles
 crosswise (1 unit of run length), bends 90° pinwheel-style
 (right→up, up→left, left→down, down→right) at H_MAX=11 / V_MAX=4 units
-with physical-style flush corners, one bend per arm; `scaleToFit` clamps
-the whole board into the fixed pane (min 0.7) — no scrolling, per the
-design decision that replaced the prototype's 440px scrolling pane.
+with physical-style flush corners (the corner offset uses each tile's
+real crosswise half-extent, so doubles landing on a bend meet flush too).
+Leg 0 — every arm's first, un-bent run — always uses the plain H_MAX/V_MAX,
+byte-identical to the original single-bend board; every bend from leg 1 on
+grows the limit immediately (`legLimit`: +`SPIRAL_STEP` units per leg index,
+8-bend ceiling), so a long arm spirals outward instead of running off in one
+direction. Growing from leg 1 (not leg 2) is what keeps two *different* arms
+from colliding: the pinwheel sends right's post-bend run and up's own un-bent
+run onto the same axis (and up→left onto left's, left→down onto down's,
+down→right onto right's), so without leg 1 also widening, one arm's bend
+could land exactly where a neighboring arm's own run already sits — verified
+by an 8000-trial fuzz over the realistic ≤27-tile bound (zero overlaps, zero
+gaps, across every arm-count split and pairing). `scaleToFit` clamps the
+whole board into the fixed pane (min 0.35) — no scrolling, per the design
+decision that replaced the prototype's 440px scrolling pane.
 
 ## Deal intro & sounds
 

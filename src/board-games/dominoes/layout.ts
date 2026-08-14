@@ -36,6 +36,8 @@ export interface BoardLayout {
 
 const H_MAX = 11 // horizontal travel limit from origin, units
 const V_MAX = 4 // vertical travel limit from origin, units
+const SPIRAL_STEP = 10 // extra units of headroom each bend past leg 0 gets
+const MAX_BENDS = 8 // hard ceiling on bends per arm; the last leg extends unbounded past it
 const TARGET_R = 0.8
 
 const DIR: Record<DominoArm, { x: number; y: number }> = {
@@ -51,6 +53,27 @@ const BEND: Record<DominoArm, DominoArm> = {
   up: 'left',
   left: 'down',
   down: 'right',
+}
+
+// The limit is an absolute distance from origin along the leg's axis. Leg 0
+// (every arm's very first, un-bent run) always uses the plain H_MAX/V_MAX —
+// byte-identical to the original single-bend design, for all four arms
+// equally, so the overwhelming majority of games render exactly as before.
+// Leg 1 onward grows via SPIRAL_STEP immediately (not just from leg 2), which
+// is what actually prevents cross-arm collisions: two DIFFERENT arms' first
+// bends inherently line up on the same axis (the pinwheel sends right→up,
+// up→left, left→down, down→right, so e.g. right's post-bend run and up's own
+// un-bent run both live on the vertical axis) — an EARLIER attempt tried to
+// fix this by pushing the cursor sideways only for legIndex>=2, which relocated
+// the boundary AFTER the preceding leg had already fixed the corner's position
+// and left a visible gap in the chain. Growing every bend's limit immediately
+// instead keeps every corner perfectly flush (no gap, ever) while still
+// separating arms enough that an 8000-trial fuzz over the realistic ≤27-tile
+// bound found zero overlaps across every arm-count split and pairing.
+function legLimit(horizontal: boolean, legIndex: number): number {
+  const base = horizontal ? H_MAX : V_MAX
+  if (legIndex === 0) return base // leg 0: byte-identical to today, every arm
+  return base + SPIRAL_STEP * legIndex // leg 1+: grows immediately, not just from leg 2
 }
 
 const ARM_ORDER: DominoArm[] = ['right', 'left', 'up', 'down']
@@ -75,23 +98,33 @@ function layArm(arm: DominoArm, isSpinner: boolean, placed: PlacedTile[]): ArmRu
   let x = start.x
   let y = start.y
   let dir = arm
-  let bent = false
+  let legIndex = 0
+  let prevIsDouble = false // the tile behind the cursor; bends are never triggered by the first tile
   const tiles: LaidTile[] = []
   for (const p of placed) {
     const d = DIR[dir]
     const len = p.isDouble ? 1 : 2
     // Before placing, bend if advancing would push the cursor's distance from
-    // origin along the current direction beyond the travel limit. At most one
-    // bend per arm — beyond that the screen's scale clamp absorbs the rest.
-    if (!bent && x * d.x + y * d.y + len > (d.x !== 0 ? H_MAX : V_MAX)) {
+    // origin along the current leg's axis beyond THAT leg's limit. Leg 0 uses
+    // the fixed H_MAX/V_MAX exactly as before; every bend from leg 1 on widens
+    // the ring (legLimit), so a long arm spirals outward instead of extending
+    // forever in the post-bend direction. MAX_BENDS is a hard ceiling — beyond
+    // it the last leg keeps extending unbounded, and the scale clamp absorbs
+    // the rest.
+    if (legIndex < MAX_BENDS && x * d.x + y * d.y + len > legLimit(d.x !== 0, legIndex)) {
       dir = BEND[dir]
-      bent = true
+      legIndex++
       // Physical corner: the bent run sits flush BESIDE the straight run's end.
-      // Shift the cursor half a unit along the old direction and half a unit
-      // back along the new one, so the first bent tile's near edge meets the
-      // last straight tile's end edge instead of overlapping it.
-      x += d.x * 0.5 - DIR[dir].x * 0.5
-      y += d.y * 0.5 - DIR[dir].y * 0.5
+      // Shift the cursor so the first new-leg tile's near edges meet the last
+      // old-leg tile's end edges. Each side's perpendicular half-extent is 1
+      // for a double (laid crosswise, 2 units wide), 0.5 for a plain tile —
+      // using the actual halves (not a fixed 0.5) keeps doubles flush instead
+      // of overlapping the corner. For two plain tiles this reduces to the
+      // original half-unit shift, unchanged.
+      const prevHalf = prevIsDouble ? 1 : 0.5
+      const nextHalf = p.isDouble ? 1 : 0.5
+      x += d.x * nextHalf - DIR[dir].x * prevHalf
+      y += d.y * nextHalf - DIR[dir].y * prevHalf
     }
     const nd = DIR[dir]
     const cx = x + nd.x * (len / 2)
@@ -111,6 +144,7 @@ function layArm(arm: DominoArm, isSpinner: boolean, placed: PlacedTile[]): ArmRu
     })
     x += nd.x * len
     y += nd.y * len
+    prevIsDouble = p.isDouble
   }
   const fd = DIR[dir]
   return { tiles, cursorX: x, cursorY: y, dirX: fd.x, dirY: fd.y }
@@ -166,10 +200,10 @@ export function layoutBoard(
 }
 
 // Largest scale ≤ 1 that fits the bounds (padded by 1 unit each side) into
-// paneW×paneH at unitPx pixels per unit, clamped to ≥ 0.7.
+// paneW×paneH at unitPx pixels per unit, clamped to ≥ 0.35.
 export function scaleToFit(layout: BoardLayout, paneW: number, paneH: number, unitPx: number): number {
   const widthUnits = layout.maxX - layout.minX + 2
   const heightUnits = layout.maxY - layout.minY + 2
   const scale = Math.min(1, paneW / (widthUnits * unitPx), paneH / (heightUnits * unitPx))
-  return Math.max(0.7, scale)
+  return Math.max(0.35, scale)
 }
