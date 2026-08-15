@@ -1,12 +1,12 @@
+import iconImg from '../assets/pips-icon.png'
+import wordmarkImg from '../assets/pips-wordmark.png'
+
 export function Wordmark({ small, onClick }: { small?: boolean; onClick?: () => void }) {
   const className = `wordmark${small ? ' wordmark--small' : ''}`
   const content = (
     <>
-      <span className="wordmark-mark">
-        <span style={{ left: '30%', top: '30%' }} />
-        <span style={{ left: '70%', top: '70%' }} />
-      </span>
-      <span className="wordmark-text">Pips</span>
+      <img src={iconImg} alt="" className="wordmark-icon" />
+      <img src={wordmarkImg} alt="Pips" className="wordmark-img" />
     </>
   )
 
