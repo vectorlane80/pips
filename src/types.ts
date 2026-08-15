@@ -17,6 +17,14 @@ export const GAME_LABEL: Record<Game, string> = {
   connect4: 'Connect 4',
 }
 
+export const GAME_CODE_PREFIX: Record<Game, string> = {
+  farkle: 'FK',
+  yahtzee: 'YZ',
+  ttt: 'TT',
+  hangman: 'HM',
+  connect4: 'C4',
+}
+
 export const GAME_BLURB: Record<Game, string> = {
   farkle: 'Push your luck with six dice',
   yahtzee: 'Thirteen boxes, three rolls a turn',

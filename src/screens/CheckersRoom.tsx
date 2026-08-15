@@ -43,7 +43,6 @@ export function CheckersRoom({
       <div className="header-row">
         <div className="header-left">
           <Wordmark small onClick={onLeave} />
-          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--muted-text)' }}>Checkers table</span>
         </div>
         <div className="header-actions">
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
@@ -70,9 +69,9 @@ export function CheckersRoom({
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 380px', maxWidth: 460 }}>
-          <div style={{ background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 28, boxShadow: '0 9px 0 var(--ink)', padding: 30 }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Give them this code</div>
-            <div style={{ fontSize: 'clamp(46px,9vw,80px)', fontWeight: 700, letterSpacing: '-0.02em' }}>{code}</div>
+          <div style={{ background: 'var(--yellow)', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 6px 0 var(--ink)', padding: 20 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Give them this code</div>
+            <div style={{ fontSize: 'clamp(26px,4.5vw,38px)', fontWeight: 700, letterSpacing: '-0.02em' }}>{code}</div>
           </div>
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
@@ -95,6 +94,16 @@ export function CheckersRoom({
         </div>
 
         <div style={{ flex: '1 1 320px', maxWidth: 460 }}>
+          <div
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: '#b45309', color: '#fff', fontWeight: 700, fontSize: 15,
+              padding: '8px 18px', borderRadius: 999, border: '3px solid var(--ink)', boxShadow: '0 5px 0 var(--ink)',
+              marginBottom: 14,
+            }}
+          >
+            Checkers
+          </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {slots.map((seat, i) =>

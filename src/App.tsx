@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Action, Game, RoomState } from './types'
+import { GAME_CODE_PREFIX } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
 import { decideBoot, gameFromPath, gamePath, readNameCookie, writeNameCookie, type RoutedGame } from './state/route'
 import { randomBotName } from './data/botNames'
@@ -416,7 +417,7 @@ export default function App() {
   }
 
   function startHost(game: Game) {
-    const code = `PG-${generateCode()}`
+    const code = `${GAME_CODE_PREFIX[game]}-${generateCode()}`
     const hostId = peerIdForCode(code)
     const initial = makeRoom(code, game, name.trim(), hostId)
     roomRef.current = initial
@@ -487,6 +488,7 @@ export default function App() {
     setRole(null)
     setLocalSeatId(null)
     setRulesOpen(false)
+    setJoinCodeInput('')
     // Rummy
     rummyHostRef.current?.destroy()
     rummyHostRef.current = null
