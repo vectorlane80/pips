@@ -4,7 +4,7 @@ import { runBotTurn, type BotStrategy } from '../../engine/bot.ts'
 import { advanceTurn, currentPlayer, setPhase, skipNext, createTurnState } from '../../engine/turn-engine.ts'
 import { moveCards, removeCardsById, topCard, cardCount, createPlayerZone, addCards, recyclePile, type Zone } from '../../card-engine/zones.ts'
 import { shuffleDeck } from '../../card-engine/deck.ts'
-import { isValidSet, isValidRun, isValidColorGroup, classifyPhaseHand } from './classify.ts'
+import { isValidSet, isValidRun, isValidColorGroup, classifyPhaseHand, runLockedRange } from './classify.ts'
 import { PHASES } from './phases.ts'
 import { handPenalty } from './scoring.ts'
 import type { Phase10Session, Phase10PublicState, Phase10PrivateState, Phase10Action, Phase10TurnPhase, Phase10Group, Phase10Hit } from './state.ts'
@@ -266,8 +266,18 @@ function makeValidator(
       // Check against the FULL accumulated group so far — and use the un-wrapped predicate,
       // NOT classifyGroup: there's no exact-count constraint when extending an existing group.
       const currentFull = fullGroupCards(publicState.groups, publicState.hits, action.targetPlayerId, action.groupIndex)
-      const combined = [...currentFull, ...selected]
       const groupType = publicState.groups[action.targetPlayerId][action.groupIndex].type
+      // A run's already-established range is off-limits to new naturals: every rank in it is
+      // already covered (by a natural, or by a Wild filling that gap), so a new natural landing
+      // in-range would silently evict a Wild from the slot it was locked into — see runLockedRange.
+      if (groupType === 'run') {
+        const locked = runLockedRange(currentFull)
+        if (locked) {
+          const intruder = selected.find((c) => c.meta?.kind === 'number' && Number(c.rank) >= locked.min && Number(c.rank) <= locked.max)
+          if (intruder) return { ok: false, reason: 'that number is already covered by a Wild in this run' }
+        }
+      }
+      const combined = [...currentFull, ...selected]
       const valid =
         groupType === 'set' ? isValidSet(combined)
         : groupType === 'run' ? isValidRun(combined)

@@ -56,6 +56,19 @@ export function isValidSet(cards: Card[]): boolean {
   return naturals.every((c) => c.rank === firstRank)
 }
 
+// The [min,max] rank span already established by a run's naturals, or null if
+// the run has no naturals yet (nothing pins any Wild to a value yet). Every
+// rank inside this span is necessarily already occupied — by a natural, or by
+// a Wild filling that gap — since the run is valid. Used to lock a Wild's
+// implied value in place: once a Wild is filling gap N in a laid-down run, no
+// later HIT may add a natural N and bump it loose to represent something
+// else. Only extending the range below min or above max is still open.
+export function runLockedRange(cards: Card[]): { min: number; max: number } | null {
+  const numbers = cards.filter((c) => c.meta?.kind === 'number').map((c) => Number(c.rank))
+  if (numbers.length === 0) return null
+  return { min: Math.min(...numbers), max: Math.max(...numbers) }
+}
+
 // True iff a contiguous run of consecutive integers in [1,12] (no wraparound)
 // can be formed using every card, with wilds filling any gaps or extending
 // either end.

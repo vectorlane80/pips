@@ -500,6 +500,51 @@ describe('Phase 10 integration harness', () => {
     expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(10)
   })
 
+  it('HIT rejected — a natural cannot evict a Wild that already fills that gap in a run', () => {
+    // p2's group is a red run 1-2-W-4 (the Wild is locked in as "3")
+    const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-0', 'p10-2', 'p10-100', 'p10-6'].map((id) => cardMap().get(id)!))
+    const p1Cards = ['p10-4', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18', 'p10-20', 'p10-22', 'p10-24', 'p10-26']
+    const p2Cards = ['p10-28', 'p10-30', 'p10-32', 'p10-34', 'p10-36', 'p10-38', 'p10-40', 'p10-42', 'p10-44', 'p10-46']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96', 'p10-0', 'p10-2', 'p10-100', 'p10-6']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: false },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
+    })
+
+    // red 3 (p10-4) would fill the exact gap the Wild already occupies
+    const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-4'] })
+    expect(result.outcome.ok).toBe(false)
+    expect(result.outcome.reason).toContain('already covered by a Wild')
+    expect(result.game.session.publicState.hits).toHaveLength(0)
+    expect(cardCount(result.game.session.privateStates['p1'].hand)).toBe(10)
+  })
+
+  it('HIT accepted — extending a run past its established range is still allowed with the Wild locked', () => {
+    // same red run 1-2-W-4; extending with a red 5 only touches new range, not the Wild's gap
+    const p2GroupZone = addCards(createPlayerZone('p2', 'p10group-0', 'public'), ['p10-0', 'p10-2', 'p10-100', 'p10-6'].map((id) => cardMap().get(id)!))
+    const p1Cards = ['p10-8', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18', 'p10-20', 'p10-22', 'p10-24', 'p10-26']
+    const p2Cards = ['p10-28', 'p10-30', 'p10-32', 'p10-34', 'p10-36', 'p10-38', 'p10-40', 'p10-42', 'p10-44', 'p10-46']
+    const game = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['p10-96'],
+      stockCardIds: remainingDeckIds([...p1Cards, ...p2Cards, 'p10-96', 'p10-0', 'p10-2', 'p10-100', 'p10-6']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      hasLaidPhase: { p1: true, p2: false },
+      groups: { p1: [], p2: [{ type: 'run', zone: p2GroupZone, phaseNumber: 2 }] },
+    })
+
+    const result = applyPhase10Action(game, 'p1', { type: 'HIT', targetPlayerId: 'p2', groupIndex: 0, cardIds: ['p10-8'] })
+    expect(result.outcome.ok).toBe(true)
+    expect(result.game.session.publicState.hits[0].cards.map((c) => c.id)).toEqual(['p10-8'])
+  })
+
   it('HIT rejected — nonexistent group index', () => {
     const p1Cards = ['p10-80', 'p10-0', 'p10-2', 'p10-4', 'p10-6', 'p10-10', 'p10-12', 'p10-14', 'p10-16', 'p10-18']
     const p2Cards = ['p10-24', 'p10-26', 'p10-28', 'p10-30', 'p10-32', 'p10-34', 'p10-36', 'p10-38', 'p10-40', 'p10-42']

@@ -5,6 +5,7 @@ import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 
 export function YahtzeeTable({
   room, localSeatId, onRoll, onToggleHold, onScore, onOpenRules, onLeave,
@@ -18,9 +19,11 @@ export function YahtzeeTable({
   onLeave: () => void
 }) {
   const y = room.yahtzee
-  const { play } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const humanCount = room.seats.filter((s) => !s.bot).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const displayVals = useDiceAnimation(y.dice, y.rollsLeft)
   const vals = y.dice.map((d) => d.val)
 
@@ -65,6 +68,10 @@ export function YahtzeeTable({
         meta={`${room.code} · Turn ${y.round} of 13`}
         onRules={onOpenRules}
         onLeave={onLeave}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        turnSoundEnabled={turnSoundEnabled}
+        setTurnSoundEnabled={setTurnSoundEnabled}
       />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>

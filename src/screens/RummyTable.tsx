@@ -11,8 +11,10 @@ import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/Playi
 import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './RummyTable.css'
 
 // ---- Props ----
@@ -318,7 +320,8 @@ export function RummyTable({
   const theirCrossLayoffs = publicState.layoffs.filter((l) => l.playerId === opponentId && l.targetPlayerId === localPlayerId)
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'suit' | 'rank'>('suit')
@@ -535,6 +538,7 @@ export function RummyTable({
           hint={`to ${publicState.target}`}
         />
         <div className="rummy-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

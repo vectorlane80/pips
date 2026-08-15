@@ -15,8 +15,10 @@ import { currentPlayer } from '../engine/turn-engine'
 import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { BattleshipRulesOverlay } from './BattleshipRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import markers from '../assets/battleship/markers.png'
 import carrierH from '../assets/battleship/ship-carrier-h.png'
 import carrierV from '../assets/battleship/ship-carrier-v.png'
@@ -142,7 +144,8 @@ export function BattleshipTable({
   const drafting = placing && !publicState.placedReady[localPlayerId]
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const [draft, setDraft] = useState<(ShipId | null)[]>(() => Array.from({ length: BOARD_CELLS }, () => null))
   const [placedIds, setPlacedIds] = useState<ShipId[]>([])
   const [selIdx, setSelIdx] = useState(-1)
@@ -308,6 +311,7 @@ export function BattleshipTable({
           hint="ships sunk"
         />
         <div className="bs-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

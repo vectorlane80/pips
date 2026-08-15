@@ -5,9 +5,11 @@ import type { ChessPublicState } from '../board-games/chess/state'
 import { seatToColor } from '../board-games/chess/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Wordmark } from '../components/Wordmark'
 import { ChessRulesOverlay } from './ChessRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './ChessTable.css'
 
 // ---- Props ----
@@ -69,7 +71,7 @@ export function ChessTable({
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null)
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null)
@@ -79,6 +81,7 @@ export function ChessTable({
   const opponentName = names[opponentId] ?? opponentId
   const mySeat = publicState.seatOrder.indexOf(localPlayerId) as 0 | 1
   const myTurn = currentPlayer(publicState.turn) === localPlayerId
+  useTurnStartSound(myTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const currentId = currentPlayer(publicState.turn)
   const currentName = names[currentId] ?? currentId
   const drawOfferBy = publicState.drawOfferBy
@@ -200,6 +203,7 @@ export function ChessTable({
           </span>
         </div>
         <div className="ch-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

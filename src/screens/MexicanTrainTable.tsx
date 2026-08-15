@@ -3,9 +3,11 @@ import type { MTLaneKey, MTPublicState, MTTile } from '../board-games/mexican-tr
 import { handHasLegalPlay, legalLanes } from '../board-games/mexican-train/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Wordmark } from '../components/Wordmark'
 import { MexicanTrainRulesOverlay } from './MexicanTrainRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './MexicanTrainTable.css'
 
 // ---- Props ----
@@ -145,7 +147,9 @@ export function MexicanTrainTable({
   }, [myLane, publicState.seatOrder])
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  const humanCount = publicState.seatOrder.filter((id) => !id.startsWith('bot')).length
+  useTurnStartSound(myTurn, humanCount, playTurnStart)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedTile = useMemo(() => hand.find((t) => t.id === selectedId) ?? null, [hand, selectedId])
@@ -272,6 +276,7 @@ export function MexicanTrainTable({
           </span>
         </div>
         <div className="mt-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

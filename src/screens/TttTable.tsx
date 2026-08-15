@@ -3,6 +3,7 @@ import type { RoomState } from '../types'
 import { TTT_MARKS } from '../games/ttt'
 import { TableHeader } from '../components/TableHeader'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 
 // Small fixed per-cell rotation so the hand-drawn marks don't line up too neatly.
 const CELL_ROT = [-4, 3, -2, 4, -3, 2, -4, 3, -2]
@@ -17,9 +18,11 @@ export function TttTable({
   onLeave: () => void
 }) {
   const t = room.ttt
-  const { play } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const humanCount = room.seats.filter((s) => !s.bot).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const mySeatIdx = room.seats.findIndex((s) => s.id === localSeatId)
   const roundWinner = t.roundOver && t.winLine.length > 0 ? room.seats[t.board[t.winLine[0]]!] : null
   const roundStatus = t.roundOver
@@ -46,7 +49,17 @@ export function TttTable({
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
-      <TableHeader gameLabel="Tic Tac Toe" gameColor="var(--amber)" meta={`${room.code} · first to three`} onRules={onOpenRules} onLeave={onLeave} />
+      <TableHeader
+        gameLabel="Tic Tac Toe"
+        gameColor="var(--amber)"
+        meta={`${room.code} · first to three`}
+        onRules={onOpenRules}
+        onLeave={onLeave}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        turnSoundEnabled={turnSoundEnabled}
+        setTurnSoundEnabled={setTurnSoundEnabled}
+      />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 420px' }}>

@@ -5,6 +5,7 @@ import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 
 export function FarkleTable({
   room, localSeatId, onRoll, onToggle, onBank, onEndTurn, onOpenRules, onLeave,
@@ -19,9 +20,11 @@ export function FarkleTable({
   onLeave: () => void
 }) {
   const f = room.farkle
-  const { play } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const humanCount = room.seats.filter((s) => !s.bot).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const rollSig = `${f.kept.length}:${f.dice.length}`
   const displayVals = useDiceAnimation(f.dice, rollSig)
 
@@ -90,6 +93,10 @@ export function FarkleTable({
         meta={`${room.code} · Round ${f.round} · to ${f.winningScore.toLocaleString()}`}
         onRules={onOpenRules}
         onLeave={onLeave}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        turnSoundEnabled={turnSoundEnabled}
+        setTurnSoundEnabled={setTurnSoundEnabled}
       />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>

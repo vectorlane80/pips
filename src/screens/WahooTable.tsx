@@ -6,9 +6,11 @@ import { exitTargetRel, legalMoves, type WahooMove, type WahooPublicState } from
 import { currentPlayer } from '../engine/turn-engine'
 import { Die } from '../components/Die'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Wordmark } from '../components/Wordmark'
 import { WahooRulesOverlay } from './WahooRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './WahooTable.css'
 
 // ---- Props ----
@@ -204,7 +206,9 @@ export function WahooTable({
   }, [myMovePhase, publicState, localPlayerId])
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  const humanCount = publicState.turn.playerOrder.filter((id) => !id.startsWith('bot')).length
+  useTurnStartSound(myTurn, humanCount, playTurnStart)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [paneW, setPaneW] = useState(0)
   // The most recent roll, kept so the die still shows a (muted) value between
@@ -385,6 +389,7 @@ export function WahooTable({
           </span>
         </div>
         <div className="wh-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

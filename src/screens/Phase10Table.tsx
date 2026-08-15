@@ -10,8 +10,10 @@ import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phas
 import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Phase10RulesOverlay } from './Phase10RulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './Phase10Table.css'
 
 // ---- Props ----
@@ -103,18 +105,24 @@ function computeRoundBanner(
   )
 }
 
-// Number cards sort by colour (runs and colour groups read as contiguous blocks),
-// then by rank; Skip/Wild (suit 'special') sort last.
-function sortHandForDisplay(cards: Card[]): Card[] {
+// 'color' groups number cards by colour first, then rank — sets and colour groups read as
+// contiguous blocks. 'rank' groups by rank first, then colour — runs (which ignore colour)
+// read as contiguous blocks instead. Skip/Wild (suit 'special') always sort last either way.
+function sortHandForDisplay(cards: Card[], sortBy: 'color' | 'rank'): Card[] {
   return [...cards].sort((a, b) => {
     const ca = COLOR_ORDER[a.suit] ?? 4
     const cb = COLOR_ORDER[b.suit] ?? 4
-    if (ca !== cb) return ca - cb
     const na = Number(a.rank)
     const nb = Number(b.rank)
-    if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb
-    if (a.rank !== b.rank) return a.rank < b.rank ? -1 : 1
-    return 0
+    const aIsNumber = !Number.isNaN(na)
+    const bIsNumber = !Number.isNaN(nb)
+    const rankCmp = aIsNumber && bIsNumber ? na - nb : aIsNumber !== bIsNumber ? (aIsNumber ? -1 : 1) : 0
+    if (sortBy === 'color') {
+      if (ca !== cb) return ca - cb
+      return rankCmp
+    }
+    if (rankCmp !== 0) return rankCmp
+    return ca - cb
   })
 }
 
@@ -317,10 +325,12 @@ export function Phase10Table({
   const theirCrossHits = publicState.hits.filter((h) => h.playerId === opponentId && h.targetPlayerId === localPlayerId)
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [justDrawn, setJustDrawn] = useState<Card | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
+  const [sortBy, setSortBy] = useState<'color' | 'rank'>('color')
   const prevHandRef = useRef<Card[]>(hand)
 
   // Fresh-round detection: show the deal intro exactly once per distinct
@@ -391,9 +401,6 @@ export function Phase10Table({
         play('card-play')
       }
     }
-    if (!p.wasMyTurn && isMyTurn && !publicState.roundOver) {
-      play('die-select')
-    }
     if (!p.roundOver && publicState.roundOver && publicState.roundWinnerId !== null) {
       play('round-win')
     }
@@ -412,11 +419,11 @@ export function Phase10Table({
   // ---- Computed ----
   const sortedHand = useMemo(() => {
     if (!justDrawn || !hand.some((c) => c.id === justDrawn.id)) {
-      return sortHandForDisplay(hand)
+      return sortHandForDisplay(hand, sortBy)
     }
     const rest = hand.filter((c) => c.id !== justDrawn.id)
-    return [...sortHandForDisplay(rest), justDrawn]
-  }, [hand, justDrawn])
+    return [...sortHandForDisplay(rest, sortBy), justDrawn]
+  }, [hand, justDrawn, sortBy])
 
   const selectedCards = useMemo(
     () => selectedIds.map((id) => hand.find((c) => c.id === id)).filter((c): c is Card => c !== undefined),
@@ -521,6 +528,7 @@ export function Phase10Table({
           hint="lower wins"
         />
         <div className="p10-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>
@@ -700,8 +708,26 @@ export function Phase10Table({
           <div className="p10-hand-section">
             {/* Hand header */}
             <div className="p10-hand-header">
-              <span className="p10-hand-label">Your hand</span>
-              <span className="p10-hand-stats">{hand.length} cards</span>
+              <div className="p10-hand-header-left">
+                <span className="p10-hand-label">Your hand</span>
+                <span className="p10-hand-stats">{hand.length} cards</span>
+              </div>
+              <div className="p10-sort-toggle">
+                <button
+                  type="button"
+                  className={`p10-sort-btn ${sortBy === 'color' ? 'p10-sort-btn--active' : ''}`}
+                  onClick={() => setSortBy('color')}
+                >
+                  color
+                </button>
+                <button
+                  type="button"
+                  className={`p10-sort-btn ${sortBy === 'rank' ? 'p10-sort-btn--active' : ''}`}
+                  onClick={() => setSortBy('rank')}
+                >
+                  order
+                </button>
+              </div>
             </div>
 
             {/* Hand cards */}

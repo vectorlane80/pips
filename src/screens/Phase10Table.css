@@ -465,6 +465,14 @@
 
 .p10-hand-header {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.p10-hand-header-left {
+  display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
@@ -480,6 +488,32 @@
   font-weight: 500;
   color: var(--muted-text);
   white-space: nowrap;
+}
+
+/* ---- Sort toggle ---- */
+
+.p10-sort-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.p10-sort-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 2px solid var(--grey-border);
+  background: var(--surface);
+  color: var(--muted-text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.p10-sort-btn--active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
 }
 
 .p10-hand-fan {

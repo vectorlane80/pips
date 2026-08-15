@@ -3,6 +3,7 @@ import type { RoomState } from '../types'
 import { isWordSolved } from '../games/hangman'
 import { TableHeader } from '../components/TableHeader'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const PART_THRESHOLD = { head: 1, body: 2, armL: 3, armR: 4, legL: 5, legR: 6 }
@@ -39,13 +40,16 @@ export function HangmanTable({
   onLeave: () => void
 }) {
   const h = room.hangman
-  const { play } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [wordInput, setWordInput] = useState('')
   const guesser = room.seats[h.guesserIdx]
   const setterIdx = h.guesserIdx === 0 ? 1 : 0
   const setter = room.seats[setterIdx]
   const iAmGuesser = guesser?.id === localSeatId
   const iAmSetter = setter?.id === localSeatId
+  const isMyTurn = h.phase === 'setting' ? iAmSetter : h.phase !== 'roundOver' && iAmGuesser
+  const humanCount = room.seats.filter((s) => !s.bot).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
 
   // Sound effects — diff room state transitions, but only for my own guesses
   // (never for the opponent's turn — otherwise a fast bot spams sound).
@@ -68,7 +72,17 @@ export function HangmanTable({
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
-      <TableHeader gameLabel="Hangman" gameColor="var(--coral)" meta={`${room.code} · first to two`} onRules={onOpenRules} onLeave={onLeave} />
+      <TableHeader
+        gameLabel="Hangman"
+        gameColor="var(--coral)"
+        meta={`${room.code} · first to two`}
+        onRules={onOpenRules}
+        onLeave={onLeave}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        turnSoundEnabled={turnSoundEnabled}
+        setTurnSoundEnabled={setTurnSoundEnabled}
+      />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 480px' }}>

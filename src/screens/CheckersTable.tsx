@@ -3,9 +3,11 @@ import type { CheckersPublicState } from '../board-games/checkers/state'
 import { capturesFrom, movesFrom } from '../board-games/checkers/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Wordmark } from '../components/Wordmark'
 import { CheckersRulesOverlay } from './CheckersRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './CheckersTable.css'
 
 // ---- Props ----
@@ -47,7 +49,7 @@ export function CheckersTable({
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const [rulesOpen, setRulesOpen] = useState(false)
   const [selectedCell, setSelectedCell] = useState<number | null>(null)
 
@@ -56,6 +58,7 @@ export function CheckersTable({
   const opponentName = names[opponentId] ?? opponentId
   const mySeat = publicState.seatOrder.indexOf(localPlayerId) as 0 | 1
   const myTurn = currentPlayer(publicState.turn) === localPlayerId
+  useTurnStartSound(myTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const chainCell = publicState.chainCell
   const currentId = currentPlayer(publicState.turn)
   const currentName = names[currentId] ?? currentId
@@ -173,6 +176,7 @@ export function CheckersTable({
           </span>
         </div>
         <div className="ck-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

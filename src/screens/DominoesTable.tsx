@@ -7,8 +7,10 @@ import { DealIntro, type DealIntroCardBackProps } from '../components/DealIntro'
 import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
+import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { DominoesRulesOverlay } from './DominoesRulesOverlay'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 import './DominoesTable.css'
 
 // ---- Props ----
@@ -200,7 +202,8 @@ export function DominoesTable({
   const noLegalPlay = useMemo(() => !handHasLegalPlay(hand, publicState), [hand, publicState])
 
   // ---- Local state ----
-  const { play, enabled, setEnabled } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
+  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [paneSize, setPaneSize] = useState({ w: 0, h: 0 })
@@ -363,6 +366,7 @@ export function DominoesTable({
           hint={`to ${publicState.target}`}
         />
         <div className="dm-header-actions">
+          <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
           <button type="button" className="btn pill-small" onClick={() => setRulesOpen(true)}>Rules</button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>Leave</button>

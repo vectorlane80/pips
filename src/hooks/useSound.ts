@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import diceRoll from '../assets/sounds/dice-roll.mp3'
 import dieSelect from '../assets/sounds/die-select.mp3'
+import turnStart from '../assets/sounds/turn-start.mp3'
 import drawnX from '../assets/sounds/drawn-x.mp3'
 import drawnCircle from '../assets/sounds/drawn-circle.mp3'
 import pieceDrop from '../assets/sounds/piece-drop.mp3'
@@ -33,7 +34,7 @@ export type SoundName =
   | 'letter-wrong' | 'round-win' | 'game-win' | 'error' | 'ship-hit' | 'ship-miss' | 'ship-sunk'
   | 'domino-shuffle' | 'domino-draw' | 'domino-play' | 'knock'
   | 'checker-move' | 'checker-jump' | 'king-me'
-  | 'train-horn'
+  | 'train-horn' | 'turn-start'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -63,27 +64,35 @@ const SOUND_FILES: Record<SoundName, string> = {
   'checker-jump': checkerJump,
   'king-me': kingMe,
   'train-horn': trainHorn,
+  'turn-start': turnStart,
 }
 
 const COOKIE_NAME = 'pips-sound'
+const TURN_COOKIE_NAME = 'pips-turn-sound'
 
-function readSoundCookie(): boolean {
+function readCookie(name: string): boolean {
   if (typeof document === 'undefined') return true
-  const match = document.cookie.split('; ').find((row) => row.startsWith(`${COOKIE_NAME}=`))
+  const match = document.cookie.split('; ').find((row) => row.startsWith(`${name}=`))
   if (!match) return true
   return match.split('=')[1] === 'on'
 }
 
-function writeSoundCookie(enabled: boolean): void {
-  document.cookie = `${COOKIE_NAME}=${enabled ? 'on' : 'off'}; path=/; max-age=31536000; samesite=lax`
+function writeCookie(name: string, value: boolean): void {
+  document.cookie = `${name}=${value ? 'on' : 'off'}; path=/; max-age=31536000; samesite=lax`
 }
 
 export function useSound() {
-  const [enabled, setEnabledState] = useState<boolean>(() => readSoundCookie())
+  const [enabled, setEnabledState] = useState<boolean>(() => readCookie(COOKIE_NAME))
+  const [turnSoundEnabled, setTurnSoundEnabledState] = useState<boolean>(() => readCookie(TURN_COOKIE_NAME))
 
   const setEnabled = useCallback((value: boolean) => {
-    writeSoundCookie(value)
+    writeCookie(COOKIE_NAME, value)
     setEnabledState(value)
+  }, [])
+
+  const setTurnSoundEnabled = useCallback((value: boolean) => {
+    writeCookie(TURN_COOKIE_NAME, value)
+    setTurnSoundEnabledState(value)
   }, [])
 
   const play = useCallback((name: SoundName) => {
@@ -92,5 +101,13 @@ export function useSound() {
     void audio.play().catch(() => {})
   }, [enabled])
 
-  return { enabled, setEnabled, play }
+  // Separate gate from `play`: the master toggle still blocks it (enabled), but
+  // it also respects its own independent toggle — see TurnSoundToggle.
+  const playTurnStart = useCallback(() => {
+    if (!enabled || !turnSoundEnabled) return
+    const audio = new Audio(SOUND_FILES['turn-start'])
+    void audio.play().catch(() => {})
+  }, [enabled, turnSoundEnabled])
+
+  return { enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, play, playTurnStart }
 }

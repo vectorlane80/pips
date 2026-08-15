@@ -3,6 +3,7 @@ import type { RoomState } from '../types'
 import { lowestOpenRow } from '../games/connect4'
 import { TableHeader } from '../components/TableHeader'
 import { useSound } from '../hooks/useSound'
+import { useTurnStartSound } from '../hooks/useTurnStartSound'
 
 export function Connect4Table({
   room, localSeatId, onPlay, onOpenRules, onLeave,
@@ -14,9 +15,11 @@ export function Connect4Table({
   onLeave: () => void
 }) {
   const c = room.connect4
-  const { play } = useSound()
+  const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
+  const humanCount = room.seats.filter((s) => !s.bot).length
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const roundWinner = c.roundOver && c.winLine.length > 0 ? room.seats[c.board[c.winLine[0]]!] : null
   const roundStatus = c.roundOver
     ? roundWinner
@@ -43,7 +46,17 @@ export function Connect4Table({
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>
-      <TableHeader gameLabel="Connect 4" gameColor="var(--connect4-color)" meta={`${room.code} · first to three`} onRules={onOpenRules} onLeave={onLeave} />
+      <TableHeader
+        gameLabel="Connect 4"
+        gameColor="var(--connect4-color)"
+        meta={`${room.code} · first to three`}
+        onRules={onOpenRules}
+        onLeave={onLeave}
+        enabled={enabled}
+        setEnabled={setEnabled}
+        turnSoundEnabled={turnSoundEnabled}
+        setTurnSoundEnabled={setTurnSoundEnabled}
+      />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)' }}>
         <div style={{ flex: '1 1 460px' }}>
