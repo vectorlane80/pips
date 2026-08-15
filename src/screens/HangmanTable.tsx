@@ -118,7 +118,7 @@ export function HangmanTable({
                 <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Gallows wrong={h.wrong.length} />
                   <div>
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', maxWidth: 400 }}>
+                    <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', maxWidth: 460 }}>
                       {h.word.split(' ').map((word, wi) => (
                         <div key={wi} style={{ display: 'flex', flexWrap: 'nowrap', gap: 6 }}>
                           {word.split('').map((letter, li) => {

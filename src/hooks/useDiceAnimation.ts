@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { Die } from '../types'
 
 /** Flickers through random faces briefly whenever a genuinely new roll lands, then settles on the real values. */
-export function useDiceAnimation(dice: Die[]) {
+export function useDiceAnimation(dice: Die[], rollSignal: string | number) {
   const [display, setDisplay] = useState<number[]>(dice.map((d) => d.val))
   const runId = useRef(0)
-  const valuesKey = dice.map((d) => d.val).join(',')
 
   useEffect(() => {
     if (dice.length === 0) {
@@ -29,7 +28,7 @@ export function useDiceAnimation(dice: Die[]) {
     }
     tick()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valuesKey, dice.length])
+  }, [rollSignal, dice.length])
 
   return display
 }

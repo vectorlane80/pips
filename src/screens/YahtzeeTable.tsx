@@ -21,7 +21,7 @@ export function YahtzeeTable({
   const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
-  const displayVals = useDiceAnimation(y.dice)
+  const displayVals = useDiceAnimation(y.dice, y.rollsLeft)
   const vals = y.dice.map((d) => d.val)
 
   const [diceOrder, setDiceOrder] = useState<{ ids: number[]; heldCount: number }>({ ids: [], heldCount: 0 })
@@ -37,17 +37,16 @@ export function YahtzeeTable({
 
   // Sound effects — diff room state transitions, but only for my own actions
   // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
-  const valuesKey = y.dice.map((d) => d.val).join(',')
   const selKey = y.dice.map((d) => d.sel).join(',')
   const lastTurnRef = y.lastTurn ? `${y.lastTurn.name}:${y.lastTurn.category}:${y.lastTurn.points}` : ''
-  const soundSigRef = useRef({ valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn })
+  const soundSigRef = useRef({ selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
     if (p.wasMyTurn) {
-      if (valuesKey !== p.valuesKey && y.dice.length > 0) {
+      if (y.rollsLeft !== p.rollsLeft && y.dice.length > 0) {
         play('dice-roll')
-      } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+      } else if (selKey !== p.selKey && y.rollsLeft === p.rollsLeft) {
         play('die-select')
       }
       if (lastTurnRef !== p.lastTurnRef && lastTurnRef !== '') {
@@ -55,8 +54,8 @@ export function YahtzeeTable({
         else play('bank-points')
       }
     }
-    soundSigRef.current = { valuesKey, selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn }
-  }, [valuesKey, selKey, lastTurnRef, y.dice.length, y.lastTurn, isMyTurn, play])
+    soundSigRef.current = { selKey, rollsLeft: y.rollsLeft, lastTurnRef, wasMyTurn: isMyTurn }
+  }, [y.rollsLeft, selKey, lastTurnRef, y.dice.length, y.lastTurn, isMyTurn, play])
 
   return (
     <div style={{ maxWidth: 1260, margin: '0 auto', padding: 'clamp(28px,6vw,48px) clamp(18px,5vw,48px) 72px' }}>

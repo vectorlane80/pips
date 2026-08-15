@@ -22,7 +22,8 @@ export function FarkleTable({
   const { play } = useSound()
   const activeSeat = room.seats[room.turnIdx]
   const isMyTurn = activeSeat?.id === localSeatId
-  const displayVals = useDiceAnimation(f.dice)
+  const rollSig = `${f.kept.length}:${f.dice.length}`
+  const displayVals = useDiceAnimation(f.dice, rollSig)
 
   const selected = f.dice.filter((d) => d.sel)
   const sel = selected.length > 0 ? scoreSelection(selected.map((d) => d.val)) : { valid: true, score: 0 }
@@ -34,19 +35,18 @@ export function FarkleTable({
 
   // Sound effects — diff room state transitions, but only for my own actions
   // (never for a bot's or opponent's turn — otherwise a fast bot spams sound).
-  const valuesKey = f.dice.map((d) => d.val).join(',')
   const selKey = f.dice.map((d) => d.sel).join(',')
-  const soundSigRef = useRef({ valuesKey, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn })
+  const soundSigRef = useRef({ rollSig, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn })
 
   useEffect(() => {
     const p = soundSigRef.current
     if (p.wasMyTurn) {
-      const valuesChanged = valuesKey !== p.valuesKey
-      const hotDice = valuesChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
+      const rollChanged = rollSig !== p.rollSig
+      const hotDice = rollChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
       const busted = f.log.length > p.logLen && f.log[f.log.length - 1].tone === 'farkle'
-      if (valuesChanged && f.dice.length > 0 && !busted) {
+      if (rollChanged && f.dice.length > 0 && !busted) {
         play(hotDice ? 'hot-dice' : 'dice-roll')
-      } else if (selKey !== p.selKey && valuesKey === p.valuesKey) {
+      } else if (selKey !== p.selKey && rollSig === p.rollSig) {
         play('die-select')
       }
       if (f.log.length > p.logLen) {
@@ -55,8 +55,8 @@ export function FarkleTable({
         else if (tone === 'farkle') play('farkle-bust')
       }
     }
-    soundSigRef.current = { valuesKey, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
-  }, [valuesKey, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
+    soundSigRef.current = { rollSig, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
+  }, [rollSig, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
 
   // Auto-advance after my own farkle: wait ~1.8s so the bust sound lands, then hand
   // the dice to the next player. The manual 'End turn' button stays as a skip-the-wait.
