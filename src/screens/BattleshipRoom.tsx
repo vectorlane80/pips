@@ -71,16 +71,6 @@ export function BattleshipRoom({
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
 
-          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Playing</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
-            <span
-              className="btn pill-small"
-              style={{ background: 'var(--green-text)', color: '#fff', cursor: 'default' }}
-            >
-              Battleship
-            </span>
-          </div>
-
           <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>House rules</div>
           <div className="bs-variant-list">
             {VARIANTS.map((v) => (

@@ -416,7 +416,7 @@ export default function App() {
   }
 
   function startHost(game: Game) {
-    const code = generateCode()
+    const code = `PG-${generateCode()}`
     const hostId = peerIdForCode(code)
     const initial = makeRoom(code, game, name.trim(), hostId)
     roomRef.current = initial
@@ -2672,7 +2672,6 @@ export default function App() {
           <Room
             room={room}
             isHost={isHost}
-            onPickGame={(g) => dispatch({ type: 'pickGame', game: g })}
             onAddBot={() => dispatch({ type: 'addBot' })}
             onSetDifficulty={(d) => dispatch({ type: 'setBotDifficulty', difficulty: d })}
             onStart={() => dispatch({ type: 'startGame' })}

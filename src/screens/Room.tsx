@@ -1,19 +1,17 @@
 import { useState } from 'react'
-import type { BotDifficulty, Game, RoomState, Seat } from '../types'
-import { GAME_COLOR, GAME_LABEL, GAME_MAX_SEATS } from '../types'
+import type { BotDifficulty, RoomState, Seat } from '../types'
+import { GAME_LABEL, GAME_MAX_SEATS } from '../types'
 import { SeatAvatar } from '../components/SeatAvatar'
 import { Wordmark } from '../components/Wordmark'
 
-const GAMES: Game[] = ['farkle', 'yahtzee', 'ttt', 'hangman', 'connect4']
 const DIFFICULTIES: BotDifficulty[] = ['easy', 'medium', 'hard']
 const DIFFICULTY_LABEL: Record<BotDifficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 
 export function Room({
-  room, isHost, onPickGame, onAddBot, onSetDifficulty, onStart, onLeave, onOpenRules,
+  room, isHost, onAddBot, onSetDifficulty, onStart, onLeave, onOpenRules,
 }: {
   room: RoomState
   isHost: boolean
-  onPickGame: (g: Game) => void
   onAddBot: () => void
   onSetDifficulty: (d: BotDifficulty) => void
   onStart: () => void
@@ -54,26 +52,6 @@ export function Room({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
-
-          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Playing</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
-            {GAMES.map((g) => (
-              <button
-                key={g}
-                type="button"
-                disabled={!isHost}
-                onClick={() => onPickGame(g)}
-                className="btn pill-small"
-                style={{
-                  background: room.game === g ? GAME_COLOR[g] : '#fff',
-                  color: room.game === g ? '#fff' : 'var(--ink)',
-                  cursor: isHost ? 'pointer' : 'default',
-                }}
-              >
-                {GAME_LABEL[g]}
-              </button>
-            ))}
-          </div>
 
           {isHost && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

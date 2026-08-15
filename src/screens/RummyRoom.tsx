@@ -61,16 +61,6 @@ export function RummyRoom({
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
 
-          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Playing</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
-            <span
-              className="btn pill-small"
-              style={{ background: 'var(--green-text)', color: '#fff', cursor: 'default' }}
-            >
-              Rummy
-            </span>
-          </div>
-
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
             <button type="button" className="btn btn-coral btn-lg" onClick={onAddHouseBot}>
               Play the house

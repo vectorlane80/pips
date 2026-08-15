@@ -477,7 +477,7 @@ export function DominoesTable({
             <div className="dm-boneyard-actions">
               <button
                 type="button"
-                className="btn dm-boneyard-btn"
+                className="btn btn-teal dm-boneyard-btn"
                 disabled={!canDraw}
                 onClick={onDraw}
               >

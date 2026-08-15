@@ -12,6 +12,10 @@ import { randomBotName } from '../data/botNames'
 const CODE_WORDS = [
   'BONE', 'DICE', 'CARD', 'GAME', 'PLAY', 'STAR', 'MOON', 'LEAF', 'WAVE', 'FOX',
   'BIRD', 'FROG', 'PLUM', 'MINT', 'SAGE', 'REEF', 'DUNE', 'PEAK', 'GLOW', 'SPARK',
+  'LYNX', 'WOLF', 'HAWK', 'SEAL', 'CRAB', 'FERN', 'ROSE', 'OAK', 'ELM', 'PINE',
+  'CORAL', 'STONE', 'CLOUD', 'RIVER', 'FIELD', 'GROVE', 'BRISK', 'SWIFT', 'BOLD', 'CALM',
+  'GOLD', 'JADE', 'ONYX', 'PEARL', 'RUBY', 'AMBER', 'TEAL', 'PLUME', 'ECHO', 'FLAME',
+  'TRAIL', 'SUMMIT', 'CANYON', 'HARBOR', 'MEADOW', 'THICKET', 'BRAMBLE', 'WILLOW', 'CEDAR', 'BIRCH',
 ]
 
 export function generateCode(): string {

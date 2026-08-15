@@ -4,8 +4,6 @@ import { ChessRulesOverlay } from './ChessRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
 import './BattleshipTable.css'
 
-const BRAND = '#0891b2'
-
 const DIFFICULTIES: { id: ChessDifficulty; name: string; desc: string; disabled?: boolean }[] = [
   { id: 'easy', name: 'Easy', desc: 'Forgiving and a little random.' },
   { id: 'normal', name: 'Normal', desc: 'Thinks two moves ahead.' },
@@ -72,16 +70,6 @@ export function ChessRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
-
-          <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Playing</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
-            <span
-              className="btn pill-small"
-              style={{ background: BRAND, color: '#fff', cursor: 'default' }}
-            >
-              Chess
-            </span>
-          </div>
 
           <div style={{ marginTop: 26, fontWeight: 600, fontSize: 15 }}>Difficulty</div>
           <div className="bs-variant-list">
