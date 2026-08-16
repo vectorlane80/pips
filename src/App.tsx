@@ -277,6 +277,7 @@ export default function App() {
   const rummyStartedRef = useRef(false)
   const rummyNamesRef = useRef<Record<string, string>>({})
   const rummyBotSeatsRef = useRef<Set<string>>(new Set())
+  const rummyBotCounterRef = useRef(0)
   const phase10SessionRef = useRef<Phase10Session | null>(null)
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
   const phase10GuestRef = useRef<GuestHandle<Phase10Action> | null>(null)
@@ -286,6 +287,7 @@ export default function App() {
   const phase10StartedRef = useRef(false)
   const phase10NamesRef = useRef<Record<string, string>>({})
   const phase10BotSeatsRef = useRef<Set<string>>(new Set())
+  const phase10BotCounterRef = useRef(0)
   const battleshipSessionRef = useRef<BattleshipSession | null>(null)
   const battleshipHostRef = useRef<HostHandle<BattleshipView> | null>(null)
   const battleshipGuestRef = useRef<GuestHandle<BattleshipAction> | null>(null)
@@ -310,6 +312,7 @@ export default function App() {
   const wahooStartedRef = useRef(false)
   const wahooNamesRef = useRef<Record<string, string>>({})
   const wahooBotSeatsRef = useRef<Set<string>>(new Set())
+  const wahooBotCounterRef = useRef(0)
   const wahooDroppedRef = useRef<string[]>([])
   const checkersSessionRef = useRef<CheckersSession | null>(null)
   const checkersHostRef = useRef<HostHandle<CheckersView> | null>(null)
@@ -328,6 +331,7 @@ export default function App() {
   const mtStartedRef = useRef(false)
   const mtNamesRef = useRef<Record<string, string>>({})
   const mtBotSeatsRef = useRef<Set<string>>(new Set())
+  const mtBotCounterRef = useRef(0)
   const mtDroppedRef = useRef<string[]>([])
   const chessSessionRef = useRef<ChessSession | null>(null)
   const chessHostRef = useRef<HostHandle<ChessView> | null>(null)
@@ -346,6 +350,7 @@ export default function App() {
   const unoStartedRef = useRef(false)
   const unoNamesRef = useRef<Record<string, string>>({})
   const unoBotSeatsRef = useRef<Set<string>>(new Set())
+  const unoBotCounterRef = useRef(0)
   const unoDroppedRef = useRef<string[]>([])
   const unoDifficultyRef = useRef<BotDifficulty>('medium')
   const unoHouseRulesRef = useRef<Record<UnoHouseRuleKey, boolean>>(resolveHouseRules())
@@ -603,6 +608,7 @@ export default function App() {
     rummySeatsRef.current = []
     rummyBotBusyRef.current = false
     rummyBotSeatsRef.current.clear()
+    rummyBotCounterRef.current = 0
     rummyNamesRef.current = {}
     // Phase 10
     phase10HostRef.current?.destroy()
@@ -623,6 +629,7 @@ export default function App() {
     phase10SeatsRef.current = []
     phase10BotBusyRef.current = false
     phase10BotSeatsRef.current.clear()
+    phase10BotCounterRef.current = 0
     phase10NamesRef.current = {}
     // Battleship
     battleshipHostRef.current?.destroy()
@@ -681,6 +688,7 @@ export default function App() {
     wahooDroppedRef.current = []
     wahooBotBusyRef.current = false
     wahooBotSeatsRef.current.clear()
+    wahooBotCounterRef.current = 0
     wahooNamesRef.current = {}
     // Checkers
     checkersHostRef.current?.destroy()
@@ -721,6 +729,7 @@ export default function App() {
     mtDroppedRef.current = []
     mtBotBusyRef.current = false
     mtBotSeatsRef.current.clear()
+    mtBotCounterRef.current = 0
     mtNamesRef.current = {}
     // Chess
     chessHostRef.current?.destroy()
@@ -762,6 +771,7 @@ export default function App() {
     unoDroppedRef.current = []
     unoBotBusyRef.current = false
     unoBotSeatsRef.current.clear()
+    unoBotCounterRef.current = 0
     unoNamesRef.current = {}
     setUnoHouseRules(resolveHouseRules())
     unoHouseRulesRef.current = resolveHouseRules()
@@ -915,7 +925,8 @@ export default function App() {
   function addRummyHouseBot() {
     if (rummyRole !== 'host' || rummyStartedRef.current) return
     if (rummySeatsRef.current.length >= RUMMY_MAX_SEATS) return
-    const botId = `bot-${rummySeatsRef.current.length}`
+    rummyBotCounterRef.current += 1
+    const botId = `bot-${rummyBotCounterRef.current}`
     const botName = randomBotName(rummySeatsRef.current.map((s) => s.name))
     rummySeatsRef.current = [...rummySeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setRummySeats(rummySeatsRef.current)
@@ -1151,7 +1162,8 @@ export default function App() {
   function addPhase10HouseBot() {
     if (phase10Role !== 'host' || phase10StartedRef.current) return
     if (phase10SeatsRef.current.length >= PHASE10_MAX_SEATS) return
-    const botId = `bot-${phase10SeatsRef.current.length}`
+    phase10BotCounterRef.current += 1
+    const botId = `bot-${phase10BotCounterRef.current}`
     const botName = randomBotName(phase10SeatsRef.current.map((s) => s.name))
     phase10SeatsRef.current = [...phase10SeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setPhase10Seats(phase10SeatsRef.current)
@@ -1734,7 +1746,8 @@ export default function App() {
   function addWahooHouseBot() {
     if (wahooRole !== 'host' || wahooStartedRef.current) return
     if (wahooSeatsRef.current.length >= 4) return
-    const botId = `bot-${wahooSeatsRef.current.length}`
+    wahooBotCounterRef.current += 1
+    const botId = `bot-${wahooBotCounterRef.current}`
     const botName = randomBotName(wahooSeatsRef.current.map((s) => s.name))
     wahooSeatsRef.current = [...wahooSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setWahooSeats(wahooSeatsRef.current)
@@ -2209,7 +2222,8 @@ export default function App() {
   function addMTHouseBot() {
     if (mtRole !== 'host' || mtStartedRef.current) return
     if (mtSeatsRef.current.length >= MT_MAX_SEATS) return
-    const botId = `bot-${mtSeatsRef.current.length}`
+    mtBotCounterRef.current += 1
+    const botId = `bot-${mtBotCounterRef.current}`
     const botName = randomBotName(mtSeatsRef.current.map((s) => s.name))
     mtSeatsRef.current = [...mtSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setMTSeats(mtSeatsRef.current)
@@ -2681,7 +2695,8 @@ export default function App() {
   function addUnoHouseBot() {
     if (unoRole !== 'host' || unoStartedRef.current) return
     if (unoSeatsRef.current.length >= UNO_MAX_SEATS) return
-    const botId = `bot-${unoSeatsRef.current.length}`
+    unoBotCounterRef.current += 1
+    const botId = `bot-${unoBotCounterRef.current}`
     const botName = randomBotName(unoSeatsRef.current.map((s) => s.name))
     unoSeatsRef.current = [...unoSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
     setUnoSeats(unoSeatsRef.current)

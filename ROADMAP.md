@@ -2,6 +2,37 @@
 
 Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
 
+## Charter: house-bot ID collision fix (2026-08-16) — done
+- [x] Single slice (spec 39): fixed a real, pre-existing bug surfaced
+      during the Rummy+Phase10 charter (see Cycle 15 below) —
+      `addXHouseBot()` in 5 games (Rummy, Phase10, Wahoo, Mexican
+      Train, Uno) derived a new bot's `playerId` from the current
+      seats-array length (`bot-${seats.length}`), which could collide
+      with an already-used id after a pre-start guest leave compacted
+      the array (traced: add bot → `bot-1` → guest joins → add bot →
+      `bot-3` → guest leaves, array compacts to length 3 → add bot
+      again → regenerates `bot-3`, a duplicate `playerId` that would
+      corrupt `seatOrder` and every per-player state map). Fixed
+      identically across all 5 with a monotonic per-room counter ref
+      (increment-then-use, reset alongside each game's existing
+      `xBotSeatsRef.current.clear()` in `resetToEntry`) — never reuses
+      a suffix within one room's lifetime regardless of array
+      compaction. Confirmed Battleship/Dominoes/Checkers/Chess use an
+      unrelated single-bot `'bot'` scheme with no bug, correctly left
+      untouched. `src/App.tsx` only, 962 tests unchanged (screens/
+      wiring convention, no dedicated test file) / tsc / build green,
+      independently re-verified by the lead. Review: delegated to
+      deepseek-as-Oscar (low risk — mechanical, no privacy/protocol
+      surface) — approve, no blockers; genuinely adversarial, not a
+      rubber stamp: it traced every `startXHost` call site (Landing
+      picks, deep-link boot, legacy rematch) to prove no path could
+      ever start a room with a stale counter, confirmed the id
+      namespace can't collide with host/guest/other-game ids, and
+      caught one harmless inaccuracy in the lead's own spec (a
+      parenthetical claiming `startXHost()` also clears the seats/bot-
+      seats pair — it doesn't; only `resetToEntry` does, which is
+      where the diff actually put the resets).
+
 ## Charter: Rummy + Phase 10 N-player expansion (2026-08-16) — done
 - [x] Rummy engine (spec 35): `playerIds` tuple → array, 2–4 seats
       (deck-math derived: 52-card deck, 10-card hands, 5 players leaves

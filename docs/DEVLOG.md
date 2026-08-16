@@ -2893,3 +2893,51 @@ shipping each verified charter promptly.
   loop skill's wrap-up-mode guidance: landing this commit, cancelling
   the scheduled backup wakeup, and leaving a clean summary for the
   user's return.
+
+## Cycle 16 — 2026-08-16 — house-bot ID collision fix (spec 39)
+- **User instruction:** "fix the collision bug, /autonomous-dev-loop" —
+  a new, separate, single-milestone charter targeting the bug spec
+  38's implementer had self-caught and correctly left unfixed
+  (Cycle 15, above).
+- **Shipped:** confirmed the bug's real scope by reading all 9
+  `addXHouseBot()` functions in `src/App.tsx` before writing the spec
+  — 5 games (Rummy, Phase10, Wahoo, Mexican Train, Uno) share the
+  vulnerable repeatable index-derived scheme with array-compacting
+  leave handling; the other 4 (Battleship, Dominoes, Checkers, Chess)
+  use a single hardcoded `'bot'` id with no repeatable add and no bug.
+  Fixed all 5 identically in one spec: a monotonic per-room counter
+  ref (`xBotCounterRef`), incremented before use so the first bot in a
+  room is always `bot-1` and no suffix is ever reissued within that
+  room's lifetime, reset alongside each game's existing
+  `xBotSeatsRef.current.clear()` call in `resetToEntry`. Deliberately
+  chose a simple monotonic counter over a randomized/UUID scheme —
+  the minimum fix that closes the actual mechanism, not a bigger
+  rewrite.
+- **Implementer:** clean first pass, no tool-cap hits, no retries
+  needed — the smallest and most mechanical spec dispatched this
+  entire run.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (962/962, unchanged), `npm run build` (clean) myself. Read the full
+  diff directly — confirmed all 20 insertions/5 deletions stayed
+  inside `src/App.tsx`, touched only the 5 authorized games, and the
+  increment-then-use ordering was correct in all 5 (no `bot-0` risk).
+- **Review:** delegated to deepseek-as-Oscar (low risk — mechanical
+  fix, no hand-privacy or protocol surface, unlike the wiring passes
+  reviewed personally earlier in this run). Genuinely adversarial, not
+  a rubber stamp: it traced every `startXHost` call site (Landing
+  `onPickX` handlers, deep-link boot via `hostGameFromBoot`, legacy
+  dice-game rematch) to prove no reachable path starts a room with a
+  stale counter; confirmed the `bot-N` namespace can't collide with
+  host ids (`pips-<code>`), guest ids, or the 4 unaffected games' own
+  `'bot'` id; confirmed nothing in the codebase parses the `bot-N`
+  suffix for meaning, so renumbering behavior (first bot is now always
+  `bot-1`, where the old scheme could start higher if a guest had
+  joined first) is safe. It also caught a real inaccuracy in the
+  lead's own spec — a parenthetical claiming `startXHost()` clears the
+  seats/bot-seats pair, which it doesn't; only `resetToEntry` does,
+  which is where the fix actually placed the resets, so the diff
+  itself was correct despite the spec's wrong aside. Verdict: approve,
+  no blockers.
+- **Charter status:** complete — single-milestone charter, done in one
+  cycle.
+- **Continue?** No further work in scope; nothing else was requested.
