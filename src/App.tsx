@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Action, Game, RoomState } from './types'
+import type { Action, BotDifficulty, Game, RoomState } from './types'
 import { GAME_CODE_PREFIX } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
 import { decideBoot, gameFromPath, gamePath, readNameCookie, writeNameCookie, type RoutedGame } from './state/route'
@@ -86,6 +86,15 @@ import { ChessTable } from './screens/ChessTable'
 import { ChessResults } from './screens/ChessResults'
 import { ChessRoom } from './screens/ChessRoom'
 
+// ---- Uno (separate parallel session, per CHARTER.md resolution #7) ----
+import { createUnoGame, resolveHouseRules, UNO_MAX_SEATS, UNO_MIN_SEATS, type UnoAction, type UnoHouseRuleKey, type UnoPublicState, type UnoSession } from './card-games/uno/state'
+import { applyUnoAction, runUnoBotTurn } from './card-games/uno/rules'
+import { unoBotStrategy } from './card-games/uno/bot'
+import type { UnoCard } from './card-games/uno/deck'
+import { UnoTable } from './screens/UnoTable'
+import { UnoResults } from './screens/UnoResults'
+import { UnoRoom } from './screens/UnoRoom'
+
 type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
@@ -100,9 +109,25 @@ type MTView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: MTPublicState; hand: MTTile[]; names: Record<string, string> }
 type ChessView = { revision: number; publicState: ChessPublicState; opponentName: string }
+type UnoView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty }
+  | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
+// Extra wait after a Wahoo pass/bust (turn moves with nothing to click) so
+// the die-flicker animation always finishes before the next actor starts.
+const PASS_ANIMATION_BUFFER_MS = 450
+// MT-specific pacing: measured against the actual sound assets so bot turns
+// don't outrun their own sounds. domino-play/domino-draw run ~1.03s; a bare
+// BASE_MS (900ms) gap between actions clips their tail.
+const MT_ACTION_MS = 1100
+// train-horn runs 3.6s. Any action that opens a train (pass-open OR a dead
+// draw — both honk, see MexicanTrainTable's `action.opened !== null` sound
+// gate) needs the next action held off long enough that the horn finishes.
+// This buffer is IN ADDITION to the MT_ACTION_MS the loop already pays on
+// its next iteration, so buffer + MT_ACTION_MS should cover the full clip.
+const MT_HORN_BUFFER_MS = 2500
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -200,6 +225,19 @@ export default function App() {
   const [chessWaiting, setChessWaiting] = useState(false)
   const [chessDifficulty, setChessDifficulty] = useState<ChessDifficulty>('easy')
 
+  // ---- Uno ----
+  const [unoRole, setUnoRole] = useState<'host' | 'guest' | null>(null)
+  const [unoCode, setUnoCode] = useState('')
+  const [unoLocalPlayerId, setUnoLocalPlayerId] = useState<string | null>(null)
+  const [unoView, setUnoView] = useState<UnoView | null>(null)
+  const [unoConnection, setUnoConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [unoNotice, setUnoNotice] = useState<string | null>(null)
+  const [unoStarted, setUnoStarted] = useState(false)
+  const [unoSeats, setUnoSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [unoDropped, setUnoDropped] = useState<string[]>([])
+  const [unoHouseRules, setUnoHouseRules] = useState<Record<UnoHouseRuleKey, boolean>>(() => resolveHouseRules())
+  const [unoDifficulty, setUnoDifficulty] = useState<BotDifficulty>('medium')
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -269,6 +307,23 @@ export default function App() {
   const chessOpponentIdRef = useRef<string | null>(null)
   const chessOpponentNameRef = useRef('')
   const chessDifficultyRef = useRef<ChessDifficulty>('easy')
+  const unoSessionRef = useRef<UnoSession | null>(null)
+  const unoHostRef = useRef<HostHandle<UnoView> | null>(null)
+  const unoGuestRef = useRef<GuestHandle<UnoAction> | null>(null)
+  const unoBotBusyRef = useRef(false)
+  const unoLocalPlayerIdRef = useRef<string | null>(null)
+  const unoSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const unoStartedRef = useRef(false)
+  const unoNamesRef = useRef<Record<string, string>>({})
+  const unoBotSeatsRef = useRef<Set<string>>(new Set())
+  const unoDroppedRef = useRef<string[]>([])
+  const unoDifficultyRef = useRef<BotDifficulty>('medium')
+  const unoHouseRulesRef = useRef<Record<UnoHouseRuleKey, boolean>>(resolveHouseRules())
+  // Bot Uno-call reflex state (§6): the vulnerable seat's playerId (null when
+  // no window is open), plus a generation counter bumped on every window change
+  // to invalidate any setTimeout scheduled against a now-stale window.
+  const unoWindowKeyRef = useRef<string | null>(null)
+  const unoReflexGenRef = useRef(0)
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -294,6 +349,8 @@ export default function App() {
     checkersGuestRef.current?.destroy()
     chessHostRef.current?.destroy()
     chessGuestRef.current?.destroy()
+    unoHostRef.current?.destroy()
+    unoGuestRef.current?.destroy()
   }, [])
 
   // ---- Routing ----
@@ -362,13 +419,14 @@ export default function App() {
     if (checkersRole && checkersStarted && checkersView?.kind === 'game' && checkersView.publicState.stage !== 'over') return 'checkers'
     if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
     if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
+    if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView])
+  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -398,6 +456,7 @@ export default function App() {
       case 'checkers': startCheckersHost(); return
       case 'mexican-train': startMTHost(); return
       case 'chess': startChessHost(); return
+      case 'uno': startUnoHost(); return
     }
   }
 
@@ -640,6 +699,34 @@ export default function App() {
     setChessWaiting(false)
     setChessDifficulty('easy')
     chessDifficultyRef.current = 'easy'
+    // Uno
+    unoHostRef.current?.destroy()
+    unoHostRef.current = null
+    unoGuestRef.current?.destroy()
+    unoGuestRef.current = null
+    unoSessionRef.current = null
+    setUnoRole(null)
+    setUnoCode('')
+    setUnoLocalPlayerId(null)
+    unoLocalPlayerIdRef.current = null
+    setUnoView(null)
+    setUnoConnection('connected')
+    setUnoNotice(null)
+    setUnoStarted(false)
+    unoStartedRef.current = false
+    setUnoSeats([])
+    unoSeatsRef.current = []
+    setUnoDropped([])
+    unoDroppedRef.current = []
+    unoBotBusyRef.current = false
+    unoBotSeatsRef.current.clear()
+    unoNamesRef.current = {}
+    setUnoHouseRules(resolveHouseRules())
+    unoHouseRulesRef.current = resolveHouseRules()
+    unoDifficultyRef.current = 'medium'
+    setUnoDifficulty('medium')
+    unoWindowKeyRef.current = null
+    unoReflexGenRef.current = 0
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -1509,6 +1596,8 @@ export default function App() {
       if (!result.outcome.ok) return
       wahooSessionRef.current = result.wh
       wahooBroadcast()
+      const kind = result.wh.session.publicState.lastEvent?.kind
+      if (kind === 'pass' || kind === 'bust') await wait(PASS_ANIMATION_BUFFER_MS)
     }
   }
 
@@ -1972,7 +2061,7 @@ export default function App() {
 
   async function runMTBots(botId: string, key: string) {
     while (!mtStale(key)) {
-      await wait(BASE_MS)
+      await wait(MT_ACTION_MS)
       if (mtStale(key)) return
       const session = mtSessionRef.current!
       const ps = session.session.publicState
@@ -1983,11 +2072,11 @@ export default function App() {
       if (!result.outcome.ok) return
       mtSessionRef.current = result.mt
       mtBroadcast()
-      // A pass-open is a honk: leave clear air (on top of the normal per-action
-      // beat) before the next bot acts, so consecutive stuck bots don't pile
-      // their horns into one rush.
-      if (result.mt.session.publicState.lastAction?.kind === 'pass-open') {
-        await wait(BASE_MS * 0.8)
+      // Opening a train (pass-open or a dead draw) plays the 3.6s train-horn:
+      // leave clear air (on top of the normal per-action beat) before the next
+      // bot acts, so consecutive stuck bots don't pile their horns into one rush.
+      if (result.mt.session.publicState.lastAction?.opened !== null) {
+        await wait(MT_HORN_BUFFER_MS)
         if (mtStale(key)) return
       }
     }
@@ -2258,6 +2347,384 @@ export default function App() {
   }
 
   // ---- End Chess helpers ----
+
+  // ---- Uno helpers ----
+
+  // Seat inks, fixed per seat index 0..9 — extends MT's 8-color palette with
+  // two more distinct hexes so a full 10-seat Uno table keeps unique colors.
+  const UNO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0', '#f97316', '#64748b', '#ec4899', '#8b5cf6']
+
+  // The actor key must re-key on any field that can change within the SAME
+  // player's turn (a draw-then-play is two actions, same turnNumber), so the
+  // loop re-evaluates after a draw that doesn't advance the turn.
+  function unoActorKey(uno: UnoSession): string {
+    const ps = uno.session.publicState
+    return `${ps.stage}:${ps.turn.turnNumber}:${ps.hasDrawnThisTurn}:${ps.pendingWild !== null}:${ps.stockCount}:${ps.discardPile.cards.length}`
+  }
+
+  function unoStale(key: string) {
+    return !unoSessionRef.current || unoActorKey(unoSessionRef.current) !== key
+  }
+
+  // Hands are PRIVATE and up to 9 guests can be seated, so a single broadcast
+  // cannot carry every hand (any guest would see the others'). Lobby phase →
+  // broadcast the roster view (now also carrying the host's house rules and
+  // bot difficulty so guests render them read-only); game phase → per-guest
+  // sendTo with only that guest's own hand. The host's own view comes from
+  // its local snapshot.
+  function unoBroadcast() {
+    if (!unoStartedRef.current) {
+      const view: UnoView = {
+        kind: 'lobby',
+        roster: unoSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === unoLocalPlayerIdRef.current })),
+        houseRules: { ...unoHouseRulesRef.current },
+        difficulty: unoDifficultyRef.current,
+      }
+      setUnoView(view)
+      unoHostRef.current?.broadcast(view)
+      return
+    }
+    const session = unoSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, unoLocalPlayerIdRef.current!)
+    setUnoView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      hand: hostSnap.privateState!.hand.cards,
+      names: { ...unoNamesRef.current },
+    })
+    const names = { ...unoNamesRef.current }
+    for (const seat of unoSeatsRef.current) {
+      if (seat.playerId === unoLocalPlayerIdRef.current) continue
+      if (unoBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      unoHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        hand: guestSnap.privateState!.hand.cards,
+        names,
+      })
+    }
+    // Every accepted action of ANY kind (play, draw, pass, color choice,
+    // CALL_UNO, or a round transition) flows through here, so the host's bot
+    // reflex system observes every unoWindow value the session ever produces.
+    checkUnoBotReflexes()
+  }
+
+  function startUnoHost() {
+    const code = `UN-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setUnoRole('host')
+    writeNameCookie(name)
+    pushGameUrl('uno')
+    setUnoCode(code)
+    setUnoLocalPlayerId(hostId)
+    unoLocalPlayerIdRef.current = hostId
+    setUnoStarted(false)
+    unoStartedRef.current = false
+    setUnoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    unoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    unoDroppedRef.current = []
+    setUnoDropped([])
+    setUnoNotice(null)
+    setUnoHouseRules(resolveHouseRules())
+    unoHouseRulesRef.current = resolveHouseRules()
+    unoDifficultyRef.current = 'medium'
+    setUnoDifficulty('medium')
+    unoWindowKeyRef.current = null
+    unoReflexGenRef.current = 0
+    setError(null)
+    unoHostRef.current = createHost<UnoView, UnoAction>(code, {
+      onJoin(guestId, guestName) {
+        if (unoStartedRef.current) {
+          unoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (unoSeatsRef.current.length >= UNO_MAX_SEATS) {
+          unoHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        unoSeatsRef.current = [...unoSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setUnoSeats(unoSeatsRef.current)
+        unoBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!unoStartedRef.current) return
+        const session = unoSessionRef.current
+        if (!session) return
+        if (!unoSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyUnoAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        unoSessionRef.current = result.uno
+        unoBroadcast()
+      },
+      onLeave(guestId) {
+        if (!unoStartedRef.current) {
+          unoSeatsRef.current = unoSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setUnoSeats(unoSeatsRef.current)
+          unoBroadcast()
+          return
+        }
+        const seat = unoSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setUnoNotice(`${seat.name} disconnected.`)
+        if (!unoDroppedRef.current.includes(guestId)) {
+          unoDroppedRef.current = [...unoDroppedRef.current, guestId]
+          setUnoDropped(unoDroppedRef.current)
+        }
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    unoBroadcast()
+  }
+
+  function addUnoHouseBot() {
+    if (unoRole !== 'host' || unoStartedRef.current) return
+    if (unoSeatsRef.current.length >= UNO_MAX_SEATS) return
+    const botId = `bot-${unoSeatsRef.current.length}`
+    const botName = randomBotName(unoSeatsRef.current.map((s) => s.name))
+    unoSeatsRef.current = [...unoSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setUnoSeats(unoSeatsRef.current)
+    unoBotSeatsRef.current.add(botId)
+    unoBroadcast()
+  }
+
+  function unoToggleHouseRule(key: UnoHouseRuleKey) {
+    if (unoRole !== 'host' || unoStartedRef.current) return
+    // Ref-first (not the state value): unoBroadcast() runs synchronously below
+    // and must send the just-toggled rules, which the state updater can't
+    // guarantee yet.
+    const next = { ...unoHouseRulesRef.current, [key]: !unoHouseRulesRef.current[key] }
+    unoHouseRulesRef.current = next
+    setUnoHouseRules(next)
+    unoBroadcast()
+  }
+
+  function unoSetDifficulty(d: BotDifficulty) {
+    if (unoRole !== 'host' || unoStartedRef.current) return
+    unoDifficultyRef.current = d
+    setUnoDifficulty(d)
+    unoBroadcast()
+  }
+
+  function unoStart() {
+    if (unoRole !== 'host' || unoStartedRef.current) return
+    const seats = unoSeatsRef.current
+    // Variable seat count: at least UNO_MIN_SEATS, at most UNO_MAX_SEATS —
+    // whatever is seated when the host presses Start, NOT a fixed-count gate.
+    if (seats.length < UNO_MIN_SEATS || seats.length > UNO_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
+    // Deliberately outside the seeded rng: host-only, one-time, and seatOrder
+    // is sent to guests — it must not shift the seeded deal.
+    for (let i = playerIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]]
+    }
+    const seed = Math.floor(Math.random() * 2147483647)
+    unoSessionRef.current = createUnoGame(playerIds, seed, unoHouseRulesRef.current)
+    unoNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    unoStartedRef.current = true
+    setUnoStarted(true)
+    unoDroppedRef.current = []
+    setUnoDropped([])
+    unoWindowKeyRef.current = null
+    unoReflexGenRef.current = 0
+    unoBroadcast()
+  }
+
+  function unoReplaceWithBot(playerId: string) {
+    if (unoRole !== 'host' || !unoStartedRef.current) return
+    // Ref-guard (not the state value): a double-click before React re-renders
+    // would otherwise read the stale dropped list twice and replace twice.
+    if (!unoDroppedRef.current.includes(playerId)) return
+    unoBotSeatsRef.current.add(playerId)
+    unoNamesRef.current = { ...unoNamesRef.current, [playerId]: `${unoNamesRef.current[playerId]} (bot)` }
+    unoDroppedRef.current = unoDroppedRef.current.filter((id) => id !== playerId)
+    setUnoDropped(unoDroppedRef.current)
+    // If this seat was vulnerable (unoWindow open on them) while still human,
+    // checkUnoBotReflexes() never scheduled a reflex for them — humans aren't
+    // bots, so the window-open pass skipped them. Now that they're a bot,
+    // force the next unoBroadcast() to treat the window as "new" so a self-
+    // call reflex actually gets scheduled instead of the window just sitting
+    // open until the next player's turn clears it uncalled.
+    if (unoSessionRef.current?.session.publicState.unoWindow?.playerId === playerId) {
+      unoWindowKeyRef.current = null
+    }
+    unoBroadcast()
+    runUnoBotsIfNeeded()
+  }
+
+  async function runUnoBots(botId: string, key: string) {
+    while (!unoStale(key)) {
+      await wait(BASE_MS)
+      if (unoStale(key)) return
+      const session = unoSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.stage !== 'play') return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!unoBotSeatsRef.current.has(botId)) return
+      const result = runUnoBotTurn(session, botId, unoBotStrategy)
+      if (!result.outcome.ok) return
+      unoSessionRef.current = result.uno
+      unoBroadcast()
+    }
+  }
+
+  async function runUnoBotsIfNeeded() {
+    if (unoBotBusyRef.current) return
+    const session = unoSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.stage !== 'play') return
+    const currentId = currentPlayer(ps.turn)
+    if (!unoBotSeatsRef.current.has(currentId)) return
+    unoBotBusyRef.current = true
+    const key = unoActorKey(session)
+    try {
+      await runUnoBots(currentId, key)
+    } finally {
+      unoBotBusyRef.current = false
+      setTimeout(() => runUnoBotsIfNeeded(), 50)
+    }
+  }
+
+  function startUnoGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<UnoView, UnoAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setUnoView(view)
+          setUnoHouseRules(view.houseRules)
+          setUnoDifficulty(view.difficulty)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setUnoView(view)
+        setUnoStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setUnoConnection('connected')
+      },
+      onDisconnected() {
+        setUnoConnection('disconnected')
+      },
+    })
+    unoGuestRef.current = handle
+    setUnoRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('uno')
+    setUnoCode(code)
+    handle.peerId.then((id) => { setUnoLocalPlayerId(id); unoLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function unoDispatch(action: UnoAction) {
+    if (unoRole === 'host' && unoLocalPlayerId) {
+      const session = unoSessionRef.current
+      if (!session) return
+      const result = applyUnoAction(session, unoLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      unoSessionRef.current = result.uno
+      unoBroadcast()
+    } else if (unoRole === 'guest') {
+      unoGuestRef.current?.sendAction(action)
+    }
+  }
+
+  function unoRematch() {
+    if (unoRole !== 'host' || !unoSessionRef.current) return
+    const ps = unoSessionRef.current.session.publicState
+    if (ps.stage !== 'over') return
+    const prevRevision = unoSessionRef.current.session.revision
+    const playerIds = [...ps.seatOrder]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createUnoGame(playerIds, seed, ps.houseRules)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    unoSessionRef.current = next
+    unoWindowKeyRef.current = null
+    unoReflexGenRef.current = 0
+    unoBroadcast()
+  }
+
+  // ---- Bot Uno-call reflex system (§6) ----
+  //
+  // CALL_UNO is not part of unoBotStrategy and is not gated by turn
+  // ownership, so bots need a SEPARATE reflex path that runs independently of
+  // the per-turn bot loop above. It is triggered by unoWindow changing, not by
+  // whose turn it is. Every setTimeout callback re-checks the generation
+  // counter before acting, so a reflex scheduled against an old window can
+  // never fire a stale CALL_UNO after that window has closed.
+
+  function rollUnoBotReflex(difficulty: BotDifficulty, _isSelf: boolean): { delayMs: number; skip: boolean } {
+    // Same distribution for self-calls and catches — the load-bearing dynamic
+    // is the delay sometimes exceeding a fast catcher's 1s window, not a
+    // self/catch asymmetry. Easy straddles/exceeds 1000ms (often loses races);
+    // hard is mostly under 1000ms (usually wins them).
+    const tier =
+      difficulty === 'easy' ? { min: 900, max: 1500, skip: 0.2 } :
+      difficulty === 'hard' ? { min: 400, max: 800, skip: 0.03 } :
+      { min: 600, max: 1100, skip: 0.1 }
+    const delayMs = tier.min + Math.random() * (tier.max - tier.min)
+    const skip = Math.random() < tier.skip
+    return { delayMs, skip }
+  }
+
+  function attemptUnoBotCall(callerId: string, targetPlayerId: string) {
+    const session = unoSessionRef.current
+    if (!session) return
+    if (session.session.publicState.unoWindow?.playerId !== targetPlayerId) return
+    const result = applyUnoAction(session, callerId, { type: 'CALL_UNO', targetPlayerId })
+    if (!result.outcome.ok) return
+    unoSessionRef.current = result.uno
+    // Re-broadcasting re-invokes checkUnoBotReflexes(), which will see the
+    // window is now null and bump the generation counter, invalidating any
+    // other still-pending timers from this same window.
+    unoBroadcast()
+  }
+
+  function checkUnoBotReflexes() {
+    const session = unoSessionRef.current
+    if (!session) return
+    const window = session.session.publicState.unoWindow
+    const newKey = window?.playerId ?? null
+    if (newKey === unoWindowKeyRef.current) return
+    unoWindowKeyRef.current = newKey
+    // Bump the generation counter on every window change (open, close, or
+    // re-open for someone else). A window closing and the SAME player's window
+    // reopening later necessarily passes through null in between (spec 34b:
+    // destroyed windows are never reopened stale), so a plain
+    // current !== new comparison is sufficient — no extra generation counter
+    // is needed for THAT part. This counter is for invalidating pending
+    // setTimeouts, not for detecting the window change itself.
+    const myGen = ++unoReflexGenRef.current
+    if (newKey === null) return
+    for (const seat of unoSeatsRef.current) {
+      if (!unoBotSeatsRef.current.has(seat.playerId)) continue
+      const isSelf = seat.playerId === newKey
+      const { delayMs, skip } = rollUnoBotReflex(unoDifficultyRef.current, isSelf)
+      if (skip) continue
+      const targetPlayerId = newKey
+      setTimeout(() => {
+        if (unoReflexGenRef.current !== myGen) return
+        attemptUnoBotCall(seat.playerId, targetPlayerId)
+      }, delayMs)
+    }
+  }
+
+  // ---- End Uno helpers ----
 
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
@@ -2581,7 +3048,7 @@ export default function App() {
     if (handHasLegalPlay(hand, seat, mtView.publicState)) return
     // Chained stuck players: when the PREVIOUS action was also a pass-open,
     // stretch the auto-pass beat so the horns don't pile up.
-    const delay = mtView.publicState.lastAction?.kind === 'pass-open' ? BASE_MS * 1.6 : BASE_MS
+    const delay = mtView.publicState.lastAction?.kind === 'pass-open' ? MT_ACTION_MS + MT_HORN_BUFFER_MS : MT_ACTION_MS
     const t = setTimeout(() => {
       const live = mtSessionRef.current
       if (!live) return
@@ -2627,11 +3094,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chessRole, chessView])
 
+  // ---- Uno effects (host-only) ----
+
+  // Bot turn trigger. The actor key includes every field that can change
+  // within the SAME player's turn (draw-then-play is two actions, same
+  // turnNumber), so the inner loop re-evaluates after a draw that doesn't
+  // advance the turn. CALL_UNO is NOT part of this loop — see
+  // checkUnoBotReflexes(), which runs at the end of every unoBroadcast().
+  useEffect(() => {
+    if (unoRole !== 'host' || !unoView) return
+    runUnoBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unoRole, unoView])
+
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, and Chess are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole) {
+  // Checkers, Mexican Train, Chess, and Uno are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole) {
     return (
       <Landing
         name={name}
@@ -2648,6 +3128,7 @@ export default function App() {
           else if (code.startsWith('CK-')) startCheckersGuest(code)
           else if (code.startsWith('MT-')) startMTGuest(code)
           else if (code.startsWith('CH-')) startChessGuest(code)
+          else if (code.startsWith('UN-')) startUnoGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -2659,6 +3140,7 @@ export default function App() {
         onPickCheckers={startCheckersHost}
         onPickMexicanTrain={startMTHost}
         onPickChess={startChessHost}
+        onPickUno={startUnoHost}
         error={error}
       />
     )
@@ -3287,6 +3769,115 @@ export default function App() {
         onOpenRules={() => {}}
         onLeave={resetToEntry}
       />
+    )
+  }
+
+  // ---- Uno session active ----
+  // Uno lobby — 2 to 10 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way). House rules
+  // and bot difficulty ride along in the lobby view for read-only guest UI.
+  if (unoRole && !unoStarted) {
+    const roster = unoRole === 'host'
+      ? unoSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === unoLocalPlayerId }))
+      : (unoView?.kind === 'lobby' ? unoView.roster : [])
+    const viewHouseRules = unoRole === 'host'
+      ? unoHouseRules
+      : (unoView?.kind === 'lobby' ? unoView.houseRules : resolveHouseRules())
+    const viewDifficulty = unoRole === 'host'
+      ? unoDifficulty
+      : (unoView?.kind === 'lobby' ? unoView.difficulty : 'medium')
+    return (
+      <UnoRoom
+        code={unoCode}
+        localName={name}
+        isHost={unoRole === 'host'}
+        seats={roster}
+        notice={unoNotice ?? error}
+        houseRules={viewHouseRules}
+        difficulty={viewDifficulty}
+        onAddHouseBot={addUnoHouseBot}
+        onToggleHouseRule={unoToggleHouseRule}
+        onSetDifficulty={unoSetDifficulty}
+        onStartGame={unoStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Uno match results
+  if (unoView?.kind === 'game' && unoView.publicState.stage === 'over' && unoView.publicState.matchWinnerId) {
+    const unoColors = Object.fromEntries(unoView.publicState.seatOrder.map((id, i) => [id, UNO_SEAT_INKS[i]]))
+    return (
+      <UnoResults
+        localPlayerId={unoLocalPlayerId ?? ''}
+        localName={name}
+        names={unoView.names}
+        colors={unoColors}
+        publicState={unoView.publicState}
+        isHost={unoRole === 'host'}
+        notice={unoNotice ?? error}
+        onRematch={unoRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Uno table (active game). Host-only: a "replace with a bot" banner above
+  // the table for every guest seat that disconnected mid-match.
+  if (unoView?.kind === 'game' && unoLocalPlayerId) {
+    const unoColors = Object.fromEntries(unoView.publicState.seatOrder.map((id, i) => [id, UNO_SEAT_INKS[i]]))
+    return (
+      <>
+        {unoRole === 'host' && unoDropped.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            background: 'var(--coral)',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 'clamp(14px, 1.8vw, 17px)',
+            padding: '10px 22px',
+            borderRadius: 999,
+            border: '3px solid var(--ink)',
+            boxShadow: '0 5px 0 var(--ink)',
+            marginBottom: 'clamp(10px, 2vw, 18px)',
+          }}>
+            {unoDropped.map((pid) => (
+              <button
+                key={pid}
+                type="button"
+                className="btn pill-small"
+                style={{ background: '#fff', color: 'var(--coral)' }}
+                onClick={() => unoReplaceWithBot(pid)}
+              >
+                Replace {unoView.names[pid] ?? pid} with a bot
+              </button>
+            ))}
+          </div>
+        )}
+        <UnoTable
+          code={unoCode}
+          localPlayerId={unoLocalPlayerId}
+          names={unoView.names}
+          colors={unoColors}
+          connection={unoConnection}
+          notice={unoNotice ?? error}
+          publicState={unoView.publicState}
+          hand={unoView.hand}
+          onPlayCard={(cardId) => unoDispatch({ type: 'PLAY_CARD', cardId })}
+          onChooseColor={(color) => unoDispatch({ type: 'CHOOSE_COLOR', color })}
+          onDraw={() => unoDispatch({ type: 'DRAW_CARD' })}
+          onPass={() => unoDispatch({ type: 'PASS' })}
+          onCallUno={(targetPlayerId) => unoDispatch({ type: 'CALL_UNO', targetPlayerId })}
+          onStartNextRound={() => unoDispatch({ type: 'START_NEXT_ROUND' })}
+          onOpenRules={() => {}}
+          onLeave={resetToEntry}
+        />
+      </>
     )
   }
 

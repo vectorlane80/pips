@@ -2,7 +2,7 @@ import type { Game } from '../types'
 import { Wordmark } from '../components/Wordmark'
 
 export function Landing({
-  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, error,
+  name, onNameChange, joinCode, onJoinCodeChange, onJoin, onPickGame, onPickRummy, onPickPhase10, onPickBattleship, onPickDominoes, onPickWahoo, onPickCheckers, onPickMexicanTrain, onPickChess, onPickUno, error,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -18,6 +18,7 @@ export function Landing({
   onPickCheckers: () => void
   onPickMexicanTrain: () => void
   onPickChess: () => void
+  onPickUno: () => void
   error: string | null
 }) {
   const ready = name.trim().length > 0
@@ -38,6 +39,7 @@ export function Landing({
     { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },
     { title: 'Rummy', note: '2 players', color: '#1aa06d', onClick: onPickRummy },
     { title: 'Phase 10', note: '2 players', color: '#ff9f1c', onClick: onPickPhase10 },
+    { title: 'Uno', note: '2–10 players', color: '#e11d2e', onClick: onPickUno },
   ]
 
   return (
