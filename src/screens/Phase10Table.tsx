@@ -547,10 +547,8 @@ export function Phase10Table({
       <div className="p10-table-card">
         {showIntro ? (
           <DealIntro
-            opponentName={opponentName}
-            opponentColor={opponentColor}
+            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
             yourHandSize={hand.length}
-            opponentHandSize={opponentHandCount}
             renderCardBack={(p) => <Phase10CardBack {...p} />}
             onComplete={() => setShowIntro(false)}
           />

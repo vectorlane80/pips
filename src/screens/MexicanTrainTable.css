@@ -84,6 +84,42 @@
   margin-bottom: clamp(10px, 2vw, 18px);
 }
 
+/* Round-end banner: a full-width row of its own inside .mt-table-card's
+   row-reverse flex layout, above the rail/board pair. */
+.mt-round-banner {
+  flex: 0 0 100%;
+  text-align: center;
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+/* ---- Deal intro tile back: MT's own visual language (coral, ink border) ---- */
+
+.mt-tile-back {
+  width: 46px;
+  height: 88px;
+  background: var(--coral);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+}
+
+.mt-tile-back--fan {
+  width: 30px;
+  height: 44px;
+  border-radius: 6px;
+}
+
+.mt-tile-back--stock {
+  width: 46px;
+  height: 88px;
+}
+
 /* ---- Main table card: the board column with the rail to its right.
    row-reverse puts the rail (DOM-first of the row pair) on the board's right
    while keeping wrap order — on narrow screens the rail wraps back to its own

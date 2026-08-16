@@ -557,10 +557,8 @@ export function RummyTable({
       <div className="rummy-table-card">
         {showIntro ? (
           <DealIntro
-            opponentName={opponentName}
-            opponentColor={opponentColor}
+            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
             yourHandSize={hand.length}
-            opponentHandSize={opponentHandCount}
             renderCardBack={(p) => <CardBack {...p} />}
             onComplete={() => setShowIntro(false)}
           />

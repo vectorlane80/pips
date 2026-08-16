@@ -385,10 +385,8 @@ export function DominoesTable({
       <div className="dm-table-card">
         {showIntro ? (
           <DealIntro
-            opponentName={opponentName}
-            opponentColor={opponentColor}
+            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
             yourHandSize={hand.length}
-            opponentHandSize={opponentHandCount}
             shuffleSound="domino-shuffle"
             renderCardBack={(p) => <DominoTileBack {...p} />}
             onComplete={() => setShowIntro(false)}

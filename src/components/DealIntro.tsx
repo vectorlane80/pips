@@ -5,43 +5,40 @@ import { useSound, type SoundName } from '../hooks/useSound'
 // ---------------------------------------------------------------------------
 // Pure helper: the deal flight schedule.
 //
-// Opponent deals first, then the two seats alternate (opponent/you/opponent/
-// you/…) until both counts are exhausted or `maxFlights` flights have been
-// produced — whichever comes first. If one seat runs out early, its turn is
-// skipped and the remaining seat keeps producing flights (never a flight for
-// an exhausted seat).
+// Round-robin over every "other" seat (in order) then "you", repeating,
+// until all seats are fully dealt or `maxFlights` is hit — whichever comes
+// first. If a seat runs out early, its turn is skipped and the remaining
+// seats keep producing flights (never a flight for an exhausted seat).
 // ---------------------------------------------------------------------------
 
 export interface DealFlight {
-  seat: 'you' | 'opponent'
+  seat: 'you' | number // number = index into the `others` array
   seatIndex: number // 0-based index of this flight WITHIN that seat's flights (0, 1, 2, ...)
 }
 
 export function computeDealFlights(
   yourCount: number,
-  opponentCount: number,
+  otherCounts: number[],
   maxFlights = 10,
 ): DealFlight[] {
   const flights: DealFlight[] = []
+  const otherDealt = otherCounts.map(() => 0)
   let yourDealt = 0
-  let opponentDealt = 0
-  let seat: DealFlight['seat'] = 'opponent'
-  while (
-    flights.length < maxFlights &&
-    (yourDealt < yourCount || opponentDealt < opponentCount)
-  ) {
-    if (seat === 'opponent') {
-      if (opponentDealt < opponentCount) {
-        flights.push({ seat: 'opponent', seatIndex: opponentDealt })
-        opponentDealt++
-      }
-      seat = 'you'
-    } else {
+  const order: DealFlight['seat'][] = [...otherCounts.map((_, i) => i), 'you']
+  let cursor = 0
+  const hasMore = () =>
+    yourDealt < yourCount || otherDealt.some((dealt, i) => dealt < otherCounts[i])
+  while (flights.length < maxFlights && hasMore()) {
+    const seat = order[cursor % order.length]
+    cursor++
+    if (seat === 'you') {
       if (yourDealt < yourCount) {
         flights.push({ seat: 'you', seatIndex: yourDealt })
         yourDealt++
       }
-      seat = 'opponent'
+    } else if (otherDealt[seat] < otherCounts[seat]) {
+      flights.push({ seat, seatIndex: otherDealt[seat] })
+      otherDealt[seat]++
     }
   }
   return flights
@@ -50,7 +47,8 @@ export function computeDealFlights(
 // ---------------------------------------------------------------------------
 // DealIntro — the table-opens-empty → shuffle → deal → settled sequence.
 // Game-agnostic: the caller injects its own card-back art via `renderCardBack`
-// (Rummy's `CardBack` and Phase 10's `Phase10CardBack` both share this exact
+// (Rummy's `CardBack`, Phase 10's `Phase10CardBack`, and Dominoes' /
+// Mexican Train's tile backs all share this exact
 // `{ size: 'fan' | 'stock', style?, className? }` prop shape).
 //
 // Timing constants locked by spec 01 (confirmed against the Deal Intro
@@ -82,11 +80,16 @@ export interface DealIntroCardBackProps {
   className?: string
 }
 
+export interface DealIntroOtherSeat {
+  id: string
+  name: string
+  color: string
+  handSize: number
+}
+
 export interface DealIntroProps {
-  opponentName: string
-  opponentColor: string
+  others: DealIntroOtherSeat[] // every non-local seat, left-to-right / top-to-bottom
   yourHandSize: number
-  opponentHandSize: number
   renderCardBack: (props: DealIntroCardBackProps) => React.ReactNode
   onComplete: () => void
   /** Sound played once when shuffling starts; defaults to the card shuffle. */
@@ -116,6 +119,14 @@ const ROOT_STYLE: React.CSSProperties = {
   borderRadius: 20,
 }
 
+const OTHERS_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 10,
+  maxWidth: 480,
+}
+
 const ROW_STYLE: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -140,10 +151,8 @@ const STATUS_STYLE: React.CSSProperties = {
 }
 
 export function DealIntro({
-  opponentName,
-  opponentColor,
+  others,
   yourHandSize,
-  opponentHandSize,
   renderCardBack,
   onComplete,
   shuffleSound: shuffleSoundProp = 'shuffle',
@@ -158,7 +167,7 @@ export function DealIntro({
 
   const rootRef = useRef<HTMLDivElement>(null)
   const stockRef = useRef<HTMLDivElement>(null)
-  const opponentPileRef = useRef<HTMLDivElement>(null)
+  const otherPileRefs = useRef<(HTMLDivElement | null)[]>([])
   const yourPileRef = useRef<HTMLDivElement>(null)
   const timersRef = useRef<number[]>([])
   const rafsRef = useRef<number[]>([])
@@ -174,7 +183,7 @@ export function DealIntro({
   // rendered pile counts, and the shuffle sound always agree with the values
   // the mount effect captured.
   const [flights] = useState(() =>
-    computeDealFlights(yourHandSize, opponentHandSize),
+    computeDealFlights(yourHandSize, others.map((o) => o.handSize)),
   )
   const [shuffleSound] = useState(() => shuffleSoundProp)
 
@@ -230,7 +239,7 @@ export function DealIntro({
             const rootEl2 = rootRef.current
             const stockEl2 = stockRef.current
             const targetEl =
-              flight.seat === 'you' ? yourPileRef.current : opponentPileRef.current
+              flight.seat === 'you' ? yourPileRef.current : otherPileRefs.current[flight.seat]
             if (rootEl2 && stockEl2 && targetEl) {
               const stockPos = measureRelativeTo(rootEl2, stockEl2)
               const targetPos = measureRelativeTo(rootEl2, targetEl)
@@ -276,10 +285,11 @@ export function DealIntro({
     }
   }, [])
 
-  const yourPileCount = flights
-    .slice(0, flightIndex)
-    .filter((f) => f.seat === 'you').length
-  const opponentPileCount = flightIndex - yourPileCount
+  const dealtSoFar = flights.slice(0, flightIndex)
+  const yourPileCount = dealtSoFar.filter((f) => f.seat === 'you').length
+  const otherPileCounts = others.map(
+    (_, i) => dealtSoFar.filter((f) => f.seat === i).length,
+  )
 
   // Riffle-split pulse: 3 alternating 6px shifts (right, left, right).
   const stockTransform =
@@ -310,14 +320,21 @@ export function DealIntro({
 
   return (
     <div className="deal-intro" ref={rootRef} style={ROOT_STYLE}>
-      <div style={ROW_STYLE}>
-        <span style={{ ...LABEL_STYLE, color: opponentColor }}>
-          {opponentName}
-          {opponentPileCount > 0 ? ` · ${opponentPileCount}` : ''}
-        </span>
-        <div ref={opponentPileRef} style={PILE_STYLE}>
-          {pileCards(opponentPileCount)}
-        </div>
+      <div style={OTHERS_STYLE}>
+        {others.map((other, i) => (
+          <div key={other.id} style={ROW_STYLE}>
+            <span style={{ ...LABEL_STYLE, color: other.color }}>
+              {other.name}
+              {otherPileCounts[i] > 0 ? ` · ${otherPileCounts[i]}` : ''}
+            </span>
+            <div
+              ref={(el) => { otherPileRefs.current[i] = el }}
+              style={PILE_STYLE}
+            >
+              {pileCards(otherPileCounts[i])}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div style={STATUS_STYLE}>{STATUS_TEXT[phase]}</div>

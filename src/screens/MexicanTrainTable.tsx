@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MTLaneKey, MTPublicState, MTTile } from '../board-games/mexican-train/state'
 import { handHasLegalPlay, legalLanes } from '../board-games/mexican-train/state'
 import { currentPlayer } from '../engine/turn-engine'
+import { DealIntro, type DealIntroCardBackProps } from '../components/DealIntro'
 import { SoundToggle } from '../components/SoundToggle'
 import { TurnSoundToggle } from '../components/TurnSoundToggle'
 import { Wordmark } from '../components/Wordmark'
@@ -81,6 +82,21 @@ function Signal({ open }: { open: boolean }) {
       <span className="mt-signal-disc" />
     </span>
   )
+}
+
+// ---- Tile back (deal intro) ----
+
+interface MTTileBackProps {
+  size: DealIntroCardBackProps['size']
+  style?: DealIntroCardBackProps['style']
+  className?: string
+}
+
+// A simple rounded-rect back in the rail's coral, with an ink border —
+// MT's own visual language, distinct from Dominoes' white/brand-dot back.
+function MTTileBack({ size, style, className }: MTTileBackProps) {
+  const cls = ['mt-tile-back', `mt-tile-back--${size}`, className].filter(Boolean).join(' ')
+  return <div className={cls} style={style} />
 }
 
 // ---- Rail status line ----
@@ -163,6 +179,17 @@ export function MexicanTrainTable({
   const trackEls = useRef<Record<string, HTMLDivElement | null>>({})
   const [rowStartMap, setRowStartMap] = useState<Record<string, number[]>>({})
 
+  // Fresh-round detection: show the deal intro exactly once per distinct
+  // round this component instance ever sees (including on mount for round 0).
+  const introShownForRoundRef = useRef<number | null>(null)
+  const [showIntro, setShowIntro] = useState(false)
+  useEffect(() => {
+    if (introShownForRoundRef.current !== publicState.round) {
+      introShownForRoundRef.current = publicState.round
+      setShowIntro(true)
+    }
+  }, [publicState.round])
+
   // Clear the selection once the turn/stage moves on, or the tile leaves the hand.
   useEffect(() => {
     setSelectedId(null)
@@ -212,7 +239,6 @@ export function MexicanTrainTable({
   const lastActionRef = useRef(publicState.lastAction)
   const stageRef = useRef(publicState.stage)
   const roundResultRef = useRef(publicState.roundResult)
-  const roundRef = useRef<number | null>(null)
   useEffect(() => {
     let hornPlayed = false
     const action = publicState.lastAction
@@ -234,11 +260,7 @@ export function MexicanTrainTable({
       roundResultRef.current = publicState.roundResult
       if (publicState.roundResult?.kind === 'blocked' && !hornPlayed) play('train-horn')
     }
-    if (roundRef.current !== publicState.round) {
-      roundRef.current = publicState.round
-      if (publicState.stage === 'play') play('domino-shuffle')
-    }
-  }, [publicState.lastAction, publicState.stage, publicState.roundResult, publicState.round, play])
+  }, [publicState.lastAction, publicState.stage, publicState.roundResult, play])
 
   // ---- Hand interaction ----
   const handleTileClick = (tile: MTTile) => {
@@ -256,6 +278,36 @@ export function MexicanTrainTable({
     ? (selectedTile !== null ? 'Tap a glowing train to place it.' : 'Pick a tile from your hand.')
     : null
   const canDraw = canAct && noLegalPlay && publicState.boneyardCount > 0
+
+  // ---- Deal intro ----
+  const others = useMemo(
+    () =>
+      publicState.seatOrder
+        .filter((id) => id !== localPlayerId)
+        .map((id) => ({
+          id,
+          name: names[id] ?? id,
+          color: colors[id] ?? MEX_COLOR,
+          handSize: publicState.handCounts[id] ?? 0,
+        })),
+    [publicState.seatOrder, publicState.handCounts, localPlayerId, names, colors],
+  )
+
+  // ---- Round-end banner ----
+  // Only shows for stage 'roundEnd' — MexicanTrainTable is never mounted for
+  // stage 'over' (App.tsx routes that to MexicanTrainResults instead).
+  const roundBannerText = useMemo(() => {
+    if (publicState.stage !== 'roundEnd') return null
+    const result = publicState.roundResult
+    if (result === null) return null
+    const nextRoundNumber = publicState.round + 2
+    if (result.kind === 'out') {
+      const name =
+        result.outPlayerId === localPlayerId ? 'You' : names[result.outPlayerId!] ?? result.outPlayerId
+      return `${name} went out — round over. Round ${nextRoundNumber} starts automatically.`
+    }
+    return `Nobody could play — round blocked. Round ${nextRoundNumber} starts automatically.`
+  }, [publicState.stage, publicState.roundResult, publicState.round, localPlayerId, names])
 
   // ---- Render ----
   return (
@@ -299,6 +351,21 @@ export function MexicanTrainTable({
           right; on narrow screens the rail wraps back to its own row above the
           board column. */}
       <div className="mt-table-card">
+        {showIntro ? (
+          <DealIntro
+            others={others}
+            yourHandSize={hand.length}
+            shuffleSound="domino-shuffle"
+            renderCardBack={(p) => <MTTileBack {...p} />}
+            onComplete={() => setShowIntro(false)}
+          />
+        ) : (
+        <>
+        {/* Round-end banner */}
+        {roundBannerText !== null && (
+          <div className="mt-round-banner">{roundBannerText}</div>
+        )}
+
         {/* Rail: one seat card per seat + the general status line, in a ~200px column */}
         <div className="mt-rail">
           {publicState.seatOrder.map((playerId) => {
@@ -423,6 +490,8 @@ export function MexicanTrainTable({
           {/* Hint (yours, under the board) */}
           {hint !== null && <div className="mt-hint">{hint}</div>}
         </div>
+        </>
+        )}
       </div>
 
       {rulesOpen && <MexicanTrainRulesOverlay onClose={() => setRulesOpen(false)} />}
