@@ -1,0 +1,552 @@
+/* ===================================================================
+   UnoTable — N-player Uno table: opponent rail / deck + discard / wild
+   color picker / fanned hand, with the scoreboard + turn log in the
+   right rail. Table panel left (flex 1 1 620px), rail right (flex 1 1
+   230px, max 330px) — the handoff's direct fix from an earlier draft
+   that put the scoreboard in a row above the table and lost width for
+   the card area; do not regress to that.
+   =================================================================== */
+
+.uno-table {
+  --uno-brand: #e11d2e;
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Header ---- */
+
+.uno-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.uno-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uno-game-label {
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--uno-brand);
+}
+
+.uno-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Peer strip ---- */
+
+.uno-peer-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uno-peer-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.uno-peer-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Error banner ---- */
+
+.uno-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Main table card: the board column with the rail to its right.
+   row-reverse puts the rail (DOM-first of the row pair) on the table's
+   right while keeping wrap order — on narrow screens the rail wraps back
+   to its own row above the board column. ---- */
+
+.uno-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Right rail: scoreboard + turn log + status ---- */
+
+.uno-rail {
+  flex: 1 1 230px;
+  max-width: 330px;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.6vw, 16px);
+}
+
+.uno-rail-caption {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted-text);
+}
+
+.uno-rail-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+
+.uno-scoreboard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.uno-score-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 10px 14px;
+  background: #fff;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* Active (current player) row is filled with the seat color; the sub and
+   dot border lighten to read on the fill (MexicanTrain's seat-card trick). */
+.uno-score-row--turn .uno-score-sub {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.uno-score-row--turn .uno-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.uno-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.uno-score-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.uno-score-name {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uno-score-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+.uno-score-value {
+  margin-left: auto;
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+/* ---- Turn log ---- */
+
+.uno-log {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface-alt);
+  border: 2px solid var(--grey-border-2);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.uno-log-line {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--body-text);
+  line-height: 1.35;
+}
+
+/* ---- Status ---- */
+
+.uno-status {
+  font-size: clamp(15px, 2vw, 18px);
+  font-weight: 600;
+  color: var(--body-text);
+  line-height: 1.3;
+}
+
+/* Narrow screens (< 900px): the rail collapses back above the board column */
+@media (max-width: 899px) {
+  .uno-rail {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+}
+
+/* ---- Board column ---- */
+
+.uno-board-col {
+  flex: 1 1 620px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.4vw, 26px);
+}
+
+/* ---- Round-over banner ---- */
+
+.uno-round-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  text-align: center;
+  background: var(--yellow);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+/* ---- Opponent rail: one row per opponent seat ---- */
+
+.uno-opp-rail {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.6vw, 14px);
+}
+
+.uno-opp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 10px 14px;
+  background: #fff;
+  transition: border-color 0.2s;
+}
+
+.uno-opp-name {
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+/* Tight hidden-hand stack: 14px-wide small backs overlapping 8px (6px of
+   each card stays visible) — a tighter stack than Rummy/Phase10's 30px
+   fan cards at -15 (same half-width-ish ratio at a third of the width);
+   this is a hidden-count display, not a playable hand. The count label
+   carries the real number. */
+.uno-opp-stack {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.uno-opp-stack .uno-card-back--small + .uno-card-back--small {
+  margin-left: -8px;
+}
+
+.uno-opp-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+.uno-turn-tag {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Uno-call button ---- */
+/* One quiet, uncolored button shared by every hand row (yours and each
+   opponent's). Default/off = grayed out, reusing components.css's
+   disabled-button palette (--grey-fill / --disabled-text / --grey-border).
+   Active/on = the ONLY change is a subtle shift toward white/full
+   opacity — no brand color, no glow/ring, no size change, and
+   deliberately NOT the loud dark-pill sort-toggle treatment
+   (.rummy-sort-btn--active / .p10-sort-btn--active). */
+
+.uno-call-btn {
+  margin-left: auto;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  border: 2px solid var(--grey-border);
+  background: var(--grey-fill);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.uno-call-btn:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--grey-border-2);
+  color: var(--body-text);
+  cursor: pointer;
+}
+
+/* ---- Centre band: deck + discard (+ color picker) ---- */
+
+.uno-centre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(16px, 2.4vw, 28px);
+  border-top: 3px solid var(--grey-fill);
+  border-bottom: 3px solid var(--grey-fill);
+  padding: clamp(14px, 2vw, 22px) 0;
+}
+
+.uno-centre-left {
+  flex: 1 1 380px;
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: clamp(12px, 2vw, 20px);
+}
+
+.uno-centre-right {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* ---- Stock ---- */
+
+.uno-stock-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.uno-stock-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 6px;
+}
+
+/* Reserve hover-lift space above the stock card, matching Rummy/Phase10 */
+.uno-stock-card-wrapper {
+  padding-top: 14px;
+}
+
+/* ---- Discard ---- */
+
+.uno-discard-group {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.uno-discard-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 6px;
+}
+
+.uno-discard-slot {
+  padding-top: 14px;
+  min-height: 78px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.uno-discard-empty {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  padding: 8px 0;
+}
+
+/* ---- Wild color picker ---- */
+/* Shown ONLY while a wild is pending on YOUR turn; for anyone else the
+   status line says "choosing a color…" instead. The four hexes are the
+   same locked brand values as UnoCard.css — do not invent different ones. */
+
+.uno-color-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.uno-color-picker-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+.uno-color-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.uno-color-swatch {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  box-shadow: 0 3px 0 var(--ink);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform 0.1s ease;
+}
+
+.uno-color-swatch:hover {
+  transform: translateY(-2px);
+}
+
+.uno-color-swatch:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 var(--ink);
+}
+
+/* ---- Your hand ---- */
+
+.uno-hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.uno-hand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uno-hand-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.uno-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.uno-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+/* Fanned hand: -30px overlap per card after the first, same as
+   Rummy/Phase10. The face cards are position:relative (UnoCard.css), so
+   later DOM siblings paint above earlier ones — the ascending-stacking
+   outcome the handoff wants, achieved the same way the sibling fans do
+   (their CSS carries no per-card z-index rules either). z-index: 1 pins
+   the stacking context so a hover-lifted card never drops under the card
+   to its right. */
+.uno-hand-fan {
+  display: flex;
+  min-height: 114px; /* room for hover lift (9px) + card height (100px) */
+  padding-top: 14px;
+  padding-bottom: 6px;
+}
+
+.uno-hand-fan .uno-card-face--hand {
+  z-index: 1;
+}
+
+.uno-hand-fan .uno-card-face--hand + .uno-card-face--hand {
+  margin-left: -30px;
+}
+
+/* ---- Actions row (Pass + hint) ---- */
+
+.uno-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.uno-action-btn {
+  height: 44px;
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+.uno-action-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+/* ---- Footnote ---- */
+
+.uno-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
