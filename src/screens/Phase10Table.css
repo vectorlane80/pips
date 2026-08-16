@@ -30,6 +30,42 @@
   flex-wrap: wrap;
 }
 
+/* ---- Header scoreboard: one pill per seated player, always visible ---- */
+
+.p10-scoreboard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.p10-score-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 5px 14px;
+  box-shadow: 0 3px 0 #c9c9e0;
+}
+
+.p10-score-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+  flex: none;
+}
+
+.p10-score-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
 .p10-game-label {
   font-weight: 700;
   font-size: 22px;
@@ -76,45 +112,108 @@
   flex-direction: column;
 }
 
-/* ---- Their side (top band) ---- */
+/* ---- Opponent tiles: a wrapping grid of content-driven seat tiles ---- */
+/* Container mechanics mirror Rummy's .rummy-opp-rail (flex-wrap, gap), and
+   tile CONTENT is the same shape as Rummy's too: real, readable Phase 10
+   group cards and the larger Phase10CardBack size="fan" hidden hand — no
+   Uno compact fixed sizing, no fixed cap on groups. Each tile's height is
+   content-driven: a player with 3 groups gets a taller tile than one with 1. */
 
-.p10-their-side {
+.p10-opp-rail {
+  --p10-opp-gap: clamp(10px, 1.6vw, 14px);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--p10-opp-gap);
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
-.p10-their-side-left {
+.p10-opp-tile {
+  flex: 1 1 260px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-.p10-their-name {
-  font-size: 16px;
+.p10-opp-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.p10-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.p10-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
 }
 
-.p10-their-count {
+.p10-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Active (current player) tile is filled with the seat color — matching the
+   turn-chip treatment — and the hidden-hand label / dot border lighten to
+   read on the fill. */
+.p10-opp-tile--turn .p10-opp-tile-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.p10-opp-tile--turn .p10-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.p10-opp-tile-hand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.p10-opp-tile-fan {
+  display: flex;
+  flex: none;
+}
+
+.p10-opp-tile-count {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--muted-text);
+  white-space: nowrap;
 }
 
-.p10-their-fan {
-  display: flex;
-  margin-top: 6px;
-}
+/* ---- Opponent tile groups ---- */
 
-.p10-their-groups {
+.p10-opp-tile-groups {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 /* ---- Phase ladder band ---- */
@@ -193,8 +292,11 @@
 
 .p10-ladder-dots {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
   min-height: 11px;
+  max-width: 100%;
 }
 
 .p10-ladder-dot {

@@ -2791,3 +2791,105 @@ shipping each verified charter promptly.
   approach, same reasoning: Phase10Table/App.tsx already have working
   2-player code that would break if screens changed without wiring
   changing in the same commit) without pausing.
+
+## Cycle 15 — 2026-08-16 — Phase 10 screens+wiring (spec 38, final milestone)
+- **Shipped:** the last item on the Rummy+Phase10 N-player charter.
+  Before writing the spec, dispatched an Explore agent to read Phase
+  10's pre-conversion screens/App.tsx wiring in full and flag anything
+  genuinely different from Rummy's pre-conversion shape rather than
+  re-reading everything myself — it correctly found the shape was
+  near-identical (same scalar opponent-prop triad, same `.find()`
+  single-opponent anti-pattern at 4 call sites, same self-vs-cross
+  extension rendering for `hits` as Rummy's `layoffs`) with exactly two
+  real Phase10-specific pieces: the Phase Ladder's single-opponent
+  marker and Phase10Results' winner-pinned sort. Spec 38 mirrored spec
+  36's structure directly for everything else and wrote fresh language
+  only for those two pieces.
+- **Phase Ladder generalization:** `opponentPhaseIdx`/`opponentColor`
+  scalars → an `opponents: {seatId, phaseIdx, color}[]` array. A shared
+  ring is drawn once per phase step (in the first opponent's color, to
+  avoid a garish stacked-ring effect at a shared step), and the dots
+  row underneath renders one dot per opponent actually sitting on that
+  step, wrapping via CSS instead of overlapping into an unreadable
+  blob at 5+ opponents.
+- **Hits generalization:** `selfExtensionCards`/`crossHitGroups`/
+  `crossHitCaption` — direct structural mirror of Rummy's layoff
+  helpers, `Phase10Hit`'s own field names substituted. Self-hits merge
+  silently into the base group; cross-hits render on the hitter's own
+  section (their tile, or "your groups" for the local player),
+  regardless of who owns the target group, grouped by
+  `(hitter, targetPlayerId, targetGroupIndex)` so repeated hits from
+  the same hitter onto the same target combine into one cluster.
+- **Preserved verbatim, not generalized away:** Phase10Results' sort —
+  the match winner is pinned first regardless of score, everyone else
+  sorts ascending (lower wins, Phase 10's actual scoring, distinct from
+  Rummy/Uno's descending convention). The spec explicitly called this
+  out as a trap; the implementer did not fall into it.
+- **Implementer friction, all recovered without a lead-authored patch:**
+  hit the 25-tool-iteration cap three times — once still mid-
+  exploration (told it explicitly to stop reading and start writing),
+  once mid-edit through App.tsx's wiring rewrite (told it to resume
+  exactly where it left off, naming the specific functions still
+  needed), and once after a genuine `ECONNRESET` network drop before
+  any code had been written on that attempt (retried with `--continue`
+  once, per the user's own "fallback to Haiku if deepseek becomes
+  unavailable" instruction — but a single transient reconnect is not
+  "unavailable," so no fallback was needed; deepseek recovered cleanly
+  and never required it this entire run).
+- **A real bug the implementer found and correctly did NOT fix:**
+  house-bot IDs are index-derived (`bot-${seats.length}`) in
+  `addPhase10HouseBot`. If a pre-start guest leave compresses the
+  seats array (via `.filter()`) and a later add-bot regenerates an
+  already-used index, two seats get the same `playerId`, which would
+  corrupt `seatOrder` and every per-player state map. Confirmed this
+  is byte-identical to `addRummyHouseBot`'s scheme, and present in
+  Wahoo/Mexican Train/Uno too — a pre-existing, shared defect, not
+  something spec 38 introduced. Fixing only Phase 10 would create a
+  fresh sibling inconsistency, so it was correctly left alone and
+  flagged for a dedicated cross-game follow-up instead.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (962/962, unchanged — screens/wiring don't get dedicated test files
+  in this codebase), `npm run build` (clean) myself. Confirmed the diff
+  touched only the 7 files spec 38 authorized (`git diff --stat`), with
+  zero cross-contamination into any other game's `App.tsx` section.
+  Read `phase10Broadcast`/`startPhase10Host`/`addPhase10HouseBot`/
+  `phase10Start`/the bot loop/`phase10Rematch` directly, plus the hits
+  helpers and `PhaseLadder`, before trusting any of the implementer's
+  claims about them.
+- **Review:** personally, as Oscar — same risk tier as Rummy's spec 36
+  wiring pass (host-authoritative PeerJS state, real hand-privacy
+  stakes), so not delegated. Verdict: approve, no blockers. Confirmed
+  `phase10Broadcast` never leaks a private hand (per-seat `sendTo`,
+  host's own view from a local snapshot, bot seats correctly skipped),
+  confirmed `onJoin`'s started-then-cap guard ordering, confirmed the
+  bot-ID collision is real, reproducible, and genuinely pre-existing
+  across five games rather than something new here. One nit noted (the
+  "(you)" lobby tag matches by name not ID — an existing, accepted
+  sibling convention, not a new issue).
+- **Live-verified:** filled a 6-seat lobby with house bots (Add house
+  bot correctly disables at the cap, Start correctly gates on the
+  2-seat minimum), watched the 6-player deal intro play out, confirmed
+  the opponent tile grid renders 5 tiles in a clean wrapping 4+1
+  layout with correct per-seat colors and hidden-hand fans, played a
+  full turn (draw → discard) and watched the bot-turn-highlight fill
+  land correctly on the active bot's tile, and confirmed the Phase
+  Ladder's phase-1 step correctly renders all 6 seats' dots as a
+  legible non-overlapping wrapped row rather than a blob. Zero console
+  errors throughout. Did not observe a live laid meld/hit in this
+  session — Phase 10 bots need a full matching set in hand, which
+  reliably takes several rounds to appear randomly — but the hits-
+  generalization logic itself was independently verified by direct
+  code reading (both mine and the review pass), which is the same bar
+  Rummy's spec 36 check applied to its own hardest-to-observe-live
+  piece.
+- **Charter status:** complete. Every item in ROADMAP.md's checklist
+  for the Rummy+Phase10 N-player expansion charter is now done. Both
+  games support 2–4 (Rummy) and 2–6 (Phase 10) seats end to end,
+  mirroring Uno's already-shipped pattern throughout.
+- **Continue?** No further work is in scope. The user's original
+  instruction ("set the number of players for phase 10 and rummy, just
+  use the same basic patterns") is now fully satisfied. Not inventing
+  new work beyond this charter — wrapping up per the autonomous-dev-
+  loop skill's wrap-up-mode guidance: landing this commit, cancelling
+  the scheduled backup wakeup, and leaving a clean summary for the
+  user's return.

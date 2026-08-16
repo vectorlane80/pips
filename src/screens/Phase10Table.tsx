@@ -1,13 +1,12 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, type CSSProperties } from 'react'
 import type { Card } from '../card-engine/cards'
-import type { Phase10PublicState } from '../card-games/phase10/state'
+import type { Phase10Hit, Phase10PublicState } from '../card-games/phase10/state'
 import { fullGroupCards } from '../card-games/phase10/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { classifyPhaseHand, isValidSet, isValidRun, isValidColorGroup, orderColorGroupForDisplay, orderRunForDisplay, type GroupType } from '../card-games/phase10/classify'
 import { PHASES, type PhaseRequirement } from '../card-games/phase10/phases'
 import { DealIntro } from '../components/DealIntro'
 import { Phase10Card, Phase10CardBack, PHASE10_COLORS } from '../components/Phase10Card'
-import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { TurnSoundToggle } from '../components/TurnSoundToggle'
@@ -22,9 +21,8 @@ export interface Phase10TableProps {
   code: string
   localPlayerId: string
   localName: string
-  opponentName: string
-  opponentColor: string
-  opponentHandCount: number
+  names: Record<string, string>        // playerId -> display name
+  colors: Record<string, string>       // playerId -> seat ink
   connection: 'connected' | 'disconnected'
   notice?: string | null
   publicState: Phase10PublicState
@@ -42,9 +40,6 @@ export interface Phase10TableProps {
 
 const COLOR_ORDER: Record<string, number> = { red: 0, blue: 1, green: 2, yellow: 3, special: 4 }
 
-/** The local player's seat colour — violet, matching the ladder's "you" dot. */
-const MY_COLOR = 'var(--violet)'
-
 type StatusLine = {
   pre: string
   card: { rank: string; suit: string } | null
@@ -54,7 +49,7 @@ type StatusLine = {
 function computeStatus(
   publicState: Phase10PublicState,
   isMyTurn: boolean,
-  opponentName: string,
+  names: Record<string, string>,
   localPlayerId: string,
   justDrawn: Card | null,
 ): StatusLine {
@@ -63,13 +58,15 @@ function computeStatus(
     if (publicState.roundWinnerId === null) {
       return { pre: 'Round blocked — no cards left to draw.', card: null, post: '' }
     }
-    const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : opponentName
+    const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId] ?? publicState.roundWinnerId)
     return { pre: `${winnerName} went out!`, card: null, post: '' }
   }
 
+  const currentId = currentPlayer(publicState.turn)
+
   // Not my turn
   if (!isMyTurn) {
-    return { pre: `${opponentName}'s turn`, card: null, post: '' }
+    return { pre: `${names[currentId] ?? currentId}'s turn`, card: null, post: '' }
   }
 
   // My turn — draw phase
@@ -90,19 +87,16 @@ function computeStatus(
 function computeRoundBanner(
   publicState: Phase10PublicState,
   localPlayerId: string,
-  localName: string,
-  opponentName: string,
+  names: Record<string, string>,
 ): string {
   if (publicState.roundWinnerId === null) {
     return 'Round blocked — no cards left to draw. Dealing a new round…'
   }
-  const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : opponentName
-  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
-  return (
-    `${winnerName} went out! ${localName}: ${publicState.scores[localPlayerId] ?? 0}` +
-    ` pts · ${opponentName}: ${publicState.scores[opponentId] ?? 0} pts. ` +
-    `Next round starts automatically.`
-  )
+  const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId] ?? publicState.roundWinnerId)
+  const scoreLine = publicState.seatOrder
+    .map((id) => `${names[id] ?? id}: ${publicState.scores[id] ?? 0} pts`)
+    .join(' · ')
+  return `${winnerName} went out! ${scoreLine}. Next round starts automatically.`
 }
 
 // 'color' groups number cards by colour first, then rank — sets and colour groups read as
@@ -181,6 +175,60 @@ function discardHint(selectedIds: string[], isMyTurn: boolean, phase: string): s
   return ''
 }
 
+// ---- Hit generalization ----
+//
+// A hit onto a group's OWN OWNER's group (self-extension) merges directly into
+// that group's cards — no caption, cards just appear as part of the cluster.
+// This is keyed by `h.playerId === h.targetPlayerId`, which works at any seat
+// count unchanged.
+//
+// A hit by someone OTHER than the group's owner (cross-hit) renders in the
+// HITTER's own section as a captioned mini-cluster. Multiple hit records by
+// the same hitter onto the same target group (they can chain across a round)
+// are combined into ONE cluster per (hitter, target) pair, not one cluster
+// per record.
+
+interface CrossHitGroup {
+  key: string
+  targetPlayerId: string
+  targetGroupIndex: number
+  cards: Card[]
+}
+
+function selfExtensionCards(hits: Phase10Hit[], playerId: string, groupIndex: number): Card[] {
+  return hits
+    .filter((h) => h.playerId === playerId && h.targetPlayerId === playerId && h.targetGroupIndex === groupIndex)
+    .flatMap((h) => h.cards)
+}
+
+function crossHitGroups(hits: Phase10Hit[], hitterId: string): CrossHitGroup[] {
+  const groups = new Map<string, Phase10Hit[]>()
+  for (const h of hits) {
+    if (h.playerId !== hitterId || h.targetPlayerId === hitterId) continue
+    const key = `${h.targetPlayerId}|${h.targetGroupIndex}`
+    const list = groups.get(key) ?? []
+    list.push(h)
+    groups.set(key, list)
+  }
+  return [...groups.entries()].map(([key, list]) => {
+    const [targetPlayerId, targetGroupIndex] = key.split('|')
+    return {
+      key,
+      targetPlayerId,
+      targetGroupIndex: Number(targetGroupIndex),
+      cards: list.flatMap((h) => h.cards),
+    }
+  })
+}
+
+function crossHitCaption(
+  targetPlayerId: string,
+  localPlayerId: string,
+  names: Record<string, string>,
+): string {
+  return targetPlayerId === localPlayerId ? 'on your group' : `on ${names[targetPlayerId] ?? targetPlayerId}'s group`
+}
+
 // ---- Group cluster sub-component ----
 
 function GroupCluster({ cards, type, ownerColor, ownerShadow, caption, onHit }: {
@@ -222,12 +270,12 @@ function GroupCluster({ cards, type, ownerColor, ownerShadow, caption, onHit }: 
 
 function PhaseLadder({
   localPhaseIdx,
-  opponentPhaseIdx,
-  opponentColor,
+  localColor,
+  opponents,
 }: {
   localPhaseIdx: number
-  opponentPhaseIdx: number
-  opponentColor: string
+  localColor: string
+  opponents: { seatId: string; phaseIdx: number; color: string }[]
 }) {
   const [hovered, setHovered] = useState<number | null>(null)
   return (
@@ -235,6 +283,16 @@ function PhaseLadder({
       <div className="p10-ladder-chips">
         {PHASES.map((p, i) => {
           const fill = i < localPhaseIdx ? 'done' : i === localPhaseIdx ? 'current' : 'ahead'
+          const atStep = opponents.filter((o) => o.phaseIdx === i)
+          const opponentHere = atStep.length > 0
+          const chipStyle: CSSProperties = {}
+          if (opponentHere) {
+            chipStyle.boxShadow = `0 0 0 3px var(--surface), 0 0 0 6px ${atStep[0].color}`
+          }
+          if (i === localPhaseIdx) {
+            chipStyle.background = localColor
+            chipStyle.borderColor = localColor
+          }
           return (
             <div
               key={p.phase}
@@ -243,14 +301,16 @@ function PhaseLadder({
               onMouseLeave={() => setHovered(null)}
             >
               <div
-                className={`p10-ladder-chip p10-ladder-chip--${fill}${i === opponentPhaseIdx ? ' p10-ladder-chip--opponent-here' : ''}`}
-                style={i === opponentPhaseIdx ? { boxShadow: `0 0 0 3px var(--surface), 0 0 0 6px ${opponentColor}` } : undefined}
+                className={`p10-ladder-chip p10-ladder-chip--${fill}${opponentHere ? ' p10-ladder-chip--opponent-here' : ''}`}
+                style={chipStyle}
               >
                 {p.phase}
               </div>
               <div className="p10-ladder-dots">
-                {i === localPhaseIdx && <span className="p10-ladder-dot" style={{ background: 'var(--violet)' }} />}
-                {i === opponentPhaseIdx && <span className="p10-ladder-dot" style={{ background: opponentColor }} />}
+                {i === localPhaseIdx && <span className="p10-ladder-dot" style={{ background: localColor }} />}
+                {atStep.map((o) => (
+                  <span key={o.seatId} className="p10-ladder-dot" style={{ background: o.color }} />
+                ))}
               </div>
             </div>
           )
@@ -289,9 +349,8 @@ export function Phase10Table({
   code,
   localPlayerId,
   localName,
-  opponentName,
-  opponentColor,
-  opponentHandCount,
+  names,
+  colors,
   connection,
   notice,
   publicState,
@@ -304,29 +363,24 @@ export function Phase10Table({
   onOpenRules,
   onLeave,
 }: Phase10TableProps) {
+  void localName // kept in props for symmetry; names[localPlayerId] is the canonical local display name
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
 
   // ---- Derived ----
-  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
-  const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
+  const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
+  const currentId = currentPlayer(publicState.turn)
+  const isMyTurn = currentId === localPlayerId
   const canAct = isMyTurn && !publicState.roundOver
   const myPhaseIdx = publicState.phaseIdx[localPlayerId] ?? 0
-  const oppPhaseIdx = publicState.phaseIdx[opponentId] ?? 0
   const myRequirement = PHASES[myPhaseIdx]
   const hasLaid = publicState.hasLaidPhase[localPlayerId] ?? false
-
-  const theirGroups = publicState.groups[opponentId] ?? []
+  const myColor = colors[localPlayerId] ?? 'var(--violet)'
   const myGroups = publicState.groups[localPlayerId] ?? []
-  // Hits render on the HITTER's side: self-extensions merge into the owner's own clusters,
-  // cross-hits appear as captioned mini-clusters on the hitter's side.
-  const theirOwnHits = publicState.hits.filter((h) => h.playerId === opponentId && h.targetPlayerId === opponentId)
-  const myOwnHits = publicState.hits.filter((h) => h.playerId === localPlayerId && h.targetPlayerId === localPlayerId)
-  const myCrossHits = publicState.hits.filter((h) => h.playerId === localPlayerId && h.targetPlayerId === opponentId)
-  const theirCrossHits = publicState.hits.filter((h) => h.playerId === opponentId && h.targetPlayerId === localPlayerId)
+  const humanCount = publicState.seatOrder.filter((id) => !id.startsWith('bot')).length
 
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
-  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [justDrawn, setJustDrawn] = useState<Card | null>(null)
   const [rulesOpen, setRulesOpen] = useState(false)
@@ -431,14 +485,14 @@ export function Phase10Table({
   )
 
   const status = useMemo(
-    () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, justDrawn),
-    [publicState, isMyTurn, opponentName, localPlayerId, justDrawn],
+    () => computeStatus(publicState, isMyTurn, names, localPlayerId, justDrawn),
+    [publicState, isMyTurn, names, localPlayerId, justDrawn],
   )
 
   const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId
   const roundBannerText = useMemo(
-    () => computeRoundBanner(publicState, localPlayerId, localName, opponentName),
-    [publicState, localPlayerId, localName, opponentName],
+    () => computeRoundBanner(publicState, localPlayerId, names),
+    [publicState, localPlayerId, names],
   )
 
   // DRAW_FROM_STOCK is always a legal attempt during the draw phase — the validator itself
@@ -500,7 +554,12 @@ export function Phase10Table({
   }, [onDiscard, selectedIds])
 
   // ---- Render ----
-  const fanCount = Math.min(opponentHandCount, 14)
+  const others = opponentIds.map((seatId) => ({
+    id: seatId,
+    name: names[seatId] ?? seatId,
+    color: colors[seatId] ?? 'var(--slate-pip)',
+    handSize: publicState.handCounts[seatId] ?? 0,
+  }))
 
   return (
     <div className="p10-table">
@@ -515,18 +574,19 @@ export function Phase10Table({
               style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
             />
             <span className="p10-peer-label">
-              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+              {connection === 'connected' ? `peer to peer · ${publicState.seatOrder.length} players` : 'connection lost'}
             </span>
           </span>
         </div>
-        <ScoreHeader
-          youScore={publicState.scores[localPlayerId] ?? 0}
-          youColor="var(--violet)"
-          opponentName={opponentName}
-          opponentScore={publicState.scores[opponentId] ?? 0}
-          opponentColor={opponentColor}
-          hint="lower wins"
-        />
+        <div className="p10-scoreboard">
+          {publicState.seatOrder.map((pid) => (
+            <span key={pid} className="p10-score-pill">
+              <span className="p10-score-dot" style={{ background: colors[pid] ?? 'var(--slate-pip)' }} />
+              {names[pid] ?? pid} {publicState.scores[pid] ?? 0}
+            </span>
+          ))}
+          <span className="p10-score-hint">lower wins</span>
+        </div>
         <div className="p10-header-actions">
           <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
@@ -547,70 +607,106 @@ export function Phase10Table({
       <div className="p10-table-card">
         {showIntro ? (
           <DealIntro
-            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
+            others={others}
             yourHandSize={hand.length}
             renderCardBack={(p) => <Phase10CardBack {...p} />}
             onComplete={() => setShowIntro(false)}
           />
         ) : (
         <>
-        {/* Their side */}
-        <div className="p10-their-side">
-          <div className="p10-their-side-left">
-            <div className="p10-their-name" style={{ color: opponentColor }}>{opponentName}</div>
-            <div className="p10-their-count">{opponentHandCount} cards · hidden</div>
-            {fanCount > 0 && (
-              <div className="p10-their-fan">
-                {Array.from({ length: fanCount }, (_, i) => (
-                  <Phase10CardBack
-                    key={i}
-                    size="fan"
-                    style={{ marginLeft: i === 0 ? 0 : -15 }}
+        {/* Opponent tiles: a wrapping grid, one tile per opponent seat */}
+        <div className="p10-opp-rail">
+          {opponentIds.map((seatId) => {
+            const seatColor = colors[seatId] ?? 'var(--slate-pip)'
+            const seatName = names[seatId] ?? seatId
+            const isTurn = seatId === currentId
+            const handCount = publicState.handCounts[seatId] ?? 0
+            const fanCount = Math.min(handCount, 14)
+            const seatGroups = publicState.groups[seatId] ?? []
+            const seatCrossGroups = crossHitGroups(publicState.hits, seatId)
+
+            return (
+              <div
+                key={seatId}
+                className={`p10-opp-tile${isTurn ? ' p10-opp-tile--turn' : ''}`}
+                style={isTurn ? { background: seatColor, borderColor: seatColor, color: '#fff' } : undefined}
+              >
+                <div className="p10-opp-tile-top">
+                  <span
+                    className="p10-seat-dot"
+                    style={isTurn
+                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
+                      : { background: seatColor }}
                   />
-                ))}
+                  <span className="p10-opp-name" style={isTurn ? undefined : { color: seatColor }}>{seatName}</span>
+                  {isTurn && <span className="p10-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
+                </div>
+                <div className="p10-opp-tile-hand">
+                  {fanCount > 0 && (
+                    <div className="p10-opp-tile-fan">
+                      {Array.from({ length: fanCount }, (_, i) => (
+                        <Phase10CardBack
+                          key={i}
+                          size="fan"
+                          style={{ marginLeft: i === 0 ? 0 : -15 }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <span className="p10-opp-tile-count">{handCount} cards · hidden</span>
+                </div>
+                <div className="p10-opp-tile-groups">
+                  {seatGroups.length > 0 ? (
+                    seatGroups.map((group, i) => {
+                      const selfExt = selfExtensionCards(publicState.hits, seatId, i)
+                      const hitTarget = groupHittable(seatId, i)
+                      return (
+                        <GroupCluster
+                          key={group.zone.id}
+                          cards={[...group.zone.cards, ...selfExt]}
+                          type={group.type}
+                          ownerColor={seatColor}
+                          ownerShadow="var(--grey-border-3)"
+                          caption={`Phase ${group.phaseNumber}`}
+                          onHit={hitTarget ? () => handleHit(seatId, i) : undefined}
+                        />
+                      )
+                    })
+                  ) : (
+                    <span className="p10-groups-empty">{seatName} has laid nothing down yet</span>
+                  )}
+                  {seatCrossGroups.map((group) => {
+                    const targetGroup = publicState.groups[group.targetPlayerId]?.[group.targetGroupIndex]
+                    const eligible = groupHittable(group.targetPlayerId, group.targetGroupIndex)
+                    return (
+                      <div key={group.key} className="p10-group-extension">
+                        <div className="p10-group-extension-caption">{crossHitCaption(group.targetPlayerId, localPlayerId, names)}</div>
+                        <GroupCluster
+                          cards={group.cards}
+                          type={targetGroup?.type ?? 'set'}
+                          ownerColor={seatColor}
+                          ownerShadow="var(--grey-border-3)"
+                          onHit={eligible ? () => handleHit(group.targetPlayerId, group.targetGroupIndex) : undefined}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            )}
-          </div>
-          <div className="p10-their-groups">
-            {theirGroups.length > 0 ? (
-              theirGroups.map((group, i) => {
-                const selfExt = theirOwnHits.filter((h) => h.targetGroupIndex === i).flatMap((h) => h.cards)
-                const hitTarget = groupHittable(opponentId, i)
-                return (
-                  <GroupCluster
-                    key={group.zone.id}
-                    cards={[...group.zone.cards, ...selfExt]}
-                    type={group.type}
-                    ownerColor={opponentColor}
-                    ownerShadow="var(--grey-border-3)"
-                    caption={`Phase ${group.phaseNumber}`}
-                    onHit={hitTarget ? () => handleHit(opponentId, i) : undefined}
-                  />
-                )
-              })
-            ) : (
-              <span className="p10-groups-empty">{opponentName} has laid nothing down yet</span>
-            )}
-            {theirCrossHits.map((h) => (
-              <div key={h.id} className="p10-group-extension">
-                <div className="p10-group-extension-caption">on your group</div>
-                <GroupCluster
-                  cards={h.cards}
-                  type={myGroups[h.targetGroupIndex]?.type ?? 'set'}
-                  ownerColor={opponentColor}
-                  ownerShadow="var(--grey-border-3)"
-                />
-              </div>
-            ))}
-          </div>
+            )
+          })}
         </div>
 
         {/* Ladder band */}
         <div className="p10-ladder-band">
           <PhaseLadder
             localPhaseIdx={myPhaseIdx}
-            opponentPhaseIdx={oppPhaseIdx}
-            opponentColor={opponentColor}
+            localColor={myColor}
+            opponents={opponentIds.map((seatId) => ({
+              seatId,
+              phaseIdx: publicState.phaseIdx[seatId] ?? 0,
+              color: colors[seatId] ?? 'var(--slate-pip)',
+            }))}
           />
         </div>
 
@@ -655,9 +751,9 @@ export function Phase10Table({
           <div className="p10-centre-right">
             <span
               className="p10-turn-chip"
-              style={{ background: isMyTurn ? 'var(--green-text)' : opponentColor }}
+              style={{ background: isMyTurn ? 'var(--green-text)' : (colors[currentId] ?? 'var(--slate-pip)') }}
             >
-              {isMyTurn ? 'Your turn' : `${opponentName}'s turn`}
+              {isMyTurn ? 'Your turn' : `${names[currentId] ?? currentId}'s turn`}
             </span>
             <StatusDisplay status={status} />
           </div>
@@ -669,14 +765,14 @@ export function Phase10Table({
             <div className="p10-your-groups">
               {myGroups.length > 0 ? (
                 myGroups.map((group, i) => {
-                  const selfExt = myOwnHits.filter((h) => h.targetGroupIndex === i).flatMap((h) => h.cards)
+                  const selfExt = selfExtensionCards(publicState.hits, localPlayerId, i)
                   const hitTarget = groupHittable(localPlayerId, i)
                   return (
                     <GroupCluster
                       key={group.zone.id}
                       cards={[...group.zone.cards, ...selfExt]}
                       type={group.type}
-                      ownerColor={MY_COLOR}
+                      ownerColor={myColor}
                       caption={`Phase ${group.phaseNumber}`}
                       onHit={hitTarget ? () => handleHit(localPlayerId, i) : undefined}
                     />
@@ -685,12 +781,18 @@ export function Phase10Table({
               ) : (
                 <span className="p10-groups-empty">You have laid nothing down yet</span>
               )}
-              {myCrossHits.map((h) => {
-                const targetType = theirGroups[h.targetGroupIndex]?.type ?? 'set'
+              {crossHitGroups(publicState.hits, localPlayerId).map((group) => {
+                const targetType = publicState.groups[group.targetPlayerId]?.[group.targetGroupIndex]?.type ?? 'set'
+                const eligible = groupHittable(group.targetPlayerId, group.targetGroupIndex)
                 return (
-                  <div key={h.id} className="p10-group-extension">
-                    <div className="p10-group-extension-caption">on {opponentName}'s group</div>
-                    <GroupCluster cards={h.cards} type={targetType} ownerColor={MY_COLOR} />
+                  <div key={group.key} className="p10-group-extension">
+                    <div className="p10-group-extension-caption">{crossHitCaption(group.targetPlayerId, localPlayerId, names)}</div>
+                    <GroupCluster
+                      cards={group.cards}
+                      type={targetType}
+                      ownerColor={myColor}
+                      onHit={eligible ? () => handleHit(group.targetPlayerId, group.targetGroupIndex) : undefined}
+                    />
                   </div>
                 )
               })}
@@ -698,7 +800,7 @@ export function Phase10Table({
 
             {/* Current phase pill */}
             <span className="p10-phase-pill">
-              <span className="p10-phase-pill-dot" />
+              <span className="p10-phase-pill-dot" style={{ background: myColor }} />
               Phase {myRequirement.phase} — {myRequirement.label}
             </span>
           </div>

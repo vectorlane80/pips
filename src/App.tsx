@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Action, BotDifficulty, Game, RoomState } from './types'
 import { GAME_CODE_PREFIX } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
@@ -32,7 +32,7 @@ import { RummyResults } from './screens/RummyResults'
 import { RummyRoom } from './screens/RummyRoom'
 
 // ---- Phase 10 (separate parallel session, per CHARTER.md resolution #7) ----
-import { createPhase10Game, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
+import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
 import { applyPhase10Action, runPhase10BotTurn } from './card-games/phase10/rules'
 import { phase10BotStrategy } from './card-games/phase10/bot'
 import { Phase10Table } from './screens/Phase10Table'
@@ -100,7 +100,9 @@ import { UnoRoom } from './screens/UnoRoom'
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
-type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
+type Phase10View =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; names: Record<string, string> }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
 type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
 type WahooView =
@@ -180,11 +182,11 @@ export default function App() {
   const [phase10Role, setPhase10Role] = useState<'host' | 'guest' | null>(null)
   const [phase10Code, setPhase10Code] = useState('')
   const [phase10LocalPlayerId, setPhase10LocalPlayerId] = useState<string | null>(null)
-  const [phase10OpponentId, setPhase10OpponentId] = useState<string | null>(null)
-  const [phase10OpponentName, setPhase10OpponentName] = useState('')
   const [phase10View, setPhase10View] = useState<Phase10View | null>(null)
   const [phase10Connection, setPhase10Connection] = useState<'connected' | 'disconnected'>('connected')
-  const [phase10Waiting, setPhase10Waiting] = useState(false)
+  const [phase10Notice, setPhase10Notice] = useState<string | null>(null)
+  const [phase10Started, setPhase10Started] = useState(false)
+  const [phase10Seats, setPhase10Seats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
   // ---- Battleship ----
   const [battleshipRole, setBattleshipRole] = useState<'host' | 'guest' | null>(null)
@@ -280,8 +282,10 @@ export default function App() {
   const phase10GuestRef = useRef<GuestHandle<Phase10Action> | null>(null)
   const phase10BotBusyRef = useRef(false)
   const phase10LocalPlayerIdRef = useRef<string | null>(null)
-  const phase10OpponentIdRef = useRef<string | null>(null)
-  const phase10OpponentNameRef = useRef('')
+  const phase10SeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const phase10StartedRef = useRef(false)
+  const phase10NamesRef = useRef<Record<string, string>>({})
+  const phase10BotSeatsRef = useRef<Set<string>>(new Set())
   const battleshipSessionRef = useRef<BattleshipSession | null>(null)
   const battleshipHostRef = useRef<HostHandle<BattleshipView> | null>(null)
   const battleshipGuestRef = useRef<GuestHandle<BattleshipAction> | null>(null)
@@ -444,7 +448,7 @@ export default function App() {
     const legacy = roomRef.current
     if (legacy && legacy.screen !== 'room' && legacy.screen !== 'results') return legacy.game
     if (rummyRole && rummyStarted && rummyView?.kind === 'game' && !rummyView.publicState.matchWinnerId) return 'rummy'
-    if (phase10Role && phase10View && !phase10View.publicState.matchWinnerId) return 'phase10'
+    if (phase10Role && phase10Started && phase10View?.kind === 'game' && !phase10View.publicState.matchWinnerId) return 'phase10'
     if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
     if (dominoesRole && dominoesView && dominoesView.publicState.stage !== 'over') return 'dominoes'
     if (wahooRole && wahooStarted && wahooView?.kind === 'game' && wahooView.publicState.stage !== 'over') return 'wahoo'
@@ -458,7 +462,7 @@ export default function App() {
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -610,13 +614,16 @@ export default function App() {
     setPhase10Code('')
     setPhase10LocalPlayerId(null)
     phase10LocalPlayerIdRef.current = null
-    setPhase10OpponentId(null)
-    phase10OpponentIdRef.current = null
-    setPhase10OpponentName('')
-    phase10OpponentNameRef.current = ''
     setPhase10View(null)
     setPhase10Connection('connected')
-    setPhase10Waiting(false)
+    setPhase10Notice(null)
+    setPhase10Started(false)
+    phase10StartedRef.current = false
+    setPhase10Seats([])
+    phase10SeatsRef.current = []
+    phase10BotBusyRef.current = false
+    phase10BotSeatsRef.current.clear()
+    phase10NamesRef.current = {}
     // Battleship
     battleshipHostRef.current?.destroy()
     battleshipHostRef.current = null
@@ -794,6 +801,9 @@ export default function App() {
   // UNO_SEAT_INKS is. Rummy's cap is 4 seats, so 4 entries (first 4 of Uno's
   // own palette — same visual language across games).
   const RUMMY_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+  // Phase 10 caps at 6 seats, so this reuses Uno's full first-six palette
+  // (same palette-reuse convention Rummy's spec 36 established for its 4-entry version).
+  const PHASE10_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0']
 
   // The actor key must re-key on any field that can change within the SAME
   // player's turn (a draw-then-play is two actions, same turnNumber), so the
@@ -1031,23 +1041,53 @@ export default function App() {
 
   // ---- Phase 10 helpers ----
 
+  // The actor key must re-key on any field that can change within the SAME
+  // player's turn (a draw-then-play is two actions, same turnNumber), so the
+  // loop re-evaluates after a draw that doesn't advance the turn.
   function phase10ActorKey(session: Phase10Session): string {
     const ps = session.session.publicState
-    return `${ps.roundNumber}:${ps.turn.turnNumber}`
+    return `${ps.roundNumber}:${ps.turn.turnNumber}:${ps.turn.phase}:${ps.stockCount}:${ps.discardPile.cards.length}:${ps.hits.length}:${Object.values(ps.groups).reduce((n, gs) => n + gs.length, 0)}`
   }
 
   function phase10Stale(key: string) {
     return !phase10SessionRef.current || phase10ActorKey(phase10SessionRef.current) !== key
   }
 
-  function phase10UpdateViews() {
+  // Hands are PRIVATE and up to 5 guests can be seated, so a single broadcast
+  // cannot carry every hand (any guest would see the others'). Lobby phase →
+  // broadcast the roster view; game phase → per-guest sendTo with only that
+  // guest's own hand. The host's own view comes from its local snapshot.
+  function phase10Broadcast() {
+    if (!phase10StartedRef.current) {
+      const view: Phase10View = {
+        kind: 'lobby',
+        roster: phase10SeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === phase10LocalPlayerIdRef.current })),
+      }
+      setPhase10View(view)
+      phase10HostRef.current?.broadcast(view)
+      return
+    }
     const session = phase10SessionRef.current!
     const hostSnap = deriveSnapshot(session.session, phase10LocalPlayerIdRef.current!)
-    setPhase10View({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: phase10OpponentNameRef.current })
-    const opponentId = phase10OpponentIdRef.current
-    if (opponentId && opponentId !== 'bot') {
-      const guestSnap = deriveSnapshot(session.session, opponentId)
-      phase10HostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+    setPhase10View({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      privateState: hostSnap.privateState!,
+      names: { ...phase10NamesRef.current },
+    })
+    const names = { ...phase10NamesRef.current }
+    for (const seat of phase10SeatsRef.current) {
+      if (seat.playerId === phase10LocalPlayerIdRef.current) continue
+      if (phase10BotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      phase10HostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        privateState: guestSnap.privateState!,
+        names,
+      })
     }
   }
 
@@ -1060,53 +1100,78 @@ export default function App() {
     setPhase10Code(code)
     setPhase10LocalPlayerId(hostId)
     phase10LocalPlayerIdRef.current = hostId
-    setPhase10Waiting(true)
+    setPhase10Started(false)
+    phase10StartedRef.current = false
+    setPhase10Seats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    phase10SeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    setPhase10Notice(null)
     setError(null)
     phase10HostRef.current = createHost<Phase10View, Phase10Action>(code, {
       onJoin(guestId, guestName) {
-        if (phase10SessionRef.current) {
-          phase10HostRef.current?.reject(guestId, 'That Phase 10 table is already full.')
+        if (phase10StartedRef.current) {
+          phase10HostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
           return
         }
-        const seed = Math.floor(Math.random() * 2147483647)
-        phase10SessionRef.current = createPhase10Game([hostId, guestId], seed)
-        setPhase10OpponentId(guestId)
-        phase10OpponentIdRef.current = guestId
-        setPhase10OpponentName(guestName)
-        phase10OpponentNameRef.current = guestName
-        setPhase10Waiting(false)
-        phase10UpdateViews()
+        if (phase10SeatsRef.current.length >= PHASE10_MAX_SEATS) {
+          phase10HostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        phase10SeatsRef.current = [...phase10SeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setPhase10Seats(phase10SeatsRef.current)
+        phase10Broadcast()
       },
       onAction(guestId, action) {
-        if (!phase10SessionRef.current || guestId !== phase10OpponentIdRef.current) return
-        const result = applyPhase10Action(phase10SessionRef.current!, guestId, action)
+        if (!phase10StartedRef.current) return
+        const session = phase10SessionRef.current
+        if (!session) return
+        if (!phase10SeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyPhase10Action(session, guestId, action)
         if (!result.outcome.ok) return
         phase10SessionRef.current = result.game
-        phase10UpdateViews()
+        phase10Broadcast()
       },
       onLeave(guestId) {
-        // Guest left mid-hand: match cannot continue with only 1 player.
-        if (guestId !== phase10OpponentIdRef.current) return
-        setError('Opponent left the room.')
+        if (!phase10StartedRef.current) {
+          phase10SeatsRef.current = phase10SeatsRef.current.filter((s) => s.playerId !== guestId)
+          setPhase10Seats(phase10SeatsRef.current)
+          phase10Broadcast()
+          return
+        }
+        const seat = phase10SeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setPhase10Notice(`${seat.name} disconnected.`)
       },
       onError(message) {
         setError(message)
       },
     })
+    phase10Broadcast()
   }
 
   function addPhase10HouseBot() {
-    if (phase10Role !== 'host' || !phase10LocalPlayerId || !phase10Waiting) return
-    const botId = 'bot'
-    const botName = randomBotName([name.trim()])
+    if (phase10Role !== 'host' || phase10StartedRef.current) return
+    if (phase10SeatsRef.current.length >= PHASE10_MAX_SEATS) return
+    const botId = `bot-${phase10SeatsRef.current.length}`
+    const botName = randomBotName(phase10SeatsRef.current.map((s) => s.name))
+    phase10SeatsRef.current = [...phase10SeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setPhase10Seats(phase10SeatsRef.current)
+    phase10BotSeatsRef.current.add(botId)
+    phase10Broadcast()
+  }
+
+  function phase10Start() {
+    if (phase10Role !== 'host' || phase10StartedRef.current) return
+    const seats = phase10SeatsRef.current
+    // Variable seat count: at least PHASE10_MIN_SEATS, at most PHASE10_MAX_SEATS —
+    // whatever is seated when the host presses Start, NOT a fixed-count gate.
+    if (seats.length < PHASE10_MIN_SEATS || seats.length > PHASE10_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    phase10SessionRef.current = createPhase10Game([phase10LocalPlayerId, botId], seed)
-    setPhase10OpponentId(botId)
-    phase10OpponentIdRef.current = botId
-    setPhase10OpponentName(botName)
-    phase10OpponentNameRef.current = botName
-    setPhase10Waiting(false)
-    phase10UpdateViews()
+    phase10SessionRef.current = createPhase10Game(playerIds, seed)
+    phase10NamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    phase10StartedRef.current = true
+    setPhase10Started(true)
+    phase10Broadcast()
   }
 
   async function runPhase10Bot(botId: string, key: string) {
@@ -1115,12 +1180,13 @@ export default function App() {
       if (phase10Stale(key)) return
       const session = phase10SessionRef.current!
       const ps = session.session.publicState
-      if (ps.roundOver || currentPlayer(ps.turn) !== botId) return
+      if (ps.roundOver || ps.matchWinnerId) return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!phase10BotSeatsRef.current.has(botId)) return
       const result = runPhase10BotTurn(session, botId, phase10BotStrategy)
       if (!result.outcome.ok) return
       phase10SessionRef.current = result.game
-      const snap = deriveSnapshot(result.game.session, phase10LocalPlayerId!)
-      setPhase10View({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: phase10OpponentNameRef.current })
+      phase10Broadcast()
     }
   }
 
@@ -1130,12 +1196,12 @@ export default function App() {
     if (!session) return
     const ps = session.session.publicState
     if (ps.roundOver || ps.matchWinnerId) return
-    if (phase10OpponentId !== 'bot') return
-    if (currentPlayer(ps.turn) !== 'bot') return
+    const currentId = currentPlayer(ps.turn)
+    if (!phase10BotSeatsRef.current.has(currentId)) return
     phase10BotBusyRef.current = true
     const key = phase10ActorKey(session)
     try {
-      await runPhase10Bot('bot', key)
+      await runPhase10Bot(currentId, key)
     } finally {
       phase10BotBusyRef.current = false
       setTimeout(() => runPhase10BotsIfNeeded(), 50)
@@ -1148,10 +1214,15 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<Phase10View, Phase10Action>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'lobby') {
+          setPhase10View(view)
+          setPhase10Started(false)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
         setPhase10View(view)
-        setPhase10OpponentName(view.opponentName)
+        setPhase10Started(true)
       },
       onError() {
         resetToEntry()
@@ -1178,24 +1249,28 @@ export default function App() {
 
   function phase10Dispatch(action: Phase10Action) {
     if (phase10Role === 'host' && phase10LocalPlayerId) {
-      const result = applyPhase10Action(phase10SessionRef.current!, phase10LocalPlayerId, action)
+      const session = phase10SessionRef.current
+      if (!session) return
+      const result = applyPhase10Action(session, phase10LocalPlayerId, action)
       if (!result.outcome.ok) return
       phase10SessionRef.current = result.game
-      phase10UpdateViews()
+      phase10Broadcast()
     } else if (phase10Role === 'guest') {
       phase10GuestRef.current?.sendAction(action)
     }
   }
 
   function phase10Rematch() {
-    if (phase10Role !== 'host' || !phase10SessionRef.current || !phase10LocalPlayerId) return
+    if (phase10Role !== 'host' || !phase10SessionRef.current) return
+    const ps = phase10SessionRef.current.session.publicState
+    if (ps.matchWinnerId === null) return
     const prevRevision = phase10SessionRef.current.session.revision
-    const playerIds = phase10SessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
     const next = createPhase10Game(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
     phase10SessionRef.current = next
-    phase10UpdateViews()
+    phase10Broadcast()
   }
 
   // ---- End Phase 10 helpers ----
@@ -3040,32 +3115,26 @@ export default function App() {
 
   // Bot turn trigger
   useEffect(() => {
-    if (phase10Role !== 'host' || !phase10View) return
+    if (phase10Role !== 'host' || !phase10View || phase10View.kind !== 'game') return
     runPhase10BotsIfNeeded()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase10Role, phase10View])
 
   // Round transition (pause then start next round)
   useEffect(() => {
-    if (phase10Role !== 'host' || !phase10View) return
+    if (phase10Role !== 'host' || !phase10View || phase10View.kind !== 'game') return
     if (phase10View.publicState.roundOver && !phase10View.publicState.matchWinnerId) {
       const t = setTimeout(() => {
         const result = applyPhase10Action(phase10SessionRef.current!, phase10LocalPlayerId!, { type: 'START_NEXT_ROUND' })
         if (result.outcome.ok) {
           phase10SessionRef.current = result.game
-          phase10UpdateViews()
+          phase10Broadcast()
         }
       }, ROUND_PAUSE_MS)
       return () => clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase10Role, phase10View?.publicState.roundOver])
-
-  // ---- Derived opponentId for Phase 10 guest (avoid async ordering bug) ----
-  const resolvedPhase10OpponentId = useMemo(() => {
-    if (!phase10View || !phase10LocalPlayerId) return null
-    return phase10View.publicState.turn.playerOrder.find((id) => id !== phase10LocalPlayerId) ?? null
-  }, [phase10View, phase10LocalPlayerId])
+  }, [phase10Role, phase10View])
 
   // ---- Battleship effects (host-only) ----
 
@@ -3422,30 +3491,38 @@ export default function App() {
   }
 
   // ---- Phase 10 session active ----
-  // Phase 10 waiting screen (host waiting for opponent) — mirrors the shared Room.tsx /
-  // RummyRoom.tsx layout so the start flow doesn't feel like a different app.
-  if (phase10Role === 'host' && phase10Waiting) {
+  // Phase 10 lobby — 2 to 6 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way).
+  if (phase10Role && !phase10Started) {
+    const roster = phase10Role === 'host'
+      ? phase10Seats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === phase10LocalPlayerId }))
+      : (phase10View?.kind === 'lobby' ? phase10View.roster : [])
     return (
       <Phase10Room
         code={phase10Code}
         localName={name}
-        notice={error}
+        isHost={phase10Role === 'host'}
+        seats={roster}
+        notice={phase10Notice ?? error}
         onAddHouseBot={addPhase10HouseBot}
+        onStartGame={phase10Start}
         onLeave={resetToEntry}
       />
     )
   }
 
   // Phase 10 match results
-  if (phase10View?.publicState.matchWinnerId) {
+  if (phase10View?.kind === 'game' && phase10View.publicState.matchWinnerId) {
+    const phase10Colors = Object.fromEntries(phase10View.publicState.seatOrder.map((id, i) => [id, PHASE10_SEAT_INKS[i]]))
     return (
       <Phase10Results
         localPlayerId={phase10LocalPlayerId ?? ''}
         localName={name}
-        opponentName={phase10OpponentName}
+        names={phase10View.names}
+        colors={phase10Colors}
         publicState={phase10View.publicState}
         isHost={phase10Role === 'host'}
-        notice={error}
+        notice={phase10Notice ?? error}
         onRematch={phase10Rematch}
         onBackToShelf={resetToEntry}
       />
@@ -3453,21 +3530,17 @@ export default function App() {
   }
 
   // Phase 10 table (active game)
-  if (phase10View && phase10LocalPlayerId) {
-    const opponentHandCount = resolvedPhase10OpponentId
-      ? (phase10View.publicState.handCounts[resolvedPhase10OpponentId] ?? 0)
-      : 0
-
+  if (phase10View?.kind === 'game' && phase10LocalPlayerId) {
+    const phase10Colors = Object.fromEntries(phase10View.publicState.seatOrder.map((id, i) => [id, PHASE10_SEAT_INKS[i]]))
     return (
       <Phase10Table
         code={phase10Code}
         localPlayerId={phase10LocalPlayerId}
         localName={name}
-        opponentName={phase10OpponentName}
-        opponentColor="#1aa06d"
-        opponentHandCount={opponentHandCount}
+        names={phase10View.names}
+        colors={phase10Colors}
         connection={phase10Connection}
-        notice={error}
+        notice={phase10Notice ?? error}
         publicState={phase10View.publicState}
         hand={phase10View.privateState.hand.cards}
         onDrawStock={() => phase10Dispatch({ type: 'DRAW_FROM_STOCK' })}

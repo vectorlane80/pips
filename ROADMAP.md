@@ -2,7 +2,7 @@
 
 Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
 
-## Charter: Rummy + Phase 10 N-player expansion (2026-08-16) — in progress
+## Charter: Rummy + Phase 10 N-player expansion (2026-08-16) — done
 - [x] Rummy engine (spec 35): `playerIds` tuple → array, 2–4 seats
       (deck-math derived: 52-card deck, 10-card hands, 5 players leaves
       only 1 stock card — degenerate; 4 leaves 11, playable). New
@@ -66,14 +66,59 @@ Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
       diffed the unchanged match-win logic with a script rather than
       trusting the claim, verified test arithmetic against real deck/
       scoring values).
-- [ ] Phase 10 screens: opponent area → seat-tile grid showing full laid
-      phase groups per tile
-- [ ] Phase 10 wiring: App.tsx N-player PeerJS, same pattern
+- [x] Phase 10 screens + wiring (spec 38, combined for the same reason
+      as Rummy's spec 36 — Phase 10 already has working 2-player
+      wiring, so screen prop changes had to land with App.tsx in the
+      same commit to keep tsc green). Direct mirror of spec 36's
+      pattern: Phase10Room → N-seat lobby, Phase10Table opponent area
+      → wrapping content-height tile grid, hits generalization
+      (`selfExtensionCards`/`crossHitGroups`/`crossHitCaption`) as the
+      `layoffs`-equivalent — self-hits merge silently, cross-hits
+      render on the hitter's own section grouped by
+      `(hitter, targetPlayerId, targetGroupIndex)`, captioned "on your
+      group"/"on {name}'s group". App.tsx rewritten to the lobby/
+      `sendTo`/bot-per-seat model. Two genuinely new pieces with no
+      Rummy precedent: (1) the Phase Ladder generalized from a single
+      opponent marker to an `opponents[]` array — a shared ring drawn
+      once per phase step plus one dot per opponent sitting there,
+      wrapping instead of blobbing when several share a step; (2)
+      Phase10Results' winner-pinned-first-then-ascending sort
+      preserved verbatim (NOT collapsed into Rummy's plain descending
+      sort — Phase 10 is lower-wins and the match winner isn't always
+      the lowest scorer). Implementer hit the 25-tool-iteration cap
+      three times on this spec (once mid-exploration, once mid-edit,
+      plus one `ECONNRESET` transient disconnect recovered with a
+      retry) — each resumed with a precise, narrow continuation prompt.
+      It also self-caught and correctly did NOT fix a real pre-existing
+      bug: house-bot IDs are index-derived (`bot-${seats.length}`) and
+      can collide after a pre-start guest leave compresses the seats
+      array — confirmed identical in Rummy/Wahoo/Mexican Train/Uno, so
+      out of scope here; flagged for a dedicated cross-game follow-up
+      rather than a Phase10-only patch. 962 tests (unchanged) / tsc /
+      build green, independently re-verified by the lead directly, not
+      just trusted from the implementer's report. Oscar review (lead,
+      personally — same risk tier as Rummy's wiring pass): approve, no
+      blockers; independently traced `phase10Broadcast` for hand-
+      privacy leaks (none — per-seat `sendTo`, host's own view from a
+      local snapshot, bots skipped), confirmed the bot-ID collision is
+      real and reproducible but genuinely pre-existing/shared. Live-
+      verified: 6-seat lobby cap and lobby copy, full 6-bot deal intro,
+      opponent tile grid (5 tiles in a clean wrapping 4+1 layout, per-
+      seat colors/hidden fans), turn-highlight fill on the active
+      bot's tile, and the N-wide Phase Ladder with all 6 seats sharing
+      phase 1 rendering as a legible, non-overlapping row of dots — zero
+      console errors throughout.
+
+This closes every item in the charter's definition of done. Charter
+complete: both Rummy (2–4 seats) and Phase 10 (2–6 seats) now support
+N-player matches end to end, mirroring the same patterns established
+for Uno.
 
 Pre-approved by the user at charter creation ("go ahead... just use the
-same basic patterns... get this going while I'm gone"); running via
-/autonomous-dev-loop, deepseek implementing (Haiku fallback if deepseek
-becomes unavailable), deepseek or the lead reviewing per risk level.
+same basic patterns... get this going while I'm gone"); ran via
+/autonomous-dev-loop, deepseek implementing (Haiku fallback never
+needed — deepseek recovered from every cap-hit and the one transient
+disconnect), deepseek or the lead reviewing per risk level.
 
 ## Charter: Uno seat-tile table redesign (2026-08-16) — done
 - [x] Single slice (spec 34i): `UNO_MAX_SEATS` 10→6, opponent rail
