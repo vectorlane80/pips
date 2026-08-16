@@ -1,0 +1,69 @@
+/* ---- Uno house rules (lobby toggle list) ---- */
+
+.uno-house-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.uno-house-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px 12px 16px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.1s ease;
+}
+
+.uno-house-rule:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.uno-house-rule--on {
+  border-color: var(--ink);
+}
+
+.uno-house-rule:disabled {
+  cursor: default;
+}
+
+.uno-house-rule-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.uno-house-rule-label {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.uno-house-rule-desc {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+.uno-house-rule-pill {
+  flex: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.uno-house-rule--on .uno-house-rule-pill {
+  background: var(--ink);
+  color: #fff;
+}
