@@ -1,0 +1,362 @@
+/* ===================================================================
+   UnoCardFace & UnoCardBack — Uno card-visual components
+   =================================================================== */
+
+/* ===================================================================
+   UnoCardFace — base
+   =================================================================== */
+
+.uno-card-face {
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  color: #fff;
+  padding: 0;
+  margin: 0;
+  display: block;
+  flex: none;
+  border-style: solid;
+  /* Wipe browser <button> defaults */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.uno-card-face:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   UnoCardFace — hand (70 × 100)
+   =================================================================== */
+
+.uno-card-face--hand {
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
+  border-color: var(--ink);
+  box-shadow: 0 6px 0 var(--grey-border);
+}
+
+/* Hover: lift 9 px (same as Phase10/Rummy hand cards) */
+.uno-card-face--hand:hover:not(:disabled) {
+  transform: translateY(-9px);
+}
+
+.uno-card-face--hand:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+/* ===================================================================
+   UnoCardFace — discard (50 × 70)
+   =================================================================== */
+
+/* Reuses Rummy/Phase10's discard size and visual weight (50×70, 3px ink
+   border, 0 4px grey shadow) so the two games' discard slots look identical. */
+.uno-card-face--discard {
+  width: 50px;
+  height: 70px;
+  border-radius: 10px;
+  border-width: 3px;
+  border-color: var(--ink);
+  box-shadow: 0 4px 0 var(--grey-border);
+}
+
+/* ===================================================================
+   UnoCardFace — colours
+   =================================================================== */
+
+/* Each colour class sets the face background and the --uno-face-color the
+   centre symbol inherits. The four hexes are the locked Uno brand colours
+   from the design prototype's UNO_COLORS (red/yellow/green/blue); the wild
+   gradient below is the only part that reuses Phase10's palette. */
+.uno-card-face--red {
+  --uno-face-color: #e11d2e;
+  background: var(--uno-face-color);
+}
+
+.uno-card-face--yellow {
+  --uno-face-color: #eab308;
+  background: var(--uno-face-color);
+}
+
+.uno-card-face--green {
+  --uno-face-color: #16a34a;
+  background: var(--uno-face-color);
+}
+
+.uno-card-face--blue {
+  --uno-face-color: #2f6fed;
+  background: var(--uno-face-color);
+}
+
+/* Wild: four-stop diagonal gradient, copied verbatim from Phase10Card.css's
+   .phase10-card--wild rule (deliberate shared-technique reuse). */
+.uno-card-face--wild {
+  background: linear-gradient(135deg, #ff5d73 0%, #6c4cff 33%, #1aa06d 66%, #ffd23f 100%);
+}
+
+/* ===================================================================
+   UnoCardFace — corner marks (top-left + 180°-rotated bottom-right)
+   =================================================================== */
+
+.uno-card-face__corner {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+  color: #fff;
+}
+
+/* The bottom-right corner is an actual rotated duplicate element, not a CSS
+   trick on the same element — Uno's real cards print both, so the card reads
+   correctly upside-down too. */
+.uno-card-face__corner--flipped {
+  top: auto;
+  right: 7px;
+  bottom: 6px;
+  left: auto;
+  transform: rotate(180deg);
+}
+
+/* Yellow faces: white marks read poorly on the brand yellow (~1.9:1 against
+   #eab308) — ink marks, the same convention Phase10's yellow tiles use. */
+.uno-card-face--yellow .uno-card-face__corner {
+  color: var(--ink);
+}
+
+/* ===================================================================
+   UnoCardFace — centre badge (tilted white circle)
+   =================================================================== */
+
+.uno-card-face__badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 74%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  transform: translate(-50%, -50%) rotate(-8deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The symbol/label counter-rotates so it reads upright inside the tilted badge. */
+.uno-card-face__center-symbol,
+.uno-card-face__center-label {
+  transform: rotate(8deg);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.uno-card-face__center-symbol {
+  color: var(--uno-face-color);
+}
+
+/* Wild labels are text on the white badge — ink, per the handoff's "WILD"/"+4"
+   (an earlier star-glyph draft read as unclear and was replaced with text). */
+.uno-card-face__center-label {
+  color: var(--ink);
+}
+
+/* Yellow faces: the yellow-on-white symbol doesn't read — ink, same as corners. */
+.uno-card-face--yellow .uno-card-face__center-symbol {
+  color: var(--ink);
+}
+
+/* ===================================================================
+   UnoCardFace — content sizes
+   =================================================================== */
+
+.uno-card-face--hand .uno-card-face__corner {
+  font-size: 15px;
+}
+
+.uno-card-face--hand .uno-card-face__center-symbol {
+  font-size: 24px;
+}
+
+.uno-card-face--hand .uno-card-face__center-label {
+  font-size: 14px;
+}
+
+/* Discard content scales from hand at the card-size ratio (50/70):
+   15 → 11, 24 → 17, 14 → 10. Corner offsets match Rummy's discard (4/5). */
+.uno-card-face--discard .uno-card-face__corner {
+  top: 4px;
+  left: 5px;
+  font-size: 11px;
+}
+
+/* Must come after the discard corner rule above so top/left re-return to auto
+   on the rotated duplicate (same specificity, later wins). */
+.uno-card-face--discard .uno-card-face__corner--flipped {
+  top: auto;
+  right: 5px;
+  bottom: 4px;
+  left: auto;
+}
+
+.uno-card-face--discard .uno-card-face__center-symbol {
+  font-size: 17px;
+}
+
+.uno-card-face--discard .uno-card-face__center-label {
+  font-size: 10px;
+}
+
+/* ===================================================================
+   UnoCardBack — base
+   =================================================================== */
+
+.uno-card-back {
+  position: relative;
+  background: var(--ink);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  padding: 0;
+  margin: 0;
+  display: block;
+  flex: none;
+  border-style: solid;
+  /* Keep the oversized tilted band inside the rounded corners */
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.uno-card-back:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   UnoCardBack — fan (30 × 44) — opponent's hidden hand / deal-intro piles
+   =================================================================== */
+
+.uno-card-back--fan {
+  width: 30px;
+  height: 44px;
+  border-radius: 7px;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+
+/* ===================================================================
+   UnoCardBack — stock (56 × 78) — the draw pile
+   =================================================================== */
+
+/* Reuses Rummy/Phase10's stock size and visual weight (56×78, 3px ink border,
+   0 5px ink shadow) so the two games' stock slots look identical. */
+.uno-card-back--stock {
+  width: 56px;
+  height: 78px;
+  border-radius: 11px;
+  border-width: 3px;
+  border-color: var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+/* Turn-highlight: the border turns gold when drawing is legal. Same class-swap
+   mechanic as Phase10CardBack's canDraw ring — no separately-rendered ring. */
+.uno-card-back--stock.uno-card-back--can-draw {
+  border-color: var(--yellow);
+}
+
+/* Hover lift + press (stock only) */
+.uno-card-back--stock:hover:not(:disabled) {
+  transform: translateY(-6px);
+}
+
+.uno-card-back--stock:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+/* ===================================================================
+   UnoCardBack — small (14 × 26) — opponent's hidden-hand count chip
+   =================================================================== */
+
+.uno-card-back--small {
+  width: 14px;
+  height: 26px;
+  border-radius: 4px;
+  border-width: 2px;
+  border-color: var(--ink);
+}
+
+/* ===================================================================
+   UnoCardBack — red diagonal band + Pips two-dot mark
+   =================================================================== */
+
+/* Brand-red band tilted across the ink card (the prototype's −24° tilt), with
+   ink borders on its long edges so it reads against the ink card. */
+.uno-card-back__band {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  height: 44%;
+  background: #e11d2e;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  transform: translate(-50%, -50%) rotate(-24deg);
+}
+
+/* The Pips two-dot mark — two white dots tilted with the band. An original
+   mark, explicitly not a reproduction of any commercial card game's back. */
+.uno-card-back__mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-24deg);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 1;
+}
+
+.uno-card-back__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* Band borders and dots scale down with the smaller sizes (prototype's 9px
+   dots / 5px gap / 3px band borders at 70×100, scaled per card size). */
+.uno-card-back--fan .uno-card-back__band {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+}
+
+.uno-card-back--fan .uno-card-back__mark {
+  gap: 2px;
+}
+
+.uno-card-back--fan .uno-card-back__dot {
+  width: 4px;
+  height: 4px;
+}
+
+.uno-card-back--small .uno-card-back__band {
+  border-top-width: 1px;
+  border-bottom-width: 1px;
+}
+
+.uno-card-back--small .uno-card-back__mark {
+  gap: 1px;
+}
+
+.uno-card-back--small .uno-card-back__dot {
+  width: 2px;
+  height: 2px;
+}
