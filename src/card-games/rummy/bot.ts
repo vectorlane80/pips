@@ -184,13 +184,21 @@ export const rummyBotStrategy: BotStrategy<
         return { type: 'DRAW_FROM_DISCARD', index: pile.length - 1 }
       }
     }
-    // Stock is empty and the discard pile has at least one card that isn't
-    // immediately meldable — but we must draw something.  Take just the top
-    // card (a single-card take never sets an obligation and is always legal
-    // when the pile is non-empty).  Without this fallback the bot would
-    // propose DRAW_FROM_STOCK forever (rules.ts rejects it when stockCount===0
-    // and the pile has exactly 1 card), creating a genuine livelock.
-    if (publicState.stockCount === 0 && pile.length >= 1) {
+    // Stock is empty and the discard pile has exactly one card that isn't
+    // immediately meldable — that lone card is the only thing left to draw,
+    // so take it (a single-card take never sets an obligation and is always
+    // legal). rules.ts rejects DRAW_FROM_STOCK in precisely this situation
+    // (stockCount === 0 and the pile has exactly 1 card); without this
+    // fallback the bot would propose it forever, a genuine livelock.
+    //
+    // When the discard pile has 2+ cards instead, DRAW_FROM_STOCK is still
+    // legal even with an empty stock — it recycles the pile (keeping the top
+    // card in place) into a fresh shuffled stock and draws from that. Forcing
+    // a discard-pile take here too (the bug this comment used to describe as
+    // intentional) meant the bot could never trigger a recycle: it would keep
+    // taking-then-discarding the same unwanted top card forever once stock
+    // ran dry, a real stalemate a human player hit in practice.
+    if (publicState.stockCount === 0 && pile.length === 1) {
       return { type: 'DRAW_FROM_DISCARD', index: pile.length - 1 }
     }
     return { type: 'DRAW_FROM_STOCK' }

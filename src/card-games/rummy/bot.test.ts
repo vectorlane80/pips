@@ -706,6 +706,42 @@ describe('bot review-fix regressions', () => {
     expect(totalCards(result.rummy)).toBe(52)
   })
 
+  it('stalemate fix: stock empty, discard has 2+ unmeldable cards — recycles via DRAW_FROM_STOCK instead of looping the same discard card forever', () => {
+    // p1 hand: A♣,3♣,5♣ — none of these combine with K♠ (top discard) into a meld.
+    const p1Cards = ['c0', 'c2', 'c4']
+    const discardCards = ['c51', 'c50'] // K♠, K♥ — 2 cards, top (K♠) unmeldable
+    const used = new Set([...p1Cards, ...discardCards])
+    const p2Cards = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: discardCards,
+      stockCardIds: [], // stock empty
+      phase: 'draw',
+      currentPlayerIndex: 0,
+    })
+
+    const action = rummyBotStrategy(
+      rummy.session.publicState,
+      rummy.session.privateStates['p1'],
+      'p1',
+    )
+    // With 2+ cards in discard, DRAW_FROM_STOCK is legal even at stockCount 0 —
+    // it recycles the discard pile (keeping its top card) into a fresh stock
+    // and draws from that. Forcing DRAW_FROM_DISCARD here instead is exactly
+    // the bug that let bots (and, in the UI, human players) get stuck endlessly
+    // taking and re-discarding the same unwanted top card once stock ran dry.
+    expect(action).toEqual({ type: 'DRAW_FROM_STOCK' })
+
+    // And the real validator actually accepts it and performs the recycle.
+    const result = runRummyBotTurn(rummy, 'p1', rummyBotStrategy)
+    expect(result.outcome.ok).toBe(true)
+    expect(totalCards(result.rummy)).toBe(52)
+    // The recycle keeps exactly 1 card on the discard pile (the old top card).
+    expect(result.rummy.session.publicState.discardPile.cards.length).toBe(1)
+  })
+
   it('crash fix: roundOver with an empty hand does not throw, starts next round', () => {
     const p2Cards = createStandardDeck().map((c) => c.id).filter((id) => id !== undefined).slice(0, 10)
     const rummy = buildSession({

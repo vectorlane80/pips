@@ -256,6 +256,15 @@
   transform: translateY(-6px);
 }
 
+/* Empty stock: outline only, no fill/pattern — the pile is gone, not just unclickable */
+.card-back--stock.card-back--empty {
+  background-color: transparent;
+  background-image: none;
+  border-style: dashed;
+  border-color: var(--grey-border);
+  box-shadow: none;
+}
+
 /* ===================================================================
    CardBack — decorative mark (stock only) — 19 px yellow rounded square
    =================================================================== */

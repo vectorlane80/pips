@@ -153,16 +153,19 @@ export interface CardBackProps {
   size: CardBackSize
   /** When true the stock border turns `var(--yellow)` signalling the player may draw. Ignored for fan. */
   canDraw?: boolean
+  /** Stock only: renders an empty outline instead of a full pile when the stock has run out. */
+  empty?: boolean
   className?: string
   style?: React.CSSProperties
   onClick?: () => void
 }
 
-export function CardBack({ size, canDraw, className, style, onClick }: CardBackProps) {
+export function CardBack({ size, canDraw, empty, className, style, onClick }: CardBackProps) {
   const cls = [
     'card-back',
     `card-back--${size}`,
     canDraw && 'card-back--can-draw',
+    size === 'stock' && empty && 'card-back--empty',
     className,
   ]
     .filter(Boolean)
@@ -175,9 +178,9 @@ export function CardBack({ size, canDraw, className, style, onClick }: CardBackP
       style={style}
       onClick={onClick}
       disabled={!onClick}
-      aria-label={size === 'stock' ? 'Stock pile' : 'Face-down card'}
+      aria-label={size === 'stock' ? (empty ? 'Stock pile (empty)' : 'Stock pile') : 'Face-down card'}
     >
-      {size === 'stock' && <span className="card-back__mark" />}
+      {size === 'stock' && !empty && <span className="card-back__mark" />}
     </button>
   )
 }

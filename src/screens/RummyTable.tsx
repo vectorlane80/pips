@@ -506,7 +506,12 @@ export function RummyTable({
 
   const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId && publicState.roundWinnerId
 
-  const canDrawStock = canAct && publicState.turn.phase === 'draw' && publicState.stockCount > 0
+  // Drawing from an empty stock is still legal (and necessary) when the discard pile
+  // has 2+ cards — it recycles the pile (keeping the top card) into a fresh stock.
+  // It's only actually blocked when stock is empty AND discard has exactly 1 card
+  // (the player must take that lone discard card instead) — matches rules.ts exactly.
+  const stockDrawBlocked = stockCount === 0 && discardLen === 1
+  const canDrawStock = canAct && publicState.turn.phase === 'draw' && !stockDrawBlocked
   const canReachIn = canAct && publicState.turn.phase === 'draw'
 
   const lEnabled = layDownEnabled(selectedIds, hand)
@@ -727,6 +732,7 @@ export function RummyTable({
                 <CardBack
                   size="stock"
                   canDraw={canDrawStock}
+                  empty={publicState.stockCount === 0}
                   onClick={canDrawStock ? onDrawStock : undefined}
                 />
               </div>
