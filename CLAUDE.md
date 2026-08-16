@@ -34,6 +34,40 @@ fast is still wrong.
 - When a spec or fix touches bot pacing, timing, or animation sequencing, this
   section is a mandatory check before reporting done — not just tsc/test/build.
 
+## Top priority: new games must pattern-match existing games
+
+This app has 14+ existing games with established, working conventions —
+deal/shuffle intro animations (`src/components/DealIntro.tsx`), the sound
+registry's usage patterns, turn-highlight treatment, select-then-confirm
+card play, hand sorting, table layout, footnote/copy tone, and more. When
+building a new game (or writing a spec for one), these are not optional
+extras to remember if the spec happens to mention them — they are the
+default, and skipping one is a bug. This is exactly how Uno shipped without
+a deal-intro shuffle, without select-then-confirm play, with an unsorted
+hand, and with inconsistent turn highlighting: each was designed in
+isolation as if no sibling game already answered the question.
+
+- Before writing any spec or code for a new game, identify the closest
+  existing sibling(s) by shape (card vs. board, 2-player vs. N-player) and
+  read their table/room/results screens IN FULL — not a skim for one
+  specific pattern the current task happens to care about.
+- Every interaction, animation, and sound a sibling game already has is the
+  default for the new game too, unless there is a specific, stated reason
+  the new game should differ. A spec's silence on some point (e.g. "does
+  this game get a deal intro?") is not permission to skip the sibling
+  convention — it's a sign the spec itself needs to check what siblings do
+  before it's considered complete.
+- A cross-game layout/consistency pass is planned (owner-driven, e.g.
+  standardizing score placement) to reduce the inconsistencies that
+  currently exist between games. Once that lands, its result becomes the
+  new reference baseline every future game must match — not today's ad hoc
+  per-game layouts, which are known to be inconsistent in the interim.
+- When a spec or fix touches a new game's screens, sounds, or interaction
+  model, cite the specific sibling file(s) read and the specific
+  conventions matched (or the specific, stated reason for deviating) before
+  reporting done — "it works" is not sufficient, "it matches the
+  established pattern, here's where" is the bar.
+
 ## Other constraints
 
 - No new runtime dependencies without a spec saying so. `vitest` as a dev
