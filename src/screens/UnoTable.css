@@ -270,7 +270,18 @@
   border-radius: 16px;
   padding: 10px 14px;
   background: #fff;
-  transition: border-color 0.2s;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* Active (current player) row is filled with the seat color — matching the
+   scoreboard row's treatment — and the sub text / dot border lighten to read
+   on the fill (MexicanTrain's seat-card trick). */
+.uno-opp-row--turn .uno-opp-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.uno-opp-row--turn .uno-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
 }
 
 .uno-opp-name {
@@ -507,20 +518,24 @@
    to its right. */
 .uno-hand-fan {
   display: flex;
-  min-height: 114px; /* room for hover lift (9px) + card height (100px) */
-  padding-top: 14px;
+  min-height: 120px; /* card height (100px) + selected lift clearance */
+  padding-top: 20px; /* ≥ 18px selected lift, so it never clips the header */
   padding-bottom: 6px;
 }
 
-.uno-hand-fan .uno-card-face--hand {
+.uno-hand-fan .uno-card-face--hand,
+.uno-hand-fan .uno-card-back--hand {
   z-index: 1;
 }
 
-.uno-hand-fan .uno-card-face--hand + .uno-card-face--hand {
+/* Any adjacent fan item overlaps the previous one by 30px — faces and
+   face-down backs can mix (the forced-draw reveal gate renders some hand
+   cards as backs), so this is size-agnostic rather than face-only. */
+.uno-hand-fan > * + * {
   margin-left: -30px;
 }
 
-/* ---- Actions row (Pass + hint) ---- */
+/* ---- Actions row (Play + Pass + reveal + hint) ---- */
 
 .uno-actions {
   display: flex;
@@ -536,17 +551,29 @@
   padding-right: 28px;
 }
 
+/* Play is the commit step of select-then-confirm — the same visual weight
+   as Pass, in the brand red so it reads as the primary action. */
+.uno-play-btn {
+  background: var(--uno-brand);
+  color: #fff;
+  border-color: var(--ink);
+  box-shadow: 0 7px 0 var(--ink);
+}
+
+/* Reveal is a prompt, quieter than Play/Pass — ghost style. */
+.uno-reveal-btn {
+  height: 44px;
+  padding-left: 20px;
+  padding-right: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 3px solid var(--grey-border-2);
+  border-radius: 999px;
+  box-shadow: 0 4px 0 var(--grey-border);
+  font-size: 14px;
+}
+
 .uno-action-hint {
   font-size: 14px;
   color: var(--muted-text);
-}
-
-/* ---- Footnote ---- */
-
-.uno-footnote {
-  margin-top: clamp(14px, 2.2vw, 22px);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--faint-text);
-  text-align: center;
 }

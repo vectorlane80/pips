@@ -1,5 +1,5 @@
 import type { JSX } from 'react'
-import type { UnoCard } from '../card-games/uno/deck.ts'
+import type { UnoCard, UnoColor } from '../card-games/uno/deck.ts'
 import './UnoCard.css'
 
 // ---- UnoCardFace ----
@@ -25,17 +25,34 @@ const ACTION_MARKS: Record<'skip' | 'reverse' | 'draw2', string> = {
 export function UnoCardFace({
   card,
   size,
+  activeColor,
+  selected,
   onClick,
 }: {
   card: UnoCard
   size: 'hand' | 'discard'
+  /**
+   * Discard-pile top card only. When the top card is a wild (color 'wild')
+   * whose color has already been chosen, render it in that chosen solid
+   * color instead of the generic wild gradient — the WILD/+4 label stays.
+   * Never passed for hand cards: a wild still in a hand has no assigned
+   * color yet.
+   */
+  activeColor?: UnoColor
+  selected?: boolean
   onClick?: () => void
 }): JSX.Element {
+  // A wild on the discard pile whose color was chosen shows that color (the
+  // generic gradient is only for wilds that haven't been colored yet).
+  const faceColor = card.color === 'wild' && activeColor !== undefined ? activeColor : card.color
   const cls = [
     'uno-card-face',
     `uno-card-face--${size}`,
-    `uno-card-face--${card.color}`,
-  ].join(' ')
+    `uno-card-face--${faceColor}`,
+    selected && 'uno-card-face--selected',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   const ariaLabel =
     card.kind === 'number'
@@ -49,6 +66,7 @@ export function UnoCardFace({
             : card.kind === 'wild'
               ? 'Wild'
               : 'Wild draw four'
+  const finalAriaLabel = selected ? `${ariaLabel}, selected` : ariaLabel
 
   const renderContent = () => {
     switch (card.kind) {
@@ -87,7 +105,7 @@ export function UnoCardFace({
       className={cls}
       onClick={onClick}
       disabled={!onClick}
-      aria-label={ariaLabel}
+      aria-label={finalAriaLabel}
     >
       {renderContent()}
     </button>
@@ -101,14 +119,18 @@ export function UnoCardFace({
 // commercial card game's back. `stock` (the draw pile) is the only
 // interactive size: the caller wires an onClick when drawing is legal and the
 // border turns gold via a class swap (Phase10CardBack's canDraw mechanic);
-// `fan`/`small` are static face-down displays.
+// `fan`/`small` are static face-down displays, and `hand` is a face-down card
+// inside the player's OWN fan (the forced-draw reveal gate) — clickable to
+// reveal.
 
 export function UnoCardBack({
   size,
   onClick,
   disabled,
+  style,
+  className,
 }: {
-  size: 'fan' | 'stock' | 'small'
+  size: 'fan' | 'stock' | 'small' | 'hand'
   onClick?: () => void
   /**
    * Stock only. Explicit "draw is not legal right now" signal, separate from
@@ -117,6 +139,9 @@ export function UnoCardBack({
    * Phase10CardBack's `disabled={!onClick}` rule still applies underneath.
    */
   disabled?: boolean
+  /** DealIntro and the fan renderers pass positioning via style/className. */
+  style?: React.CSSProperties
+  className?: string
 }): JSX.Element {
   // Phase10CardBack's interplay: the button is disabled whenever no onClick
   // is wired; the gold "may draw" ring is a CSS modifier class swap, not a
@@ -127,6 +152,7 @@ export function UnoCardBack({
     'uno-card-back',
     `uno-card-back--${size}`,
     size === 'stock' && !isDisabled && 'uno-card-back--can-draw',
+    className,
   ]
     .filter(Boolean)
     .join(' ')
@@ -135,6 +161,7 @@ export function UnoCardBack({
     <button
       type="button"
       className={cls}
+      style={style}
       onClick={onClick}
       disabled={isDisabled}
       aria-label={size === 'stock' ? 'Stock pile' : 'Face-down card'}

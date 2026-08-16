@@ -2318,3 +2318,79 @@ shipping each verified charter promptly.
   to 500 points, or the "lift the 2-player cap on Rummy/Phase10/
   Dominoes" item already queued in ROADMAP's "Next up" section) would
   be new scope, not part of this charter's definition of done.
+
+## Cycle 8 — 2026-08-15 (post-charter UX fix pass, spec 34h)
+- **Trigger:** user live-played Uno after the charter landed and gave
+  a 9-item punch list comparing it against Rummy/Phase10 conventions:
+  single-click-to-play instead of select-then-confirm, a table layout
+  that didn't match the other card games, unsorted hand, no deal-intro
+  shuffle animation, an inconsistent turn-highlight treatment between
+  the scoreboard and opponent rail, a too-cute footnote, a going-out
+  score banner that always read "0 points" despite the real score
+  being correct, wild cards never revealing their chosen color on the
+  discard pile, and (added mid-turn) forced draws from an opponent's
+  draw-two/wild-four appearing in-hand with no acknowledgment click.
+- **Scoping:** asked two clarifying questions before writing a fix
+  spec, since guessing wrong on either would have meant redoing
+  substantial work — table-layout scope (keep the N-player seat-rail
+  structure and fix the actual inconsistencies, vs. force Rummy/
+  Phase10's 2-player column layout onto a 2-10 player game) and sound
+  assets (this codebase's registry needs real mp3 files per sound
+  name, no synthesized-placeholder convention exists). User chose:
+  keep the rail, fix details; wire the registry now with placeholder
+  files, real audio to follow.
+- **Shipped directly (not through the implementer, mechanical/low-
+  risk):** six new `SoundName` entries in `src/hooks/useSound.ts`
+  (`uno-call`, `uno-called-on`, `uno-skip`, `uno-reverse`, `uno-draw`,
+  `uno-wild`) with placeholder audio files (copies of existing sounds
+  — `knock`/`error`/`card-play`×2/`card-draw`/`king-me` — the user
+  will drop real files into the same six `src/assets/sounds/uno-*.mp3`
+  paths later with no further code changes needed).
+- **Shipped via spec 34h** (`src/screens/UnoTable.tsx`/`.css`,
+  `src/components/UnoCard.tsx`, new `src/screens/UnoTable.test.ts`):
+  select-then-confirm card play (click selects, a red "Play" button
+  commits — mirrors Rummy/Phase10's pattern, single-select since Uno
+  only ever plays one card); a fixed canonical hand sort (`sortUnoHand`
+  — color-grouped red/yellow/green/blue, ascending numbers then action
+  cards within a color, wilds always last), no user toggle, unlike
+  Rummy/Phase10's two-way sort; `DealIntro` wired in exactly like
+  Rummy's pattern, N-1 opponents via the `others` array; opponent-rail
+  turn highlight now matches the scoreboard's full seat-color fill
+  (was border-only, an internal inconsistency more than a cross-game
+  one); the footnote removed entirely (confirmed Rummy/Phase10 have no
+  equivalent); the going-out banner now sums `pointsAdded` instead of
+  reading the always-0 out-player entry; `UnoCardFace` gained an
+  optional `activeColor` prop so the discard pile's top card shows the
+  chosen color once a wild is resolved (hand cards unaffected — a wild
+  still in hand has no color yet); a client-side-only forced-draw
+  reveal gate (new cards from someone else's draw-two/wild-four render
+  face-down in the fan until clicked — deliberately NOT a host-state
+  change, the engine already settled the real hand instantly, this is
+  presentation-only, same principle `DealIntro` already relies on).
+- **Implementer note:** hit the 25-tool-iteration cap twice (once
+  after finishing only the card-component groundwork, once mid-final-
+  self-review after tsc/test/build were already reported clean) — both
+  recovered via `deepseek --continue`, no lead-authored patches needed.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (953/953, +6 new `sortUnoHand` tests, zero regressions), `npm run
+  build` (clean) myself. Read the full diffs of `UnoTable.tsx`,
+  `UnoCard.tsx`, and the new test file directly — traced the reveal-
+  gate's `knownCardIds` effect logic by hand (own-draw vs forced-draw
+  vs round-transition branches) and confirmed it can't deadlock (the
+  reveal button renders regardless of whose turn it is). Live-verified
+  in the browser end to end: deal intro fired and animated correctly
+  for a 3-player match, hand rendered in the correct sorted order
+  (red ascending → yellow → blue → wild), select-then-confirm worked
+  (click selects with a lift+ring, "Play" button commits), the
+  opponent rail's turn fill now matches the scoreboard, a wild play
+  correctly opened the color picker and the chosen color (green) was
+  correctly enforced as the new active color against the next bot
+  play. Zero console errors throughout. Noted (not a bug): two
+  unrelated files (`src/App.tsx`, `src/screens/FarkleTable.tsx`) were
+  modified in the working tree by a different concurrent session
+  (Battleship/Farkle sound-pacing) — left untouched, out of scope.
+- **Continue?** Holding here — this was a live-feedback fix pass, not
+  a new charter milestone. Nothing from this cycle has been committed
+  yet; will request authorization same as the main charter once the
+  user confirms the fixes read correctly (and once real Uno audio
+  files replace the six placeholders).

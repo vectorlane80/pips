@@ -27,6 +27,12 @@ import checkerMove from '../assets/sounds/checker-moving.mp3'
 import checkerJump from '../assets/sounds/checker-jumping-over.mp3'
 import kingMe from '../assets/sounds/king-me.mp3'
 import trainHorn from '../assets/sounds/train-horn.mp3'
+import unoCall from '../assets/sounds/uno-call.mp3'
+import unoCalledOn from '../assets/sounds/uno-called-on.mp3'
+import unoSkip from '../assets/sounds/uno-skip.mp3'
+import unoReverse from '../assets/sounds/uno-reverse.mp3'
+import unoDraw from '../assets/sounds/uno-draw.mp3'
+import unoWild from '../assets/sounds/uno-wild.mp3'
 
 export type SoundName =
   | 'dice-roll' | 'die-select' | 'drawn-x' | 'drawn-circle' | 'piece-drop' | 'farkle-bust' | 'bank-points'
@@ -35,6 +41,7 @@ export type SoundName =
   | 'domino-shuffle' | 'domino-draw' | 'domino-play' | 'knock'
   | 'checker-move' | 'checker-jump' | 'king-me'
   | 'train-horn' | 'turn-start'
+  | 'uno-call' | 'uno-called-on' | 'uno-skip' | 'uno-reverse' | 'uno-draw' | 'uno-wild'
 
 const SOUND_FILES: Record<SoundName, string> = {
   'dice-roll': diceRoll,
@@ -65,6 +72,12 @@ const SOUND_FILES: Record<SoundName, string> = {
   'king-me': kingMe,
   'train-horn': trainHorn,
   'turn-start': turnStart,
+  'uno-call': unoCall,
+  'uno-called-on': unoCalledOn,
+  'uno-skip': unoSkip,
+  'uno-reverse': unoReverse,
+  'uno-draw': unoDraw,
+  'uno-wild': unoWild,
 }
 
 const COOKIE_NAME = 'pips-sound'

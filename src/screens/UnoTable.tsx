@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { UnoCard, UnoColor } from '../card-games/uno/deck.ts'
 import type { UnoLastAction, UnoPublicState } from '../card-games/uno/state.ts'
 import { UNO_TARGET, handHasLegalPlay, isUnoPlayable } from '../card-games/uno/state.ts'
 import { currentPlayer } from '../engine/turn-engine.ts'
 import { topCard } from '../card-engine/zones.ts'
+import { DealIntro } from '../components/DealIntro'
 import { UnoCardBack, UnoCardFace } from '../components/UnoCard'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
@@ -42,6 +43,35 @@ const COLOR_SWATCHES: ReadonlyArray<{ color: UnoColor; hex: string }> = [
   { color: 'green', hex: '#16a34a' },
   { color: 'blue', hex: '#2f6fed' },
 ]
+
+// ---- Canonical hand sort ----
+//
+// Uno's ONE fixed order, always applied (no user toggle like Rummy/Phase10):
+// grouped by color in the fixed order red, yellow, green, blue; within a
+// color group, number cards ascending by value (0-9) first, then that
+// color's action cards in the fixed sub-order skip, reverse, draw2. Wild
+// and wild4 belong to no color group — they always sort to the very end
+// (wild before wild4). Exported only for the unit test; callers outside
+// this module have no use for it.
+export function sortUnoHand(cards: UnoCard[]): UnoCard[] {
+  const COLOR_ORDER: ReadonlyArray<UnoColor> = ['red', 'yellow', 'green', 'blue']
+  const ACTION_ORDER: ReadonlyArray<'skip' | 'reverse' | 'draw2'> = ['skip', 'reverse', 'draw2']
+  return [...cards].sort((a, b) => {
+    // Wilds form their own final group; everything else sorts by color.
+    const aColorRank = a.color === 'wild' ? COLOR_ORDER.length : COLOR_ORDER.indexOf(a.color)
+    const bColorRank = b.color === 'wild' ? COLOR_ORDER.length : COLOR_ORDER.indexOf(b.color)
+    if (aColorRank !== bColorRank) return aColorRank - bColorRank
+    if (a.color === 'wild') {
+      return (a.kind === 'wild' ? 0 : 1) - (b.kind === 'wild' ? 0 : 1)
+    }
+    // Numbers before action cards within a color.
+    const aIsNumber = a.kind === 'number' ? 1 : 0
+    const bIsNumber = b.kind === 'number' ? 1 : 0
+    if (aIsNumber !== bIsNumber) return bIsNumber - aIsNumber
+    if (aIsNumber === 1) return (a.value ?? 0) - (b.value ?? 0)
+    return ACTION_ORDER.indexOf(a.kind as 'skip' | 'reverse' | 'draw2') - ACTION_ORDER.indexOf(b.kind as 'skip' | 'reverse' | 'draw2')
+  })
+}
 
 // ---- Uno-call button ----
 //
@@ -125,6 +155,15 @@ function formatLastAction(
   }
 }
 
+// A stable fingerprint for "is this the same action as last render".
+// Ignores drewCount so a wild4's CHOOSE_COLOR (which merges drewCount: 4 into
+// the same play) doesn't read as a second, new play.
+function lastActionSignature(lastAction: UnoLastAction | null): string {
+  if (lastAction === null) return 'none'
+  const c = lastAction.card
+  return `${lastAction.by}|${lastAction.kind}|${c?.kind ?? 'none'}|${c?.color ?? 'none'}|${c?.value ?? 'none'}`
+}
+
 function computeStatus(
   publicState: UnoPublicState,
   isMyTurn: boolean,
@@ -172,7 +211,9 @@ function computeRoundBanner(
   if (publicState.roundResult === null) return 'Round blocked — no cards left to draw.'
   const outId = publicState.roundResult.outPlayerId
   const outName = outId === localPlayerId ? 'You' : (names[outId] ?? outId)
-  const gained = publicState.roundResult.pointsAdded[outId] ?? 0
+  // pointsAdded[outPlayerId] is ALWAYS 0 by contract (it records each OTHER
+  // player's contribution). Sum every entry to get the out-player's gain.
+  const gained = Object.values(publicState.roundResult.pointsAdded).reduce((a, b) => a + b, 0)
   return `${outName} went out and scored ${gained} points!`
 }
 
@@ -212,6 +253,75 @@ export function UnoTable({
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   useTurnStartSound(isMyTurn, humanCount, playTurnStart)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Card ids already shown face-up. New ids that arrive from someone ELSE's
+  // draw2/wild4 stay out of this set until the local player reveals them.
+  const [knownCardIds, setKnownCardIds] = useState<Set<string>>(() => new Set(hand.map((c) => c.id)))
+
+  // Fresh-round detection: show the deal intro exactly once per distinct
+  // round this component instance ever sees.
+  const introShownForRoundRef = useRef<number | null>(null)
+  const [showIntro, setShowIntro] = useState(false)
+
+  const revealPrevRoundRef = useRef(publicState.round)
+  const revealPrevHandLenRef = useRef(hand.length)
+
+  // ---- Effects ----
+  // Show the deal intro on mount and on every START_NEXT_ROUND transition;
+  // never re-fires for the same round on an unrelated re-render.
+  useEffect(() => {
+    if (introShownForRoundRef.current !== publicState.round) {
+      introShownForRoundRef.current = publicState.round
+      setShowIntro(true)
+    }
+  }, [publicState.round])
+
+  // Clear the selection whenever it stops being valid: the selected card
+  // leaves the hand, the turn changes, a wild color picker opens, the
+  // discard top/active color makes it illegal, or the stage leaves 'play'.
+  useEffect(() => {
+    setSelectedId((prev) => {
+      if (prev === null) return null
+      const card = hand.find((c) => c.id === prev)
+      if (!card) return null
+      if (!canAct || publicState.pendingWild !== null || top === undefined) return null
+      if (!isUnoPlayable(card, top, publicState.activeColor)) return null
+      return prev
+    })
+  }, [hand, canAct, publicState.pendingWild, top, publicState.activeColor])
+
+  // Forced-draw reveal gate (spec 34h §8) — purely client-side presentation.
+  // The engine already put the drawn cards in the hand; we only delay SHOWING
+  // them face-up. Own deliberate DRAW_CARDs reveal immediately; a fresh round
+  // is fully revealed by the DealIntro.
+  useEffect(() => {
+    const roundChanged = publicState.round !== revealPrevRoundRef.current
+    const handGrew = hand.length > revealPrevHandLenRef.current
+    const lastAction = publicState.lastAction
+    const ownDraw = lastAction !== null && lastAction.kind === 'draw' && lastAction.by === localPlayerId
+
+    if (roundChanged) {
+      setKnownCardIds(new Set(hand.map((c) => c.id)))
+    } else if (handGrew && ownDraw) {
+      // My own deck draw — already required a click, no double gating.
+      setKnownCardIds((prev) => {
+        const next = new Set(prev)
+        for (const c of hand) next.add(c.id)
+        return next
+      })
+    } else {
+      // Hand shrank (prune played ids) OR a forced draw grew it (leave the
+      // new ids unknown so they render face-down until revealed).
+      setKnownCardIds((prev) => {
+        const currentIds = new Set(hand.map((c) => c.id))
+        const kept = new Set([...prev].filter((id) => currentIds.has(id)))
+        return kept.size === prev.size ? prev : kept
+      })
+    }
+
+    revealPrevRoundRef.current = publicState.round
+    revealPrevHandLenRef.current = hand.length
+  }, [hand, publicState.round, publicState.lastAction, localPlayerId])
 
   // ---- Sounds ----
   // Diff room-state transitions, but only for my own actions (never for an
@@ -220,23 +330,63 @@ export function UnoTable({
   // (shuffle); discard growing = a play; stock shrinking = cards drawn.
   const stockCount = publicState.stockCount
   const discardLen = publicState.discardPile.cards.length
+  const actionSig = lastActionSignature(publicState.lastAction)
   const soundSigRef = useRef({
     stockCount, discardLen,
     stage: publicState.stage, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
+    round: publicState.round, handLen: hand.length,
+    unoWindowPlayerId: publicState.unoWindow?.playerId ?? null,
+    actionSig,
   })
   const noticeSeenRef = useRef(!!notice)
 
   useEffect(() => {
     const p = soundSigRef.current
+    const roundChanged = publicState.round !== p.round
+    const handGrew = hand.length > p.handLen
+    const la = publicState.lastAction
+    const ownDraw = la !== null && la.kind === 'draw' && la.by === localPlayerId
+
+    // Own-action diffs. Judgment call: 'uno-draw' REPLACES the generic
+    // 'card-draw' for Uno's own deck draws, so the same event never fires
+    // both sounds.
     if (p.wasMyTurn) {
       if (stockCount > p.stockCount) {
         play('shuffle')
       } else if (discardLen > p.discardLen) {
         play('card-play')
       } else if (stockCount < p.stockCount) {
-        play('card-draw')
+        // When the stock shrank because I resolved a draw2/wild4, the NEXT
+        // player drew those cards, not me — suppress the draw sound.
+        const drewForNext = la !== null && la.kind === 'play' && la.by === localPlayerId && la.drewCount > 0
+        if (!drewForNext) play('uno-draw')
       }
     }
+
+    // Action-flavored sounds — everyone witnesses a skip/reverse/wild landing.
+    if (!roundChanged && actionSig !== p.actionSig && la !== null && la.kind === 'play' && la.card !== null) {
+      if (la.card.kind === 'skip') play('uno-skip')
+      else if (la.card.kind === 'reverse') play('uno-reverse')
+      else if (la.card.kind === 'wild' || la.card.kind === 'wild4') play('uno-wild')
+    }
+
+    // Forced draw (draw2/wild4) landing on me → the §8 reveal prompt sound.
+    if (!roundChanged && handGrew && !ownDraw && la !== null && la.kind === 'play' && la.drewCount > 0 && la.card !== null && (la.card.kind === 'draw2' || la.card.kind === 'wild4')) {
+      play('uno-draw')
+    }
+
+    // Uno-window sounds.
+    const windowClosed = p.unoWindowPlayerId !== null && publicState.unoWindow === null && publicState.stage === 'play' && !roundChanged
+    if (windowClosed) {
+      // Caught: MY window closed while my hand grew by exactly 2 with no new
+      // lastAction — a CALL_UNO catch. (A draw2/wild4 would change lastAction.)
+      const caughtMe = p.unoWindowPlayerId === localPlayerId && hand.length - p.handLen === 2 && actionSig === p.actionSig
+      // Self-call: a window closed with NO other state change at all.
+      const selfCall = !caughtMe && actionSig === p.actionSig && stockCount === p.stockCount && discardLen === p.discardLen
+      if (caughtMe) play('uno-called-on')
+      else if (selfCall) play('uno-call')
+    }
+
     if (p.stage !== 'roundOver' && publicState.stage === 'roundOver' && publicState.roundResult !== null) {
       play('round-win')
     }
@@ -252,10 +402,18 @@ export function UnoTable({
     soundSigRef.current = {
       stockCount, discardLen,
       stage: publicState.stage, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
+      round: publicState.round, handLen: hand.length,
+      unoWindowPlayerId: publicState.unoWindow?.playerId ?? null,
+      actionSig,
     }
-  }, [stockCount, discardLen, publicState.stage, publicState.roundResult, publicState.matchWinnerId, isMyTurn, notice, play])
+  }, [stockCount, discardLen, publicState.stage, publicState.roundResult, publicState.matchWinnerId, publicState.unoWindow, publicState.lastAction, publicState.round, isMyTurn, notice, hand.length, localPlayerId, actionSig, play])
 
   // ---- Computed ----
+  const sortedHand = useMemo(() => sortUnoHand(hand), [hand])
+  const unrevealedIds = useMemo(
+    () => hand.filter((c) => !knownCardIds.has(c.id)).map((c) => c.id),
+    [hand, knownCardIds],
+  )
   const logLine = useMemo(
     () => formatLastAction(publicState.lastAction, localPlayerId, names),
     [publicState.lastAction, localPlayerId, names],
@@ -274,7 +432,8 @@ export function UnoTable({
     if (publicState.stage !== 'play' || !isMyTurn) return null
     if (publicState.pendingWild !== null) return 'Choose a color to finish your play.'
     if (publicState.hasDrawnThisTurn) return 'Play the card you drew, or pass.'
-    return hasPlayable ? 'Click a card to play it.' : 'No playable cards — click the deck to draw.'
+    if (unrevealedIds.length > 0) return 'Reveal the drawn cards first.'
+    return hasPlayable ? 'Select a card to play.' : 'No playable cards — click the deck to draw.'
   })()
 
   // Client-side legality prediction only — the host is still the authority
@@ -294,8 +453,35 @@ export function UnoTable({
     return !catchStaggered
   }
 
+  // ---- Handlers ----
+  const handleCardClick = useCallback((cardId: string) => {
+    setSelectedId((prev) => (prev === cardId ? null : cardId))
+  }, [])
+
+  const handlePlay = useCallback(() => {
+    if (selectedId === null) return
+    onPlayCard(selectedId)
+    setSelectedId(null)
+  }, [onPlayCard, selectedId])
+
+  const handleReveal = useCallback((clickedCardId?: string) => {
+    setKnownCardIds(new Set(hand.map((c) => c.id)))
+    if (clickedCardId !== undefined) {
+      const card = hand.find((c) => c.id === clickedCardId)
+      if (card && cardClickable(card)) setSelectedId(clickedCardId)
+    }
+  }, [hand, cardClickable])
+
   // ---- Render ----
   const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
+  const others = publicState.seatOrder
+    .filter((id) => id !== localPlayerId)
+    .map((id) => ({
+      id,
+      name: names[id] ?? id,
+      color: colors[id] ?? 'var(--slate-pip)',
+      handSize: publicState.handCounts[id] ?? 0,
+    }))
 
   return (
     <div className="uno-table">
@@ -335,6 +521,16 @@ export function UnoTable({
           right while keeping wrap order — on narrow screens the rail wraps
           back to its own row above the board column. */}
       <div className="uno-table-card">
+        {showIntro ? (
+          <DealIntro
+            others={others}
+            yourHandSize={hand.length}
+            shuffleSound="shuffle"
+            renderCardBack={(p) => <UnoCardBack {...p} />}
+            onComplete={() => setShowIntro(false)}
+          />
+        ) : (
+        <>
         {/* Right rail: scoreboard + turn log + status */}
         <div className="uno-rail">
           <span className="uno-rail-caption">Round {publicState.round + 1} · {targetText}</span>
@@ -407,17 +603,22 @@ export function UnoTable({
                 <div
                   key={seatId}
                   className={`uno-opp-row${isTurn ? ' uno-opp-row--turn' : ''}`}
-                  style={isTurn ? { borderColor: color } : undefined}
+                  style={isTurn ? { background: color, borderColor: color, color: '#fff' } : undefined}
                 >
-                  <span className="uno-seat-dot" style={{ background: color }} />
-                  <span className="uno-opp-name" style={{ color }}>{names[seatId] ?? seatId}</span>
+                  <span
+                    className="uno-seat-dot"
+                    style={isTurn
+                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
+                      : { background: color }}
+                  />
+                  <span className="uno-opp-name" style={isTurn ? undefined : { color }}>{names[seatId] ?? seatId}</span>
                   <div className="uno-opp-stack">
                     {Array.from({ length: stackCount }, (_, i) => (
                       <UnoCardBack key={i} size="small" />
                     ))}
                   </div>
                   <span className="uno-opp-count">{count} cards</span>
-                  {isTurn && <span className="uno-turn-tag" style={{ background: color }}>turn</span>}
+                  {isTurn && <span className="uno-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
                   <UnoCallButton
                     disabled={unoCallDisabled(seatId)}
                     onClick={() => onCallUno(seatId)}
@@ -451,7 +652,7 @@ export function UnoTable({
                 </div>
                 <div className="uno-discard-slot">
                   {top ? (
-                    <UnoCardFace card={top} size="discard" />
+                    <UnoCardFace card={top} size="discard" activeColor={publicState.activeColor} />
                   ) : (
                     <span className="uno-discard-empty">Discard pile empty</span>
                   )}
@@ -495,30 +696,51 @@ export function UnoTable({
             </div>
 
             <div className="uno-hand-fan">
-              {hand.map((card) => (
-                <UnoCardFace
-                  key={card.id}
-                  card={card}
-                  size="hand"
-                  onClick={cardClickable(card) ? () => onPlayCard(card.id) : undefined}
-                />
-              ))}
+              {sortedHand.map((card) => {
+                if (unrevealedIds.includes(card.id)) {
+                  // Face-down until the local player reveals the forced draw.
+                  return (
+                    <UnoCardBack
+                      key={card.id}
+                      size="hand"
+                      onClick={() => handleReveal(card.id)}
+                    />
+                  )
+                }
+                const clickable = cardClickable(card)
+                return (
+                  <UnoCardFace
+                    key={card.id}
+                    card={card}
+                    size="hand"
+                    selected={selectedId === card.id}
+                    onClick={clickable ? () => handleCardClick(card.id) : undefined}
+                  />
+                )
+              })}
             </div>
 
-            {(showPass || handHint !== null) && (
+            {(showPass || selectedId !== null || unrevealedIds.length > 0 || handHint !== null) && (
               <div className="uno-actions">
+                {selectedId !== null && (
+                  <button type="button" className="btn uno-action-btn uno-play-btn" onClick={handlePlay}>Play</button>
+                )}
                 {showPass && (
                   <button type="button" className="btn uno-action-btn" onClick={onPass}>Pass</button>
+                )}
+                {unrevealedIds.length > 0 && (
+                  <button type="button" className="btn uno-action-btn uno-reveal-btn" onClick={() => handleReveal()}>
+                    Reveal {unrevealedIds.length} {unrevealedIds.length === 1 ? 'card' : 'cards'}
+                  </button>
                 )}
                 {handHint !== null && <span className="uno-action-hint">{handHint}</span>}
               </div>
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
-
-      {/* Footnote */}
-      <p className="uno-footnote">Your hand never leaves this device — only the play does.</p>
     </div>
   )
 }

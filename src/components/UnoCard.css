@@ -7,6 +7,7 @@
    =================================================================== */
 
 .uno-card-face {
+  --_selected-shadow: #e0a800;
   position: relative;
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
@@ -48,6 +49,16 @@
 
 .uno-card-face--hand:active:not(:disabled) {
   transform: translateY(2px);
+}
+
+/* Selected (select-then-confirm): yellow border, darker shadow, higher lift —
+   the same treatment PlayingCard/Phase10Card use. The :hover combinator
+   ensures the selected transform wins over the plain hover above. */
+.uno-card-face--hand.uno-card-face--selected,
+.uno-card-face--hand.uno-card-face--selected:hover {
+  border-color: var(--yellow);
+  box-shadow: 0 6px 0 var(--_selected-shadow);
+  transform: translateY(-18px);
 }
 
 /* ===================================================================
@@ -249,6 +260,31 @@
   border-radius: 7px;
   border-width: 2px;
   border-color: var(--ink);
+}
+
+/* ===================================================================
+   UnoCardBack — hand (70 × 100) — face-down card in the player's own fan
+   (the forced-draw reveal gate). Same size/weight as the hand face so it
+   slots into the fan without shifting the overlap geometry.
+   =================================================================== */
+
+.uno-card-back--hand {
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
+  border-color: var(--ink);
+  box-shadow: 0 6px 0 var(--grey-border);
+}
+
+/* Hover lift matches the hand face, so a face-down card reads as clickable
+   (it flips the whole unrevealed batch face-up). */
+.uno-card-back--hand:hover:not(:disabled) {
+  transform: translateY(-9px);
+}
+
+.uno-card-back--hand:active:not(:disabled) {
+  transform: translateY(2px);
 }
 
 /* ===================================================================
