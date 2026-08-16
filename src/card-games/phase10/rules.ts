@@ -22,14 +22,17 @@ function finishRoundByGoingOut(
   newHasLaidPhase: Record<string, boolean>,
   newDiscard?: Zone,
 ): ActionOutcome<Phase10PublicState, Phase10PrivateState> {
-  // 1. Round scoring: the player who went out scores +0 this round. Every OTHER player (in
-  //    this 2-player game, just the opponent) adds the penalty of their remaining hand.
-  //    Lower cumulative score is better — never invert or subtract, just add the penalty.
-  const opponentId = publicState.turn.playerOrder.find((p) => p !== playerId)!
-  const newScores = {
-    ...publicState.scores,
-    [playerId]: publicState.scores[playerId],
-    [opponentId]: publicState.scores[opponentId] + handPenalty(privateStates[opponentId].hand.cards),
+  // 1. Round scoring: the player who went out scores +0 this round. Every OTHER seated player
+  //    adds the penalty of their OWN remaining hand — never anyone else's. Lower cumulative
+  //    score is better — never invert or subtract, just add the penalty. (Phase 10, unlike
+  //    Rummy, never gives the going-out player a positive contribution: going out just means
+  //    paying nothing this round.) At 2 players this loop is provably identical to the old
+  //    two-player split — the going-out player's score was unchanged and the opponent got
+  //    += handPenalty(their hand); iterating seatOrder instead of "the opponent" only
+  //    generalizes, it doesn't change anything.
+  const newScores: Record<string, number> = {}
+  for (const p of publicState.seatOrder) {
+    newScores[p] = publicState.scores[p] + (p === playerId ? 0 : handPenalty(privateStates[p].hand.cards))
   }
 
   // 2. Phase advancement: players who laid their phase this round advance one phase next
@@ -95,26 +98,42 @@ function makeValidator(
       if (!publicState.roundOver || publicState.matchWinnerId) {
         return { ok: false, reason: 'round is not over, or the match is already decided' }
       }
-      const [prevA, prevB] = publicState.turn.playerOrder
-      const nextOrder: [string, string] = [prevB, prevA]   // alternate who starts each round
-      const { p0Hand, p1Hand, stock: newStock, discardPile } = dealRound(nextOrder, rng)
+      const { hands, stock: newStock, discardPile } = dealRound(publicState.seatOrder, rng)
       onStockChange(newStock)
+      // The next round's starter rotates through the FIXED seatOrder (never the previous
+      // round's turn order): seatOrder[roundNumber % seatOrder.length], where roundNumber is
+      // the 1-based round that just ended — round 1 ends → seatOrder[1] starts round 2, etc.,
+      // wrapping to seatOrder[0] every len rounds. Build the turn fresh, then advanceTurn
+      // exactly that many times — exactly Rummy's spec 35 mechanism. phaseIdx is deliberately
+      // NOT touched here (phase advancement happens in finishRoundByGoingOut, see its comment).
+      let turn = createTurnState<Phase10TurnPhase>(publicState.seatOrder, 'draw')
+      for (let i = 0; i < publicState.roundNumber % publicState.seatOrder.length; i++) turn = advanceTurn(turn, 'draw')
+      const groups: Record<string, Phase10Group[]> = {}
+      const hasLaidPhase: Record<string, boolean> = {}
+      const handCounts: Record<string, number> = {}
+      const newPrivateStates: Record<string, Phase10PrivateState> = {}
+      for (const seatedPlayer of publicState.seatOrder) {
+        groups[seatedPlayer] = []
+        hasLaidPhase[seatedPlayer] = false
+        handCounts[seatedPlayer] = cardCount(hands[seatedPlayer])
+        newPrivateStates[seatedPlayer] = { hand: hands[seatedPlayer] }
+      }
       return {
         ok: true,
         publicState: {
           ...publicState,
-          turn: createTurnState<Phase10TurnPhase>(nextOrder, 'draw'),
+          turn,
           discardPile,
           stockCount: cardCount(newStock),
-          groups: { [nextOrder[0]]: [], [nextOrder[1]]: [] },
+          groups,
           hits: [],
-          hasLaidPhase: { [nextOrder[0]]: false, [nextOrder[1]]: false },
+          hasLaidPhase,
           roundNumber: publicState.roundNumber + 1,
           roundOver: false,
           roundWinnerId: null,
-          handCounts: { [nextOrder[0]]: cardCount(p0Hand), [nextOrder[1]]: cardCount(p1Hand) },
+          handCounts,
         },
-        privateStates: { [nextOrder[0]]: { hand: p0Hand }, [nextOrder[1]]: { hand: p1Hand } },
+        privateStates: newPrivateStates,
       }
     }
 
@@ -327,8 +346,9 @@ function makeValidator(
         return finishRoundByGoingOut(publicState, { ...privateStates, [playerId]: { hand: newHand } }, playerId, publicState.groups, publicState.hits, publicState.hasLaidPhase, newDiscard)
       }
 
-      // Every discarded Skip skips the opponent's turn — in this 2-player game skipNext
-      // moves the index by 2, which lands back on the SAME player and gives them another turn.
+      // Every discarded Skip skips the NEXT player's turn: skipNext advances by 2 seats in
+      // playerOrder order. With 2 players that lands back on the discarder (nobody to skip);
+      // with 3+ it passes the next player entirely.
       const discarded = newDiscard.cards[newDiscard.cards.length - 1]
       const skipApplied = discarded.meta?.kind === 'skip'
       return {

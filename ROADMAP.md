@@ -47,8 +47,25 @@ Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
       tiles, layoff-eligible highlighting, host-side rule enforcement
       correctly rejecting an illegal lay-off attempt (no meld of my own
       down yet) — zero console errors throughout.
-- [ ] Phase 10 engine: same generalization, 2–6 seats (108-card deck
-      comfortably supports 6; matches real Phase 10's own official cap)
+- [x] Phase 10 engine (spec 37): same generalization as Rummy's spec
+      35, mirrored technique-for-technique (seatOrder field, dealRound/
+      createGame loop generalization, START_NEXT_ROUND rotation via
+      createTurnState+advanceTurn). 2–6 seats (108-card deck
+      comfortably supports 6; matches real Phase 10's own official cap
+      independently). `finishRoundByGoingOut`'s scoring loop generalizes
+      cleanly (Phase 10 has no meld-contribution complexity like Rummy
+      — going-out player always +0, every other player += their OWN
+      hand penalty). Match-win/phase-advancement/tiebreak logic was
+      ALREADY N-player-safe and needed zero changes — confirmed
+      unchanged via a byte-level function-body diff, not just
+      "untouched in spirit." One correct comment-only fix (Skip-card
+      behavior description at 3+ players). 962 tests (958+4) / tsc /
+      build green. Review: delegated to deepseek-as-Oscar (lower risk,
+      proven mirror pattern) — approve, no blockers, genuinely
+      rigorous (re-derived rotation arithmetic independently, byte-
+      diffed the unchanged match-win logic with a script rather than
+      trusting the claim, verified test arithmetic against real deck/
+      scoring values).
 - [ ] Phase 10 screens: opponent area → seat-tile grid showing full laid
       phase groups per tile
 - [ ] Phase 10 wiring: App.tsx N-player PeerJS, same pattern

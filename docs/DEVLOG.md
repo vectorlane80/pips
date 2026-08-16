@@ -2740,3 +2740,54 @@ shipping each verified charter promptly.
   (engine 2-6 seats, then its own screens+wiring spec, likely also
   combined for the same tsc-must-stay-green reason) without pausing,
   per the charter's unattended-operation instruction.
+
+## Cycle 14 — 2026-08-16 (Phase 10 engine, spec 37)
+- **Shipped**: same N-player generalization as Rummy's spec 35,
+  mirrored deliberately (Phase 10's pre-generalization code was
+  structurally almost identical to Rummy's — confirmed by reading both
+  before writing the spec, which let this spec be written efficiently
+  by directly referencing the proven Rummy techniques instead of
+  re-deriving them). `seatOrder` field, `PHASE10_MIN/MAX_SEATS` (2/6,
+  108-card deck comfortably supports 6, independently matches real
+  Phase 10's own official cap), `dealRound`/`createPhase10Game`
+  generalized via loops, `START_NEXT_ROUND` rotation using the exact
+  same `createTurnState`+`advanceTurn` mechanism. `finishRoundByGoingOut`'s
+  scoring loop was simpler than Rummy's had been — Phase 10 has no
+  meld-contribution concept, so it's a straightforward "going-out
+  player +0, everyone else += their own hand penalty" loop with no
+  equivalent-formula subtlety to prove.
+- **A genuinely nice catch by the implementer**: the match-win/phase-
+  advancement/tiebreak logic in `finishRoundByGoingOut` was ALREADY
+  N-player-safe as written (already iterated `turn.playerOrder`
+  generically, no 2-hardcoding) — confirmed by the lead before writing
+  the spec, and the spec explicitly told the implementer not to touch
+  it. It correctly left that logic alone and only found one real,
+  correct thing to fix: a comment describing Skip-card behavior that
+  was accurate at 2 players ("skips back to the same player") but
+  became misleading at 3+ (skips the immediate next player instead) —
+  fixed as a comment-only change, no logic touched, verified via a
+  byte-level diff by the reviewer.
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (962/962, 958 baseline + 4 new), `npm run build` (clean) myself. Read
+  the actual `finishRoundByGoingOut`/`START_NEXT_ROUND` code directly.
+- **Review**: delegated to deepseek running the Oscar persona, per the
+  charter's proportional-routing plan (lower risk than Rummy's screens
+  +wiring milestone, since this closely mirrors an already-approved
+  pattern) — to conserve the lead's own review capacity for the
+  higher-risk work still ahead. The review was genuinely rigorous, not
+  a rubber stamp: it wrote a small Python script to byte-diff the
+  `finishRoundByGoingOut` function body against the pre-change version
+  to PROVE the match-win logic was untouched rather than trust the
+  spec's claim, independently re-derived the rotation arithmetic for
+  both 2- and 3-player cases, and verified the new tests' arithmetic
+  against the actual `deck.ts` card-id layout and `scoring.ts` point
+  values rather than trusting the test's own comments. Verdict:
+  approve, no blockers, two nits (a `turnNumber` cosmetic difference at
+  round start with no observable consumer, and one test that could be
+  strengthened to more directly prove the completers-filter excludes
+  non-completers — code is correct either way).
+- **Continue?** Yes — Phase 10's engine is done. Moving directly to its
+  screens+wiring milestone (mirroring Rummy's spec 36's combined
+  approach, same reasoning: Phase10Table/App.tsx already have working
+  2-player code that would break if screens changed without wiring
+  changing in the same commit) without pausing.

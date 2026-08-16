@@ -84,6 +84,7 @@ function buildSession(config: {
 
   const publicState: Phase10PublicState = {
     turn,
+    seatOrder: ['p1', 'p2'],
     discardPile,
     stockCount: cardCount(stock),
     groups: config.groups ?? { p1: [], p2: [] },

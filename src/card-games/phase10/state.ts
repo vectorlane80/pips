@@ -32,6 +32,7 @@ export interface Phase10Hit {
 
 export interface Phase10PublicState {
   turn: TurnState<Phase10TurnPhase>
+  seatOrder: string[]                      // fixed player order for the whole match, never reordered
   discardPile: Zone
   stockCount: number
   groups: Record<string, Phase10Group[]>   // playerId -> groups THEY laid this round
@@ -88,47 +89,66 @@ export interface Phase10Session {
                        // stock-recycle shuffle and round redeal — one seed drives the whole match
 }
 
+export const PHASE10_MIN_SEATS = 2
+export const PHASE10_MAX_SEATS = 6   // 108-card deck at a 10-card hand: 6 players deal 6×10+1=61 cards and
+                                       // still leave 47 in stock — comfortable; matches real Phase 10's own
+                                       // official 6-player cap, both lines of reasoning agree
+
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
 export function dealRound(
-  playerIds: [string, string],
+  playerIds: string[],
   rng: () => number,
-): { p0Hand: Zone; p1Hand: Zone; stock: Zone; discardPile: Zone } {
+): { hands: Record<string, Zone>; stock: Zone; discardPile: Zone } {
   const deck = createPhase10Deck()
   const shuffled = shuffleDeck(deck, rng)
-  const { dealt: p0Dealt, remaining: afterP0 } = dealCards(shuffled, 10)
-  const { dealt: p1Dealt, remaining: afterP1 } = dealCards(afterP0, 10)
-  const { dealt: discardStart, remaining: stockCards } = dealCards(afterP1, 1)
-  const p0Hand = addCards(createHand(playerIds[0]), p0Dealt)
-  const p1Hand = addCards(createHand(playerIds[1]), p1Dealt)
+  let remaining = shuffled
+  const hands: Record<string, Zone> = {}
+  for (const playerId of playerIds) {
+    const { dealt, remaining: rest } = dealCards(remaining, 10)
+    hands[playerId] = addCards(createHand(playerId), dealt)
+    remaining = rest
+  }
+  const { dealt: discardStart, remaining: stockCards } = dealCards(remaining, 1)
   const stock = addCards(createPublicZone('stock', 'private'), stockCards)
   const discardPile = addCards(createDiscardPile(), discardStart)
-  return { p0Hand, p1Hand, stock, discardPile }
+  return { hands, stock, discardPile }
 }
 
-export function createPhase10Game(playerIds: [string, string], seed: number): Phase10Session {
+export function createPhase10Game(playerIds: string[], seed: number): Phase10Session {
   const rng = createRng(seed)
-  const { p0Hand, p1Hand, stock, discardPile } = dealRound(playerIds, rng)
+  const { hands, stock, discardPile } = dealRound(playerIds, rng)
   const turn = createTurnState<Phase10TurnPhase>(playerIds, 'draw')
+
+  const groups: Record<string, Phase10Group[]> = {}
+  const hasLaidPhase: Record<string, boolean> = {}
+  const phaseIdx: Record<string, number> = {}
+  const scores: Record<string, number> = {}
+  const handCounts: Record<string, number> = {}
+  const privateStates: Record<string, Phase10PrivateState> = {}
+  for (const playerId of playerIds) {
+    groups[playerId] = []
+    hasLaidPhase[playerId] = false
+    phaseIdx[playerId] = 0
+    scores[playerId] = 0
+    handCounts[playerId] = cardCount(hands[playerId])
+    privateStates[playerId] = { hand: hands[playerId] }
+  }
 
   const publicState: Phase10PublicState = {
     turn,
+    seatOrder: playerIds,
     discardPile,
     stockCount: cardCount(stock),
-    groups: { [playerIds[0]]: [], [playerIds[1]]: [] },
+    groups,
     hits: [],
-    hasLaidPhase: { [playerIds[0]]: false, [playerIds[1]]: false },
-    phaseIdx: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
-    scores: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
+    hasLaidPhase,
+    phaseIdx,
+    scores,
     roundNumber: 1,
     roundOver: false,
     roundWinnerId: null,
     matchWinnerId: null,
-    handCounts: { [playerIds[0]]: 10, [playerIds[1]]: 10 },
-  }
-
-  const privateStates: Record<string, Phase10PrivateState> = {
-    [playerIds[0]]: { hand: p0Hand },
-    [playerIds[1]]: { hand: p1Hand },
+    handCounts,
   }
 
   return { session: createHostSession(publicState, privateStates), stock, rng }

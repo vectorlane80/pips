@@ -3,7 +3,7 @@ import { createPhase10Game, type Phase10PublicState, type Phase10PrivateState, t
 import { applyPhase10Action, runPhase10BotTurn } from './rules.ts'
 import { deriveSnapshot } from '../../engine/sync.ts'
 import { currentPlayer, createTurnState } from '../../engine/turn-engine.ts'
-import { cardCount, createHand, createDiscardPile, createPublicZone, createPlayerZone, addCards } from '../../card-engine/zones.ts'
+import { cardCount, createHand, createDiscardPile, createPublicZone, createPlayerZone, addCards, type Zone } from '../../card-engine/zones.ts'
 import { createPhase10Deck } from './deck.ts'
 import { createRng } from '../../engine/rng.ts'
 import { createHostSession } from '../../engine/sync.ts'
@@ -34,12 +34,50 @@ function totalCards(game: Phase10Session): number {
   )
 }
 
+// N-player version of totalCards — every card in the session (stock, discard, every seated
+// hand, every group zone, every hit) must sum to the 108-card deck.
+function totalCardsAll(game: Phase10Session, playerIds: string[]): number {
+  const pub = game.session.publicState
+  let groupCards = 0
+  for (const playerId of playerIds) {
+    for (const group of pub.groups[playerId] ?? []) {
+      groupCards += cardCount(group.zone)
+    }
+  }
+  const hitCards = pub.hits.reduce((sum, h) => sum + h.cards.length, 0)
+  return (
+    cardCount(game.stock) +
+    cardCount(pub.discardPile) +
+    playerIds.reduce((sum, id) => sum + cardCount(game.session.privateStates[id].hand), 0) +
+    groupCards +
+    hitCards
+  )
+}
+
 function allUniqueCardIds(game: Phase10Session): Set<string> {
   const ids = new Set<string>()
   for (const card of game.stock.cards) ids.add(card.id)
   for (const card of game.session.publicState.discardPile.cards) ids.add(card.id)
   for (const card of game.session.privateStates['p1'].hand.cards) ids.add(card.id)
   for (const card of game.session.privateStates['p2'].hand.cards) ids.add(card.id)
+  for (const playerId of Object.keys(game.session.publicState.groups)) {
+    for (const group of game.session.publicState.groups[playerId]) {
+      for (const card of group.zone.cards) ids.add(card.id)
+    }
+  }
+  for (const h of game.session.publicState.hits) {
+    for (const card of h.cards) ids.add(card.id)
+  }
+  return ids
+}
+
+function allUniqueCardIdsAll(game: Phase10Session, playerIds: string[]): Set<string> {
+  const ids = new Set<string>()
+  for (const card of game.stock.cards) ids.add(card.id)
+  for (const card of game.session.publicState.discardPile.cards) ids.add(card.id)
+  for (const playerId of playerIds) {
+    for (const card of game.session.privateStates[playerId].hand.cards) ids.add(card.id)
+  }
   for (const playerId of Object.keys(game.session.publicState.groups)) {
     for (const group of game.session.publicState.groups[playerId]) {
       for (const card of group.zone.cards) ids.add(card.id)
@@ -77,6 +115,8 @@ function buildSession(config: {
   roundWinnerId?: string | null
   matchWinnerId?: string | null
   handCounts?: Record<string, number>
+  seatOrder?: string[]                          // N-player: default ['p1', 'p2']
+  otherHandCardIds?: Record<string, string[]>   // hands for players beyond p1/p2, keyed by playerId
 }): Phase10Session {
   const map = cardMap()
 
@@ -84,37 +124,56 @@ function buildSession(config: {
     return ids.map((id) => map.get(id)!)
   }
 
-  const p1Hand = addCards(createHand('p1'), cardsFor(config.p1HandCardIds))
-  const p2Hand = addCards(createHand('p2'), cardsFor(config.p2HandCardIds))
+  const seatOrder = config.seatOrder ?? ['p1', 'p2']
+  const hands: Record<string, Zone> = {
+    p1: addCards(createHand('p1'), cardsFor(config.p1HandCardIds)),
+    p2: addCards(createHand('p2'), cardsFor(config.p2HandCardIds)),
+  }
+  for (const [playerId, ids] of Object.entries(config.otherHandCardIds ?? {})) {
+    hands[playerId] = addCards(createHand(playerId), cardsFor(ids))
+  }
   const discardPile = addCards(createDiscardPile(), cardsFor(config.discardCardIds))
   const stock = addCards(createPublicZone('stock', 'private'), cardsFor(config.stockCardIds))
 
-  const playerOrder: [string, string] = ['p1', 'p2']
-  const turn = createTurnState<Phase10TurnPhase>(playerOrder, config.phase ?? 'draw')
+  const turn = createTurnState<Phase10TurnPhase>(seatOrder, config.phase ?? 'draw')
   if (config.currentPlayerIndex != null) {
     // createTurnState starts at index 0; advance to desired index by directly setting it
     ;(turn as { currentIndex: number }).currentIndex = config.currentPlayerIndex
   }
 
+  const defaultGroups: Record<string, Phase10Group[]> = {}
+  const defaultHasLaidPhase: Record<string, boolean> = {}
+  const defaultPhaseIdx: Record<string, number> = {}
+  const defaultScores: Record<string, number> = {}
+  const defaultHandCounts: Record<string, number> = {}
+  for (const playerId of seatOrder) {
+    defaultGroups[playerId] = []
+    defaultHasLaidPhase[playerId] = false
+    defaultPhaseIdx[playerId] = 0
+    defaultScores[playerId] = 0
+    defaultHandCounts[playerId] = cardCount(hands[playerId])
+  }
+
   const publicState: Phase10PublicState = {
     turn,
+    seatOrder,
     discardPile,
     stockCount: cardCount(stock),
-    groups: config.groups ?? { p1: [], p2: [] },
+    groups: config.groups ?? defaultGroups,
     hits: config.hits ?? [],
-    hasLaidPhase: config.hasLaidPhase ?? { p1: false, p2: false },
-    phaseIdx: config.phaseIdx ?? { p1: 0, p2: 0 },
-    scores: config.scores ?? { p1: 0, p2: 0 },
+    hasLaidPhase: config.hasLaidPhase ?? defaultHasLaidPhase,
+    phaseIdx: config.phaseIdx ?? defaultPhaseIdx,
+    scores: config.scores ?? defaultScores,
     roundNumber: 1,
     roundOver: config.roundOver ?? false,
     roundWinnerId: config.roundWinnerId ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
-    handCounts: config.handCounts ?? { p1: config.p1HandCardIds.length, p2: config.p2HandCardIds.length },
+    handCounts: config.handCounts ?? defaultHandCounts,
   }
 
-  const privateStates: Record<string, Phase10PrivateState> = {
-    p1: { hand: p1Hand },
-    p2: { hand: p2Hand },
+  const privateStates: Record<string, Phase10PrivateState> = {}
+  for (const playerId of seatOrder) {
+    privateStates[playerId] = { hand: hands[playerId] }
   }
 
   return {
@@ -1015,5 +1074,166 @@ describe('Phase 10 integration harness', () => {
     expect(discardResult.game.session.publicState.turn.phase).toBe('draw')
     expect(currentPlayer(discardResult.game.session.publicState.turn)).toBe('p2')
     expect(totalCards(discardResult.game)).toBe(108)
+  })
+
+  // ── N-player (3-6 seats) — spec 37 ─────────────────────────
+
+  it('4-player going out — every non-going-out player is penalized by their OWN hand only', () => {
+    // p1 goes out by discarding their last card. Every OTHER seated player adds their own
+    // handPenalty: p2 holds red 10 (10), p3 holds a Skip (15), p4 holds a Wild (25). The old
+    // 2-player code only penalized "the opponent" — p3 and p4 would have been left at 0.
+    const seatOrder = ['p1', 'p2', 'p3', 'p4']
+    const game = buildSession({
+      p1HandCardIds: ['p10-0'],        // red 1 — goes out with it
+      p2HandCardIds: ['p10-18'],       // red 10 → 10
+      otherHandCardIds: { p3: ['p10-96'], p4: ['p10-100'] },   // Skip → 15, Wild → 25
+      discardCardIds: ['p10-2'],
+      stockCardIds: remainingDeckIds(['p10-0', 'p10-18', 'p10-96', 'p10-100', 'p10-2']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      seatOrder,
+      scores: { p1: 0, p2: 5, p3: 10, p4: 20 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', { type: 'DISCARD_CARD', cardId: 'p10-0' })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.game.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1's own score is explicitly UNCHANGED (0); everyone else adds ONLY their own penalty.
+    expect(pub.scores).toEqual({ p1: 0, p2: 15, p3: 25, p4: 45 })
+    expect(pub.handCounts).toEqual({ p1: 0, p2: 1, p3: 1, p4: 1 })
+    expect(totalCardsAll(result.game, seatOrder)).toBe(108)
+  })
+
+  it('3-player phase-completion match win — simultaneous completers tie for lowest score, earliest seatOrder wins', () => {
+    // Both p1 and p2 are on Phase 10 (phaseIdx 9) and both laid it this round. p1 goes out
+    // (score unchanged at 10); p2's hand is red 10 (penalty 10) → 0 + 10 = 10. They TIE for
+    // the lowest post-round score among completers, so the existing tiebreak loop picks the
+    // earliest position in playerOrder — p1. p3 is not a completer and lands at 25.
+    const seatOrder = ['p1', 'p2', 'p3']
+    const game = buildSession({
+      p1HandCardIds: ['p10-0'],        // red 1 — goes out with it
+      p2HandCardIds: ['p10-18'],       // red 10 → penalty 10
+      otherHandCardIds: { p3: ['p10-100'] },   // Wild → penalty 25
+      discardCardIds: ['p10-2'],
+      stockCardIds: remainingDeckIds(['p10-0', 'p10-18', 'p10-100', 'p10-2']),
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      seatOrder,
+      phaseIdx: { p1: 9, p2: 9, p3: 0 },
+      hasLaidPhase: { p1: true, p2: true, p3: false },
+      scores: { p1: 10, p2: 0, p3: 0 },
+    })
+
+    const result = applyPhase10Action(game, 'p1', { type: 'DISCARD_CARD', cardId: 'p10-0' })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.game.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    expect(pub.scores).toEqual({ p1: 10, p2: 10, p3: 25 })
+    // p1 and p2 both completed Phase 10 with equal lowest scores (10); p1 is earlier in
+    // playerOrder ['p1','p2','p3'] and wins the deterministic tiebreak.
+    expect(pub.matchWinnerId).toBe('p1')
+    expect(totalCardsAll(result.game, seatOrder)).toBe(108)
+  })
+
+  it('6-player initial deal is correct — 10 each, 1 discard, 47 stock, conservation holds', () => {
+    const seatOrder = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']
+    const game = createPhase10Game(seatOrder, 42)
+    const pub = game.session.publicState
+
+    for (const playerId of seatOrder) {
+      expect(cardCount(game.session.privateStates[playerId].hand)).toBe(10)
+      expect(pub.handCounts[playerId]).toBe(10)
+    }
+    expect(cardCount(pub.discardPile)).toBe(1)
+    expect(cardCount(game.stock)).toBe(47)   // 108 - 6×10 - 1
+    expect(pub.stockCount).toBe(47)
+    expect(pub.seatOrder).toEqual(seatOrder)
+    expect(pub.turn.playerOrder).toEqual(seatOrder)
+    expect(currentPlayer(pub.turn)).toBe('p1')
+    expect(pub.turn.phase).toBe('draw')
+    expect(totalCardsAll(game, seatOrder)).toBe(108)
+    expect(allUniqueCardIdsAll(game, seatOrder).size).toBe(108)
+  })
+
+  it('START_NEXT_ROUND rotates the starter through every seat in seatOrder order (3 players, 5 rounds)', () => {
+    // Hand-verified trace for seatOrder ['p1', 'p2', 'p3'] with 1-based round numbers:
+    //   round 1 starts at seatOrder[0] = p1 (createTurnState starts at index 0)
+    //   round 1 ends → starter = seatOrder[1 % 3] = seatOrder[1] = p2
+    //   round 2 ends → starter = seatOrder[2 % 3] = seatOrder[2] = p3
+    //   round 3 ends → starter = seatOrder[3 % 3] = seatOrder[0] = p1 (wraps)
+    //   round 4 ends → starter = seatOrder[4 % 3] = seatOrder[1] = p2
+    // The rotation is against the FIXED seatOrder — never the previous round's turn order.
+    const seatOrder = ['p1', 'p2', 'p3']
+    const p1Cards = ['p10-0', 'p10-2', 'p10-4']
+    const p2Cards = ['p10-6', 'p10-8', 'p10-10']
+    const p3Cards = ['p10-12', 'p10-14', 'p10-16']
+    const discardCards = ['p10-18']
+    const used = [...p1Cards, ...p2Cards, ...p3Cards, ...discardCards]
+    const stockCardIds = remainingDeckIds(used)
+
+    // Flip a finished-round session back to round-over so the chain can continue (START_NEXT_ROUND
+    // is the only thing that legitimately transitions a round-over state).
+    const markRoundOver = (g: Phase10Session): Phase10Session => {
+      const session = g.session
+      return { ...g, session: { ...session, publicState: { ...session.publicState, roundOver: true } } }
+    }
+
+    const round1 = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      otherHandCardIds: { p3: p3Cards },
+      discardCardIds: discardCards,
+      stockCardIds,
+      phase: 'draw',
+      currentPlayerIndex: 0,
+      seatOrder,
+      roundOver: true,
+      roundWinnerId: 'p1',
+    })
+    expect(currentPlayer(round1.session.publicState.turn)).toBe('p1')   // round 1 starter = seatOrder[0]
+
+    // Round 2: starter should be seatOrder[1] = p2.
+    const round2 = applyPhase10Action(round1, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round2.outcome.ok).toBe(true)
+    let pub = round2.game.session.publicState
+    expect(pub.roundNumber).toBe(2)
+    expect(pub.seatOrder).toEqual(seatOrder)
+    expect(pub.turn.playerOrder).toEqual(seatOrder)
+    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(pub.turn.phase).toBe('draw')
+    expect(pub.groups).toEqual({ p1: [], p2: [], p3: [] })
+    expect(pub.hasLaidPhase).toEqual({ p1: false, p2: false, p3: false })
+    expect(pub.handCounts).toEqual({ p1: 10, p2: 10, p3: 10 })
+    expect(cardCount(round2.game.stock)).toBe(77)   // 108 - 3×10 - 1 discard
+    expect(cardCount(pub.discardPile)).toBe(1)
+    expect(totalCardsAll(round2.game, seatOrder)).toBe(108)
+
+    // Round 3: starter should be seatOrder[2] = p3.
+    const round3 = applyPhase10Action(markRoundOver(round2.game), 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round3.outcome.ok).toBe(true)
+    pub = round3.game.session.publicState
+    expect(pub.roundNumber).toBe(3)
+    expect(currentPlayer(pub.turn)).toBe('p3')
+
+    // Round 4: starter should wrap to seatOrder[0] = p1.
+    const round4 = applyPhase10Action(markRoundOver(round3.game), 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round4.outcome.ok).toBe(true)
+    pub = round4.game.session.publicState
+    expect(pub.roundNumber).toBe(4)
+    expect(currentPlayer(pub.turn)).toBe('p1')
+
+    // Round 5: starter should be seatOrder[1] = p2 again.
+    const round5 = applyPhase10Action(markRoundOver(round4.game), 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round5.outcome.ok).toBe(true)
+    pub = round5.game.session.publicState
+    expect(pub.roundNumber).toBe(5)
+    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(pub.seatOrder).toEqual(seatOrder)
+    expect(pub.turn.playerOrder).toEqual(seatOrder)
   })
 })
