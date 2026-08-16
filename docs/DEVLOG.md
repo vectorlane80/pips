@@ -1927,3 +1927,394 @@ shipping each verified charter promptly.
   brand #c2410c, correct per handoff). Fix dispatched (bigger star,
   thinner stroke). Empty-lane track squash found live and fixed
   (min-height 64px). README updated to twelve games.
+
+## Charter: Uno — cycle 1, 2026-08-15
+
+- **Shipped: Uno core module (spec 34)** — `src/card-games/uno/{deck,state,
+  rules,bot}.ts` + tests. 108-card deck (4 colors × [0, 1-9×2, skip×2,
+  reverse×2, draw2×2] + 4 wild + 4 wild4), genuinely N-player (2-10, not
+  the design handoff's 4-seat cap — user explicitly overrode that) via
+  `Record<playerId, T>` throughout, Rummy-style hidden-stock-outside-
+  HostSession wrapper. Base game only — the Uno-call window and house
+  rules are explicitly out of scope, deferred to specs 34b/34c.
+- **Design decisions locked in the spec, not left to the implementer**:
+  going-out ignores every pending card effect uniformly (skip/reverse/
+  draw2/wild4's draw/color-choice all skipped when the played card empties
+  the hand); N=2 reverse acts as skip, N≥3 flips direction (both via the
+  shared `skipNext`/`reverseDirection` turn-engine primitives, no new
+  turn-order code); wild/wild4 use a two-step pending-color mechanic
+  (`pendingWild` blocks every other action until `CHOOSE_COLOR`); starter-
+  flip retries until a plain number card (sidesteps "what does a starting
+  action card do" entirely); UNO_MAX_SEATS=10 is deck math (108 cards,
+  7-card hands), not arbitrary.
+- **Implementer (deepseek-v4-flash) hit its 25-iteration cap** right as it
+  started the first `tsc` verification call — never actually saw the
+  output. Continued the same session with a narrow, precise fix prompt
+  (two real type errors: a missing `UnoColor` re-export, and 5 sites
+  needing a `card.color as UnoColor` narrowing cast, justified by the same
+  precedent already used in `dealUnoRound`). Second pass fixed both, plus
+  two of its own test-fixture bugs found during its own verification (a
+  draw2-recycle-count miscalculation, and a snapshot no-leak check that
+  needed quoted-token matching since `"uno-1"` is a legitimate substring
+  of `"uno-10"`) — both self-corrected, not lead-diagnosed.
+- **Lead verification (independent, not trusting the report)**: re-ran
+  `tsc -b --noEmit` (silent) and `npm test` (899/899, up from 831) myself;
+  read `rules.ts`/`bot.ts`/`deck.ts` in full; hand-verified the scoring
+  test's arithmetic against the deck's exact card-index layout (uno-9=red
+  5, uno-1/uno-2=two red 1s, uno-100=wild, uno-23=red draw2 → 72+10=82,
+  matched); spot-read the highest-risk tests (N-player skip/reverse,
+  all six going-out cases, stock-exhaustion/blocked-round fallback) to
+  confirm they assert real behavior, not vacuous checks.
+- **Oscar review: approve, no blockers.** Probed out-of-turn `CHOOSE_COLOR`,
+  double-draw, stockCount/stock desync via the blocked-round fallback, and
+  partial-mutation leakage from a failed multi-card draw (draw2/wild4) —
+  all either already rejected by an explicit guard or structurally
+  impossible given `drawFromStock`'s purity. Two nits, neither requiring
+  action: stale `turn`/`hasDrawnThisTurn` during `roundOver`/`over` (zero
+  functional impact — gated by the stage check, and `START_NEXT_ROUND`
+  resets fresh anyway); no live fuzz/property script was run beyond the
+  enumerated test cases (hand-traced instead).
+- **Lesson**: the persistent-implementer-continuation pattern worked
+  exactly as this project's own history says it should — the 25-iteration
+  cap is a real, recurring failure mode (hit it again here, same as noted
+  in earlier charters), and a narrow, precise continuation prompt (name
+  the exact errors, the exact fix, the exact re-verification command)
+  resolved it in one more pass rather than needing a fresh implementer or
+  a lead-authored patch.
+- **Continue?** Yes — M1 is the largest, riskiest milestone in this
+  charter (the base engine everything else builds on) and it landed clean
+  on the first real attempt. Next: spec 34b, the Uno-call race mechanism
+  (`unoWindow`, the single-window-ever invariant, UI-only timing).
+  899 tests / tsc / build green, nothing committed yet (per this project's
+  standing no-auto-commit rule — will request authorization at a natural
+  stopping point, not mid-charter).
+
+## Charter: Uno — cycle 1 cleanup, 2026-08-15
+
+- **User: "Fix the minor concerns/nits - I don't like leaving anything
+  behind."** Both of Oscar's cycle-1 nits closed via spec 34a (state.ts +
+  uno.test.ts only, no behavior change to rules.ts/bot.ts): a one-line
+  comment documenting that `turn`/`hasDrawnThisTurn` are stale outside
+  stage 'play' (harmless by construction, but worth naming for a future
+  reader), and a genuine property-based invariant test — 50 trials, seat
+  counts cycling 2-10, up to 300 real bot-driven actions per trial via the
+  actual validator (not synthetic), asserting after every single action
+  that stockCount matches the real stock, all 108 cards are conserved
+  across hands+stock+discard, handCounts never drifts from the real
+  private hands, and public state stays wire-safe. Zero rejections, zero
+  violations across ~15,000 actions spanning every seat count in range,
+  multiple rounds, stock recycles, and blocked rounds.
+- **Independently verified** (not trusting the report): re-ran tsc/tests/
+  build myself (900/900, tsc silent, build clean), read both diffs in full
+  — the comment is accurate and placed once as specified, the property
+  test matches the spec's exact trial/action counts and all four
+  invariant checks, no duplicate imports.
+- **Continue?** Yes. Next: spec 34b, the Uno-call race mechanism.
+
+## Charter: Uno — cycle 2, 2026-08-15
+
+- **User: "loop should be synchronous. Why stopping?"** — corrected: cycles
+  run back to back without pausing for a heartbeat/check-in between them;
+  only stop for a genuine blocker. Continuing accordingly.
+- **Shipped: Uno-call race mechanism (spec 34b)** — `unoWindow:
+  {playerId:string}|null` on public state, at most one ever active by
+  construction (a single nullable value, not a per-player record — the
+  type itself makes two windows impossible, not just discipline). Opens
+  at the end of every turn-ending branch (PLAY_CARD's number/skip/
+  reverse/draw2, CHOOSE_COLOR's plain-wild/wild4, DRAW_CARD's auto-
+  advance, PASS) when the ACTING player's post-mutation hand is exactly 1
+  card. Destroyed by a new `CALL_UNO {targetPlayerId}` action (self-call:
+  no penalty; catch by anyone else, not gated by whose turn it is: target
+  draws 2) or by the next player's first VALID action (a rejected action
+  never touches it, correctly). No wall-clock time anywhere — the 1s
+  self-priority stagger stays a later, UI-only concern per the earlier
+  design conversation.
+- **Implementer hit the 25-iteration cap again**, same failure mode as
+  cycle 1 — but this time it caught and fixed its OWN bug before running
+  out (a `replace_all` edit missed the deeply-indented 2-player reverse
+  branch on its first pass; it re-read the file, spotted the gap, fixed
+  it) and had already confirmed tsc silent + tests green multiple times
+  in the transcript before the cap hit mid-final-verification-echo.
+- **Lead verification (independent)**: re-ran tsc (silent) and full suite
+  (925/925, up from 900) myself; confirmed `uno.test.ts` still 63/63 green
+  in isolation (only one fixture line touched, no behavior changed); read
+  every one of the 17 `unoWindow` call sites in `rules.ts` directly,
+  specifically hunting the "wrong hand variable" bug class (using a
+  draw2/wild4/catch victim's hand instead of the acting player's) — none
+  found; read the two highest-value tests (open→null→reopen across three
+  turns, and the sequential double-CALL_UNO rejection) in full to confirm
+  they genuinely exercise the sequence rather than asserting a static
+  end-state.
+- **Oscar review (targeted at the 5 hardest failure modes for this
+  mechanism specifically — single-window invariant, wrong-hand-variable
+  bugs, destroyed-uncalled gaps, CALL_UNO double-processing, going-out
+  vs. window-open threshold conflicts): approve, no blockers.** Traced
+  all five directly against the code (not abstract reasoning) — the
+  single-window property turned out to be enforced by the TYPE itself
+  (a nullable single value, not a collection), rejected actions correctly
+  leave `unoWindow` untouched (traced through `sync.ts`'s `applyAction`),
+  the double-call race is closed by the engine's inherent sequential
+  processing (confirmed via the existing test applying a second call
+  against the FIRST call's result, not a fresh copy), and going-out vs.
+  window-open are mutually exclusive by simple early-return arithmetic
+  (`===0` returns before the `===1` check ever runs). One nit: two call
+  sites compute a window-open check that's provably always-false given
+  how hand sizes work at that point (harmless, left as uniform/consistent
+  code rather than special-cased away).
+- **Continue?** Yes. Next: spec 34c, house rules structure (the generic
+  toggle-array pathway + the one seed rule, "draw until you can play").
+
+## Charter: Uno — cycle 3, 2026-08-15
+
+- **Shipped: house rules structure + seed rule (spec 34c)** — generic
+  `UNO_HOUSE_RULE_DEFS: {key,label,description,default}[]` (one entry:
+  `drawUntilPlayable`) and `resolveHouseRules(overrides?)`, which builds
+  the stored record by iterating the defs array (not hardcoded to one
+  key) so a second rule later is one array entry + no new code anywhere
+  else. `createUnoGame` takes an optional third `houseRules` param. The
+  one real rule is confined entirely to `DRAW_CARD`: a new
+  `drawUntilPlayable()` loop (draws one at a time until playable or
+  exhausted) used only when the flag is on; the flag-off path is the
+  original single-card `drawFromStock` call, unchanged.
+- **Implementer finished clean this time** — no iteration-cap cutoff,
+  first-pass report matched independent verification exactly.
+- **Lead verification (independent)**: tsc silent, 939/939 (up from 925),
+  build clean; read every touched line in both files myself, including
+  proving by hand (not trusting the code comment) that
+  `drawUntilPlayable` cannot infinite-loop — the drawn card is pushed
+  only into the loop's local accumulator, never back into the discard
+  pile, so `stock+discard`'s combined size strictly shrinks by 1 every
+  iteration and the loop is well-founded by construction.
+- **Oscar review (targeted, kept brief per the change's actual risk
+  level): approve, no findings.** Confirmed three things directly against
+  the code rather than taking claims at face value: the loop-termination
+  argument above; that the rule-OFF path is algebraically (not just
+  test-wise) identical to pre-spec-34c behavior, since `drewCount:
+  draw.drawn.length` and `drawnCard = draw.drawn[draw.drawn.length-1]`
+  both collapse to the old hardcoded values when exactly one card is
+  drawn; and that `houseRules` survives `START_NEXT_ROUND`/`CALL_UNO`/
+  going-out because none of their override lists mention it and all four
+  use the same spread-then-override pattern consistently.
+- **Continue?** Yes. M1-M3 (the entire card-engine layer: base rules,
+  the Uno-call mechanism, house rules) are done — 939 tests, three clean
+  Oscar reviews, nothing committed yet. Next: M4, screens + multi-seat
+  wiring — the biggest remaining milestone, and the first one that
+  touches React/App.tsx rather than pure engine code.
+
+## Charter: Uno — cycle 4, 2026-08-15
+
+- **Shipped: card face/back components (spec 34d)** —
+  `src/components/UnoCard.tsx` + `.css`, mirroring `Phase10Card`'s exact
+  click/disabled mechanics for the stock pile (gold-ring class swap, not
+  a rendered ring; disabled = no onClick, ORed with an explicit disabled
+  prop) and its wild-gradient technique verbatim
+  (`linear-gradient(135deg, #ff5d73 0%, #6c4cff 33%, #1aa06d 66%,
+  #ffd23f 100%)`). Real 180°-rotated corner duplicate (an actual second
+  element, not a CSS trick), tilted white badge with a counter-rotated
+  symbol, ⊘/⇄/+2 glyphs, WILD/+4 text labels (no star, per the handoff's
+  explicit note that a star draft read unclear). No opacity dimming or
+  highlight ring on playable cards — matches the handoff's explicit
+  "both were tried and reverted" note. No tests (confirmed Phase10Card
+  has none either, same precedent).
+- **Caught a real deviation before landing, not after**: the implementer
+  substituted Phase10's wild-gradient stop colors for the four SOLID
+  face colors too, since my spec locked the gradient but never pointed
+  at the actual source for the four brand colors. I checked the design
+  prototype directly (`Design Handoff/Pips.dc.html:1602`,
+  `UNO_COLORS = {r:'#e11d2e', y:'#eab308', g:'#16a34a', b:'#2f6fed'}`)
+  and it's a real, checkable discrepancy — not a matter of taste.
+  Dispatched a narrow CSS-only correction (four custom-property values),
+  explicitly leaving the wild gradient untouched since THAT reuse is
+  correct per spec. Re-verified the fix myself: `grep` confirms the
+  brand hexes are now in place and the Phase10 palette appears exactly
+  once (the wild gradient, as intended). tsc/build clean throughout.
+- **Lesson**: when a spec says "read the design doc" but the actual
+  locked values live in a DIFFERENT file (the interactive prototype's JS
+  constants, not the markdown summary), naming the markdown doc alone
+  isn't enough — the implementer can't verify a color it was never
+  pointed at, and reasonably reached for the nearest available palette
+  instead of leaving it unspecified. Point at the exact source next time
+  a spec references "the design," not just the summary doc.
+- **Continue?** Yes. Next: spec 34e, the UnoTable screen itself (the
+  biggest remaining single file — hand fan, deck click-to-draw, discard
+  pile, wild color picker, N-player opponent rail via the Wahoo/MT
+  pattern, house-rules-driven draw hint, and the subtle uncolored
+  Uno-call toggle per the user's explicit styling correction earlier in
+  this charter's design conversation).
+
+## Cycle 5 — 2026-08-15
+- **Shipped:** spec 34e — `src/screens/UnoTable.tsx`/`.css` (525/553
+  lines). N-player opponent seat rail (one row per non-local seat: name,
+  color, hidden-hand small-back stack capped visually at 14, count,
+  turn tag, Uno-call button), deck+discard center band (client-side
+  `isUnoPlayable`/`handHasLegalPlay` legality prediction gates click
+  wiring only, host stays authoritative), wild color picker (current-
+  player-only, real locked brand hexes), fanned hand (`-30px` overlap,
+  matches Rummy/Phase10 convention), house-rules-driven hint text
+  (reads only `houseRules.drawUntilPlayable`), scoreboard + turn log +
+  status right rail (`flex 1 1 230px`/`max 330px` vs board `flex 1 1
+  620px`, per the handoff's direct-fix layout note), sound wiring via
+  the existing `useSound`/`useTurnStartSound` hooks and the established
+  `soundSigRef`-diff-only-for-my-own-actions pattern.
+- **The Uno-call button**: one shared `UnoCallButton` component for both
+  self and catch rows — grayed out (`--grey-fill`/`--disabled-text`/
+  `--grey-border`, existing disabled-button tokens) when off, a subtle
+  shift to `--surface`/`--body-text` when on, deliberately NOT the dark-
+  pill sort-toggle treatment. Self-call enables immediately when the
+  window opens on the local player; catch buttons gate on a new local-
+  only `useCatchStagger` hook (1000ms from when the LOCAL client first
+  observes that specific window, re-keyed off `unoWindow?.playerId` so
+  a window closing uncalled and a different one opening immediately
+  after correctly restarts the timer rather than reusing a stale
+  "already elapsed" flag).
+- **Implementer note:** hit the 25-tool-iteration cap again, this time
+  right as it started its own `tsc` verification — but only after both
+  files were already fully written. No continuation needed this time;
+  I verified the already-written files myself directly rather than
+  re-dispatching, since nothing was left unwritten.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (944/944, unchanged from before — this is a presentational component
+  with no test file, matching every sibling Table screen's precedent),
+  and `npm run build` (clean, pre-existing >500kB chunk warning only)
+  myself. Read `UnoTable.tsx` and `UnoTable.css` in full. Cross-checked
+  every `UnoPublicState`/`UnoCard` field access against the real
+  `state.ts`/`deck.ts` types, confirmed `UnoCardFace`/`UnoCardBack`
+  `size` props match the actual component signatures, and traced
+  `CALL_UNO`'s host-side validator (`rules.ts:182-207`) to confirm the
+  server independently re-checks `targetPlayerId` against
+  `unoWindow.playerId` — so the client's self/catch targeting can't
+  desync from the host's authority even in principle.
+- **Review:** Oscar, targeted at the two highest-risk parts (the
+  `useCatchStagger` re-keying semantics and the legality-prediction/
+  host-authority boundary) plus a general pass. Verdict: approve, no
+  blockers, no major concerns. Traced the effect's dependency-array/
+  cleanup behavior directly against React semantics (not the code's own
+  comments) and confirmed the re-key claim holds for a non-null-to-
+  different-non-null transition, not just null↔non-null. One forward-
+  looking note (not a fix): the sound-diffing branches assume no single
+  action changes both stock and discard in a way that could trip two
+  branches at once — true today, worth a comment if a future house rule
+  changes that coupling.
+- **Continue?** Yes. Next: spec 34f — `UnoRoom.tsx` (multi-seat lobby,
+  house-rules toggle section rendered generically off
+  `UNO_HOUSE_RULE_DEFS`, difficulty picker), `UnoResults.tsx`,
+  `UnoRulesOverlay.tsx`, and `App.tsx` wiring (peer connections beyond
+  2 guests, bot-per-empty-seat, `HostHandle.sendTo` for private hands
+  per the Mexican Train precedent, landing chip, route wiring, README
+  count bump). Per the user's "loop should be synchronous" correction,
+  proceeding directly into spec-writing and dispatch without pausing.
+
+## Cycle 6 — 2026-08-15
+- **Shipped:** spec 34f — `src/screens/UnoRoom.tsx`/`.css`,
+  `UnoResults.tsx`, `UnoRulesOverlay.tsx`. Mirrors MT/Wahoo's Room/
+  Results/RulesOverlay trio exactly where precedent existed; two
+  pieces had none and were designed fresh: the house-rules toggle list
+  (generic `UNO_HOUSE_RULE_DEFS.map()` → one card-button per rule with
+  label/description/On-off pill, inverted-color selected state,
+  `disabled={!isHost}` for guests — no checkbox anywhere in this
+  codebase to copy, confirmed by grep before designing) and the bot-
+  reflex difficulty picker (reused `Room.tsx`'s `DIFFICULTIES` pill
+  convention, labeled "House bot reflex" since Uno's difficulty tunes
+  Uno-call timing, not move quality). Results sorts descending
+  (higher score wins, confirmed against `UNO_TARGET`/`scores` comments
+  in `state.ts` before writing — Wahoo's convention, not MT's
+  ascending-pips one).
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (944/944 unchanged — no test files on this trio, matching every
+  sibling), `npm run build` (clean) myself. Read `UnoRoom.tsx` and
+  `UnoResults.tsx` in full; confirmed the sort direction, the seat-slot
+  padding to `UNO_MAX_SEATS`, the `UNO_MIN_SEATS`-gated start button,
+  and the host/guest-disabled wiring on both new controls all match
+  spec. No implementer iteration-cap issue this cycle.
+- **Review:** self-conducted direct read (no separate Oscar dispatch)
+  — lowest-risk change this charter, purely presentational with two
+  genuinely novel-but-simple UI patterns and full precedent for
+  everything else, same proportionality call as cycle 4's card
+  components.
+- **Also this cycle:** wrote spec 34g (App.tsx/route/landing/README
+  wiring) in full, including the bot Uno-call reflex system design —
+  the highest-risk remaining piece, since `unoBotStrategy` has no
+  CALL_UNO branch at all (confirmed by reading `bot.ts`) so bots need
+  a wholly separate, window-change-triggered timer system, independent
+  of the per-turn bot loop, with explicit stale-timer invalidation via
+  a generation counter. Dispatched to the implementer.
+- **Continue?** Yes, per "loop should be synchronous" — verification
+  of 34g is next the moment it lands, then a live in-browser multi-bot
+  soak test once wiring is confirmed correct on disk.
+
+## Cycle 7 — 2026-08-15
+- **Shipped:** spec 34g — full `App.tsx` wiring: imports, `UnoView`
+  type (lobby|game, mirrors Mexican Train's private-hand shape),
+  state+refs, `startUnoHost`/`startUnoGuest` with spectator-block and
+  seat-cap rejection, `unoBroadcast()` (lobby broadcast + per-guest
+  `sendTo` for private hands + host's own local snapshot, exactly
+  mirroring MT), the per-turn bot loop (`unoActorKey` correctly
+  includes `hasDrawnThisTurn`/`pendingWild`/`stockCount`/discard length
+  so a draw-then-play within one turn re-triggers the loop), house-
+  rules/bot-difficulty lobby state with ref-first writes (two real
+  stale-closure bugs caught and fixed by the implementer mid-cycle:
+  `unoToggleHouseRule` and `unoStart` were reading the state value
+  instead of the ref inside a synchronous broadcast path), route.ts/
+  route.test.ts (`uno` segment + 3 new tests), Landing.tsx shelf tile,
+  README bump (fourteen games, 2–10 range).
+- **The bot Uno-call reflex system** (the highest-risk piece of this
+  entire charter): `checkUnoBotReflexes`/`attemptUnoBotCall`/
+  `rollUnoBotReflex`, triggered at the end of every `unoBroadcast()`
+  call. A generation counter (`unoReflexGenRef`) bumps on every real
+  `unoWindow` transition; every scheduled `setTimeout` captures the
+  generation at schedule time and no-ops if it's stale by the time it
+  fires. Difficulty tiers (easy 900-1500ms/20% skip, medium
+  600-1100ms/10% skip, hard 400-800ms/3% skip) deliberately keep easy
+  bots' delay straddling/exceeding 1s so they sometimes genuinely lose
+  catch races — explicitly NOT meant to be "fixed" for reliability,
+  per the original design intent.
+- **Implementer note:** hit the 25-tool-iteration cap twice this cycle
+  (once almost immediately after starting App.tsx edits, once mid-fix
+  of the stale-closure bug it had just caught itself) — both times
+  recovered via `deepseek --continue` with a precise continuation
+  prompt naming exactly what was left. No lead-authored patches needed
+  either time.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (947/947, +3 from the new route tests), `npm run build` (clean)
+  myself after every continuation, not just the final report. Read the
+  full Uno section of `App.tsx` directly (session lifecycle ~2351-2650,
+  the reflex system ~2653-2716, render wiring ~3766-3870) and traced
+  every `unoSessionRef.current =` assignment site (7 total) by hand to
+  confirm each one flows into `unoBroadcast()` (which triggers the
+  reflex check) except the one legitimate teardown-to-null case.
+- **Review:** Oscar, targeted at the reflex system's generation-counter
+  airtightness, a specific edge case I asked to be traced concretely
+  (disconnect-while-vulnerable then replaced-with-bot), the stale-
+  closure ref audit, and guest-impersonation safety. Verdict: approve
+  with caveats — the edge case was real (a still-open window on a
+  seat that gets bot-replaced never gets a fresh reflex scheduled,
+  since the window's playerId doesn't change) but benign (the window
+  stays catchable by any human and still gets swept by the next
+  player's turn per spec 34b's own semantics, so nothing gets stuck).
+  Fixed immediately with a one-line `unoWindowKeyRef.current = null`
+  reset in `unoReplaceWithBot` right before its broadcast, forcing the
+  next reflex check to treat the still-open window as new. Re-verified
+  tsc/test/build clean after the fix. No impersonation vector found
+  (guest identity comes from the PeerJS connection, never from the
+  action payload).
+- **Live verification:** started a dev server, opened the Uno tile
+  from the landing shelf (confirmed "14 games", correct brand color,
+  2-10 players caption), created a room, added 5 house bots (6 seats
+  total, well past the old 4-player cap the charter explicitly
+  overrode), started the match, and watched several real turns:
+  a skip correctly bypassed exactly one player, a draw-two correctly
+  forced a 2-card draw with the turn log reporting it, my own hand
+  rendered with correct per-card clickability, I played a legal card
+  successfully, and the bot turn loop continued cleanly afterward.
+  Zero console errors throughout.
+- **Uno charter: definition of done reached.** All four milestones
+  (module, call mechanism, house rules, screens+wiring) are shipped,
+  independently verified, and live-tested. Nothing has been committed
+  or pushed this entire charter — requesting commit/push authorization
+  now via REQUESTS.md + chat, per this project's established loop
+  precedent (accumulate uncommitted, ask at natural stopping points).
+- **Continue?** No — charter complete, holding for commit
+  authorization before any further Uno work (e.g. a full-match soak
+  to 500 points, or the "lift the 2-player cap on Rummy/Phase10/
+  Dominoes" item already queued in ROADMAP's "Next up" section) would
+  be new scope, not part of this charter's definition of done.
