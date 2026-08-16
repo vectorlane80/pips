@@ -1,6 +1,42 @@
 # Roadmap
 
-Charter: Uno seat-tile table redesign — see `CHARTER.md`.
+Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
+
+## Charter: Rummy + Phase 10 N-player expansion (2026-08-16) — in progress
+- [x] Rummy engine (spec 35): `playerIds` tuple → array, 2–4 seats
+      (deck-math derived: 52-card deck, 10-card hands, 5 players leaves
+      only 1 stock card — degenerate; 4 leaves 11, playable). New
+      `seatOrder` field + `RUMMY_MIN/MAX_SEATS` exports, mirroring
+      Uno's pattern. `finishRoundByGoingOut` collapsed from a 2-formula
+      split into one uniform per-seat loop (provably identical at 2
+      players — going-out player's empty hand makes deadwood 0
+      automatically). Caught and fixed a real bug in the LEAD's OWN
+      spec mid-cycle: the first-drafted match-win rule ("going-out
+      player always wins outright") would have silently changed
+      existing 2-player behavior in a real case (both cross target,
+      opponent scores strictly higher — old code gave the win to the
+      higher scorer); corrected to preserve exact 2-player parity
+      (strictly-highest-scorer wins, going-out player only wins a tie),
+      generalized properly to N candidates. 958 tests (953+5) / tsc /
+      build green. Oscar review: approve, no blockers — independently
+      re-verified the match-win logic against all 2-player branches and
+      spot-checked test arithmetic against the actual rank/meld value
+      tables rather than trusting the implementer's report.
+- [ ] Rummy screens: opponent area → seat-tile grid showing full laid
+      melds per tile (not a hidden count like Uno — melds are public
+      information), your hand/melds section unchanged
+- [ ] Rummy wiring: App.tsx N-player PeerJS lobby/bot-fill/sendTo,
+      mirroring Uno's spec-34g pattern
+- [ ] Phase 10 engine: same generalization, 2–6 seats (108-card deck
+      comfortably supports 6; matches real Phase 10's own official cap)
+- [ ] Phase 10 screens: opponent area → seat-tile grid showing full laid
+      phase groups per tile
+- [ ] Phase 10 wiring: App.tsx N-player PeerJS, same pattern
+
+Pre-approved by the user at charter creation ("go ahead... just use the
+same basic patterns... get this going while I'm gone"); running via
+/autonomous-dev-loop, deepseek implementing (Haiku fallback if deepseek
+becomes unavailable), deepseek or the lead reviewing per risk level.
 
 ## Charter: Uno seat-tile table redesign (2026-08-16) — done
 - [x] Single slice (spec 34i): `UNO_MAX_SEATS` 10→6, opponent rail

@@ -27,6 +27,7 @@ export interface RummyLayoff {
 
 export interface RummyPublicState {
   turn: TurnState<RummyPhase>
+  seatOrder: string[]                      // fixed player order for the whole match, never reordered
   discardPile: Zone
   stockCount: number
   melds: Record<string, Zone[]>          // playerId -> the meld zones THEY originally laid down this round.
@@ -89,49 +90,65 @@ export interface RummySession {
                        // stock-recycle shuffle and round redeal — one seed drives the whole match
 }
 
+export const RUMMY_MIN_SEATS = 2
+export const RUMMY_MAX_SEATS = 4   // hard ceiling for a single 52-card deck at a 10-card hand: 5 players
+                                     // would deal 5×10+1=51 cards and leave a degenerate 1-card stock; 4 leaves 11
+
 const TARGET_SCORE = 500
 
 // Shared deal logic used both for the very first round and every subsequent round (via START_NEXT_ROUND).
+// Deals 10 cards to each player in `playerIds` order, then 1 to the discard pile, remainder to stock —
+// the same loop shape as Uno's dealUnoRound.
 function dealRound(
-  playerIds: [string, string],
+  playerIds: string[],
   rng: () => number,
-): { p0Hand: Zone; p1Hand: Zone; stock: Zone; discardPile: Zone } {
+): { hands: Record<string, Zone>; stock: Zone; discardPile: Zone } {
   const deck = createStandardDeck()
   const shuffled = shuffleDeck(deck, rng)
-  const { dealt: p0Dealt, remaining: afterP0 } = dealCards(shuffled, 10)
-  const { dealt: p1Dealt, remaining: afterP1 } = dealCards(afterP0, 10)
-  const { dealt: discardStart, remaining: stockCards } = dealCards(afterP1, 1)
-  const p0Hand = addCards(createHand(playerIds[0]), p0Dealt)
-  const p1Hand = addCards(createHand(playerIds[1]), p1Dealt)
+  let remaining = shuffled
+  const hands: Record<string, Zone> = {}
+  for (const playerId of playerIds) {
+    const { dealt, remaining: rest } = dealCards(remaining, 10)
+    hands[playerId] = addCards(createHand(playerId), dealt)
+    remaining = rest
+  }
+  const { dealt: discardStart, remaining: stockCards } = dealCards(remaining, 1)
   const stock = addCards(createPublicZone('stock', 'private'), stockCards)
   const discardPile = addCards(createDiscardPile(), discardStart)
-  return { p0Hand, p1Hand, stock, discardPile }
+  return { hands, stock, discardPile }
 }
 
-export function createRummyGame(playerIds: [string, string], seed: number): RummySession {
+export function createRummyGame(playerIds: string[], seed: number): RummySession {
   const rng = createRng(seed)
-  const { p0Hand, p1Hand, stock, discardPile } = dealRound(playerIds, rng)
+  const { hands, stock, discardPile } = dealRound(playerIds, rng)
   const turn = createTurnState<RummyPhase>(playerIds, 'draw')
+
+  const melds: Record<string, Zone[]> = {}
+  const scores: Record<string, number> = {}
+  const handCounts: Record<string, number> = {}
+  const privateStates: Record<string, RummyPrivateState> = {}
+  for (const playerId of playerIds) {
+    melds[playerId] = []
+    scores[playerId] = 0
+    handCounts[playerId] = cardCount(hands[playerId])
+    privateStates[playerId] = { hand: hands[playerId] }
+  }
 
   const publicState: RummyPublicState = {
     turn,
+    seatOrder: playerIds,
     discardPile,
     stockCount: cardCount(stock),
-    melds: { [playerIds[0]]: [], [playerIds[1]]: [] },
+    melds,
     layoffs: [],
     obligatedCardId: null,
-    scores: { [playerIds[0]]: 0, [playerIds[1]]: 0 },
+    scores,
     target: TARGET_SCORE,
     roundNumber: 1,
     roundOver: false,
     roundWinnerId: null,
     matchWinnerId: null,
-    handCounts: { [playerIds[0]]: 10, [playerIds[1]]: 10 },
-  }
-
-  const privateStates: Record<string, RummyPrivateState> = {
-    [playerIds[0]]: { hand: p0Hand },
-    [playerIds[1]]: { hand: p1Hand },
+    handCounts,
   }
 
   return { session: createHostSession(publicState, privateStates), stock, rng }

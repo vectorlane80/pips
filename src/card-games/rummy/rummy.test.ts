@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createRummyGame, type RummyPublicState, type RummyPrivateState, type RummyAction, type RummyPhase, type RummySession } from './state.ts'
+import { createRummyGame, type RummyPublicState, type RummyPrivateState, type RummyAction, type RummyPhase, type RummySession, type RummyLayoff, fullMeldCards } from './state.ts'
 import { applyRummyAction, runRummyBotTurn } from './rules.ts'
 import { deriveSnapshot } from '../../engine/sync.ts'
 import { currentPlayer } from '../../engine/turn-engine.ts'
@@ -9,6 +9,8 @@ import { createRng } from '../../engine/rng.ts'
 import { createTurnState } from '../../engine/turn-engine.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { classifyMeld } from './melds.ts'
+import { deadwood, meldValue } from './scoring.ts'
+import { rummyBotStrategy } from './bot.ts'
 import type { BotStrategy } from '../../engine/bot.ts'
 import type { Card } from '../../card-engine/cards.ts'
 
@@ -29,6 +31,26 @@ function totalCards(
     cardCount(pub.discardPile) +
     cardCount(priv['p1'].hand) +
     cardCount(priv['p2'].hand) +
+    meldCards +
+    layoffCards
+  )
+}
+
+// N-player version of totalCards — every card in the session (stock, discard, every seated
+// hand, every meld zone, every layoff) must sum to the 52-card deck.
+function totalCardsAll(rummy: RummySession, playerIds: string[]): number {
+  const pub = rummy.session.publicState
+  let meldCards = 0
+  for (const playerId of playerIds) {
+    for (const meld of pub.melds[playerId] ?? []) {
+      meldCards += cardCount(meld)
+    }
+  }
+  const layoffCards = pub.layoffs.reduce((sum, l) => sum + l.cards.length, 0)
+  return (
+    cardCount(rummy.stock) +
+    cardCount(pub.discardPile) +
+    playerIds.reduce((sum, id) => sum + cardCount(rummy.session.privateStates[id].hand), 0) +
     meldCards +
     layoffCards
   )
@@ -86,7 +108,10 @@ function buildSession(config: {
   matchWinnerId?: string | null
   obligatedCardId?: string | null
   melds?: Record<string, Zone[]>
+  layoffs?: RummyLayoff[]
   handCounts?: Record<string, number>
+  seatOrder?: string[]
+  otherHandCardIds?: Record<string, string[]>   // hands for players beyond p1/p2, keyed by playerId
 }): RummySession {
   const deck = createStandardDeck()
   const cardMap = new Map(deck.map((c) => [c.id, c]))
@@ -95,37 +120,52 @@ function buildSession(config: {
     return ids.map((id) => cardMap.get(id)!)
   }
 
-  const p1Hand = addCards(createHand('p1'), cardsFor(config.p1HandCardIds))
-  const p2Hand = addCards(createHand('p2'), cardsFor(config.p2HandCardIds))
+  const seatOrder = config.seatOrder ?? ['p1', 'p2']
+  const hands: Record<string, Zone> = {
+    p1: addCards(createHand('p1'), cardsFor(config.p1HandCardIds)),
+    p2: addCards(createHand('p2'), cardsFor(config.p2HandCardIds)),
+  }
+  for (const [playerId, ids] of Object.entries(config.otherHandCardIds ?? {})) {
+    hands[playerId] = addCards(createHand(playerId), cardsFor(ids))
+  }
   const discardPile = addCards(createDiscardPile(), cardsFor(config.discardCardIds))
   const stock = addCards(createPublicZone('stock', 'private'), cardsFor(config.stockCardIds))
 
-  const playerOrder: [string, string] = ['p1', 'p2']
-  const turn = createTurnState<RummyPhase>(playerOrder, config.phase ?? 'draw')
+  const turn = createTurnState<RummyPhase>(seatOrder, config.phase ?? 'draw')
   if (config.currentPlayerIndex != null) {
     // createTurnState starts at index 0; advance to desired index by directly setting it
     ;(turn as { currentIndex: number }).currentIndex = config.currentPlayerIndex
   }
 
+  const defaultMelds: Record<string, Zone[]> = {}
+  const defaultScores: Record<string, number> = {}
+  const defaultHandCounts: Record<string, number> = {}
+  for (const playerId of seatOrder) {
+    defaultMelds[playerId] = []
+    defaultScores[playerId] = 0
+    defaultHandCounts[playerId] = cardCount(hands[playerId])
+  }
+
   const publicState: RummyPublicState = {
     turn,
+    seatOrder,
     discardPile,
     stockCount: cardCount(stock),
-    melds: config.melds ?? { p1: [], p2: [] },
-    layoffs: [],
+    melds: config.melds ?? defaultMelds,
+    layoffs: config.layoffs ?? [],
     obligatedCardId: config.obligatedCardId ?? null,
-    scores: config.scores ?? { p1: 0, p2: 0 },
+    scores: config.scores ?? defaultScores,
     target: 100,
     roundNumber: 1,
     roundOver: config.roundOver ?? false,
     roundWinnerId: config.roundWinnerId ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
-    handCounts: config.handCounts ?? { p1: config.p1HandCardIds.length, p2: config.p2HandCardIds.length },
+    handCounts: config.handCounts ?? defaultHandCounts,
   }
 
-  const privateStates: Record<string, RummyPrivateState> = {
-    p1: { hand: p1Hand },
-    p2: { hand: p2Hand },
+  const privateStates: Record<string, RummyPrivateState> = {}
+  for (const playerId of seatOrder) {
+    privateStates[playerId] = { hand: hands[playerId] }
   }
 
   return {
@@ -1734,5 +1774,257 @@ describe('Rummy integration harness', () => {
     expect(discardResult.outcome.ok).toBe(true)
     expect(currentPlayer(discardResult.rummy.session.publicState.turn)).toBe('p1')
     expect(discardResult.rummy.session.publicState.turn.phase).toBe('draw')
+  })
+
+  // ── N-player (3-4 seats) — spec 35 ──────────────────────────
+
+  it('3-player round — melds and layoffs from multiple players score by contribution, with each player\'s own deadwood', () => {
+    // p1's original meld: A♣2♣3♣4♣ (c0,c1,c2,c3) — run, value 5×4 = 20.
+    // p2 laid off 5♣ (c4) onto it, p3 laid off 6♣ (c5) onto it → full run A-2-3-4-5-6♣,
+    // value 5×6 = 30 (ace-low, so every card is 5). p2's own meld: 5♦5♥5♠ (c17,c30,c43) — set, value 15.
+    // p1 hand: J♠ (c49) to discard out with. p2 hand: 6♦7♦ (c18,c19) → deadwood 10. p3 hand: 8♦9♦ (c20,c21) → deadwood 10.
+    // p1 delta = 20 - 0 = 20
+    // p2 delta = 5♣ (5, laid off onto p1's run) + 15 (own set) - 10 = 10
+    // p3 delta = 6♣ (5, laid off onto p1's run) - 10 = -5
+    const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2'), cardMap('c3')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const p2MeldCards = [cardMap('c17'), cardMap('c30'), cardMap('c43')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const layoffs: RummyLayoff[] = [
+      { id: 'layoff-0', playerId: 'p2', targetPlayerId: 'p1', targetMeldIndex: 0, cards: [cardMap('c4')] },
+      { id: 'layoff-1', playerId: 'p3', targetPlayerId: 'p1', targetMeldIndex: 0, cards: [cardMap('c5')] },
+    ]
+    const seatOrder = ['p1', 'p2', 'p3']
+    const used = new Set(['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c17', 'c30', 'c43', 'c49', 'c18', 'c19', 'c20', 'c21', 'c51'])
+    const stockCardIds = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c49'],
+      p2HandCardIds: ['c18', 'c19'],
+      discardCardIds: ['c51'],
+      stockCardIds,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      seatOrder,
+      melds: { p1: [p1MeldZone], p2: [p2MeldZone], p3: [] },
+      layoffs,
+      otherHandCardIds: { p3: ['c20', 'c21'] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c49' })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    expect(pub.scores).toEqual({ p1: 20, p2: 10, p3: -5 })
+    // Original meld zones are untouched by layoffs; both layoffs recorded separately.
+    expect(pub.melds['p1'][0].cards.length).toBe(4)
+    expect(pub.melds['p2'][0].cards.length).toBe(3)
+    expect(pub.layoffs).toHaveLength(2)
+    expect(pub.handCounts).toEqual({ p1: 0, p2: 2, p3: 2 })
+    expect(totalCardsAll(result.rummy, seatOrder)).toBe(52)
+    // Invariant: sum of deltas = total meld value on the table (30 + 15) - total deadwood (10 + 10).
+    expect(pub.scores['p1'] + pub.scores['p2'] + pub.scores['p3']).toBe(25)
+    expect(pub.matchWinnerId).toBeNull()
+  })
+
+  it('4-player going out — every non-going-out player\'s score drops by their OWN deadwood', () => {
+    // p1 melds A♣2♣3♣ (c0,c1,c2) = 15 and discards J♠ (c49) to go out.
+    // p2: no melds, hand A♦2♦3♦ (c13,c14,c15) → deadwood 15+5+5 = 25 → delta -25
+    // p3: no melds, hand 4♦5♦6♦ (c16,c17,c18) → deadwood 5+5+5 = 15 → delta -15
+    // p4: no melds, hand 2♠3♠ (c40,c41) → deadwood 5+5 = 10 → delta -10
+    // The old 2-player code only subtracted the single "opponent"'s deadwood; p3 and p4 would
+    // have been left at 0. Every seated player must get their own deadwood subtracted.
+    const p1MeldCards = [cardMap('c0'), cardMap('c1'), cardMap('c2')]
+    const p1MeldZone = addCards(createHand('p1'), p1MeldCards)
+    const seatOrder = ['p1', 'p2', 'p3', 'p4']
+    const used = new Set(['c0', 'c1', 'c2', 'c49', 'c13', 'c14', 'c15', 'c16', 'c17', 'c18', 'c40', 'c41', 'c51'])
+    const stockCardIds = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: ['c49'],
+      p2HandCardIds: ['c13', 'c14', 'c15'],
+      discardCardIds: ['c51'],
+      stockCardIds,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      seatOrder,
+      melds: { p1: [p1MeldZone], p2: [], p3: [], p4: [] },
+      otherHandCardIds: { p3: ['c16', 'c17', 'c18'], p4: ['c40', 'c41'] },
+    })
+
+    const result = applyRummyAction(rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c49' })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    // p1: 15 - 0 = 15; p2: 0 - 25 = -25; p3: 0 - 15 = -15; p4: 0 - 10 = -10
+    expect(pub.scores).toEqual({ p1: 15, p2: -25, p3: -15, p4: -10 })
+    expect(pub.handCounts).toEqual({ p1: 0, p2: 3, p3: 3, p4: 2 })
+    expect(totalCardsAll(result.rummy, seatOrder)).toBe(52)
+  })
+
+  it('match winner tiebreak — non-going-out players tied at target: earliest seatOrder wins', () => {
+    // p1 goes out with a 15-point meld → p1=15 (below target 100), so the going-out player is
+    // NOT a candidate. p2 and p3 both land exactly at 100 with equal scores.
+    //   p2: own meld 5♣5♦5♥5♠ (20) - deadwood 2♦3♦4♦ (15) = +5 → 95+5 = 100
+    //   p3: own meld 6♣6♦6♥ (15) - deadwood 7♣7♦ (10) = +5 → 95+5 = 100
+    // The corrected match-win rule: strictly highest among candidates wins; on a tie that does
+    // NOT include the going-out player, the earliest seatOrder position among the tied wins —
+    // here p2 (seatOrder [p1, p2, p3]), deterministically, never object-iteration order.
+    const p1Cards = ['c0', 'c1', 'c2', 'c49']
+    const p2MeldCards = [cardMap('c4'), cardMap('c17'), cardMap('c30'), cardMap('c43')]
+    const p3MeldCards = [cardMap('c5'), cardMap('c18'), cardMap('c31')]
+    const p2MeldZone = addCards(createHand('p2'), p2MeldCards)
+    const p3MeldZone = addCards(createHand('p3'), p3MeldCards)
+    const seatOrder = ['p1', 'p2', 'p3']
+    const used = new Set(['c0', 'c1', 'c2', 'c49', 'c4', 'c17', 'c30', 'c43', 'c14', 'c15', 'c16', 'c5', 'c18', 'c31', 'c6', 'c19', 'c51'])
+    const stockCardIds = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    const rummy = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: ['c14', 'c15', 'c16'],
+      discardCardIds: ['c51'],
+      stockCardIds,
+      phase: 'discard',
+      currentPlayerIndex: 0,
+      seatOrder,
+      scores: { p1: 0, p2: 95, p3: 95 },
+      melds: { p1: [], p2: [p2MeldZone], p3: [p3MeldZone] },
+      otherHandCardIds: { p3: ['c6', 'c19'] },
+    })
+
+    const melded = applyRummyAction(rummy, 'p1', { type: 'LAY_DOWN_MELD', cardIds: ['c0', 'c1', 'c2'] })
+    expect(melded.outcome.ok).toBe(true)
+    const result = applyRummyAction(melded.rummy, 'p1', { type: 'DISCARD_CARD', cardId: 'c49' })
+    expect(result.outcome.ok).toBe(true)
+
+    const pub = result.rummy.session.publicState
+    expect(pub.roundOver).toBe(true)
+    expect(pub.roundWinnerId).toBe('p1')
+    expect(pub.scores).toEqual({ p1: 15, p2: 100, p3: 100 })
+    // p1 is below target; p2 and p3 tie at the highest score; earliest seatOrder wins.
+    expect(pub.matchWinnerId).toBe('p2')
+    expect(totalCardsAll(result.rummy, seatOrder)).toBe(52)
+  })
+
+  it('START_NEXT_ROUND rotates the starter through every seat in seatOrder order (3 players, 4 rounds)', () => {
+    // Hand-verified trace for seatOrder [p1, p2, p3]:
+    //   round 1 starts at seatOrder[0] = p1 (createTurnState starts at index 0)
+    //   round 1 ends  → next starter = seatOrder[roundNumber % 3] = seatOrder[1] = p2
+    //   round 2 ends  → next starter = seatOrder[2 % 3] = seatOrder[2] = p3
+    //   round 3 ends  → next starter = seatOrder[3 % 3] = seatOrder[0] = p1 (wraps)
+    // The rotation is against the FIXED seatOrder — never the previous round's turn order.
+    const seatOrder = ['p1', 'p2', 'p3']
+    const p1Cards = ['c0', 'c1', 'c2']
+    const p2Cards = ['c4', 'c5', 'c6']
+    const used = new Set([...p1Cards, ...p2Cards, 'c3', 'c7', 'c8', 'c9'])
+    const stockCardIds = createStandardDeck().map((c) => c.id).filter((id) => !used.has(id))
+
+    // Flip a finished-round session back to round-over so the chain can continue (START_NEXT_ROUND
+    // is the only thing that legitimately transitions a round-over state).
+    const markRoundOver = (r: RummySession): RummySession => {
+      const session = r.session
+      return { ...r, session: { ...session, publicState: { ...session.publicState, roundOver: true } } }
+    }
+
+    const round1 = buildSession({
+      p1HandCardIds: p1Cards,
+      p2HandCardIds: p2Cards,
+      discardCardIds: ['c3'],
+      stockCardIds,
+      phase: 'draw',
+      currentPlayerIndex: 0,
+      seatOrder,
+      roundOver: true,
+      roundWinnerId: 'p1',
+      otherHandCardIds: { p3: ['c7', 'c8', 'c9'] },
+    })
+    expect(currentPlayer(round1.session.publicState.turn)).toBe('p1')   // round 1 starter = seatOrder[0]
+
+    // Round 2: starter should be seatOrder[1] = p2.
+    const round2 = applyRummyAction(round1, 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round2.outcome.ok).toBe(true)
+    let pub = round2.rummy.session.publicState
+    expect(pub.roundNumber).toBe(2)
+    expect(pub.seatOrder).toEqual(seatOrder)
+    expect(pub.turn.playerOrder).toEqual(seatOrder)
+    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(pub.turn.phase).toBe('draw')
+    expect(pub.handCounts).toEqual({ p1: 10, p2: 10, p3: 10 })
+    expect(cardCount(round2.rummy.stock)).toBe(21)   // 52 - 3×10 - 1 discard
+    expect(cardCount(pub.discardPile)).toBe(1)
+    expect(totalCardsAll(round2.rummy, seatOrder)).toBe(52)
+
+    // Round 3: starter should be seatOrder[2] = p3.
+    const round3 = applyRummyAction(markRoundOver(round2.rummy), 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round3.outcome.ok).toBe(true)
+    pub = round3.rummy.session.publicState
+    expect(pub.roundNumber).toBe(3)
+    expect(currentPlayer(pub.turn)).toBe('p3')
+
+    // Round 4: starter should wrap to seatOrder[0] = p1.
+    const round4 = applyRummyAction(markRoundOver(round3.rummy), 'p1', { type: 'START_NEXT_ROUND' })
+    expect(round4.outcome.ok).toBe(true)
+    pub = round4.rummy.session.publicState
+    expect(pub.roundNumber).toBe(4)
+    expect(currentPlayer(pub.turn)).toBe('p1')
+    expect(pub.seatOrder).toEqual(seatOrder)
+    expect(pub.turn.playerOrder).toEqual(seatOrder)
+  })
+
+  it('property: 2-4 seat bot playouts keep conservation, handCounts/stockCount sync, fixed seatOrder, and the going-out delta-sum identity', () => {
+    for (let trial = 0; trial < 9; trial++) {
+      const n = 2 + (trial % 3)   // cycles 2..4 so every seat count gets covered
+      const players = Array.from({ length: n }, (_, i) => `p${i}`)
+      let rummy = createRummyGame(players, trial)
+      let roundStartScores = { ...rummy.session.publicState.scores }
+      let actions = 0
+      const maxActions = 120
+
+      while (actions < maxActions && !rummy.session.publicState.matchWinnerId) {
+        const pub = rummy.session.publicState
+        const result = pub.roundOver
+          ? applyRummyAction(rummy, players[0], { type: 'START_NEXT_ROUND' })
+          : runRummyBotTurn(rummy, currentPlayer(pub.turn), rummyBotStrategy)
+        expect(
+          result.outcome.ok,
+          `trial ${trial} (${n} players) action ${actions}: ${result.outcome.reason ?? '(no reason)'}`,
+        ).toBe(true)
+        rummy = result.rummy
+        actions++
+
+        const after = rummy.session.publicState
+        // 1. seatOrder is fixed for the whole match
+        expect(after.seatOrder).toEqual(players)
+        // 2. the public stockCount never drifts from the real host-side stock
+        expect(after.stockCount).toBe(cardCount(rummy.stock))
+        // 3. all 52 cards are always conserved across hands + stock + discard + melds + layoffs
+        expect(totalCardsAll(rummy, players)).toBe(52)
+        // 4. handCounts never drift from the real private hands
+        for (const p of players) {
+          expect(after.handCounts[p]).toBe(cardCount(rummy.session.privateStates[p].hand))
+        }
+
+        if (pub.roundOver && !after.roundOver) {
+          // a new round just started — snapshot scores for the delta-sum identity below
+          roundStartScores = { ...after.scores }
+        } else if (after.roundOver && after.roundWinnerId) {
+          // Going-out round: sum of score deltas = total meld value on the table
+          // - total deadwood left in everyone's hands.
+          let meldTotal = 0
+          for (const p of players) {
+            for (let i = 0; i < (after.melds[p] ?? []).length; i++) {
+              meldTotal += meldValue(fullMeldCards(after.melds, after.layoffs, p, i))
+            }
+          }
+          const deadwoodTotal = players.reduce((s, p) => s + deadwood(rummy.session.privateStates[p].hand.cards), 0)
+          const deltaSum = players.reduce((s, p) => s + (after.scores[p] - (roundStartScores[p] ?? 0)), 0)
+          expect(deltaSum, `trial ${trial} (${n} players) going-out delta-sum`).toBe(meldTotal - deadwoodTotal)
+        }
+      }
+    }
   })
 })

@@ -69,6 +69,7 @@ function buildSession(config: {
 
   const publicState: RummyPublicState = {
     turn,
+    seatOrder: ['p1', 'p2'],
     discardPile,
     stockCount: cardCount(stock),
     melds: config.melds ?? { p1: [], p2: [] },

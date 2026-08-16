@@ -2602,3 +2602,68 @@ shipping each verified charter promptly.
   explicitly out of scope — next steps for those wait on the user's own
   judgment of how this one turned out, not on this session continuing
   unprompted.
+
+## Cycle 12 — 2026-08-16 (new charter: Rummy + Phase 10 N-player expansion)
+- **Trigger**: user pre-approved this charter verbatim at invocation
+  ("go ahead... just use the same basic patterns... get this going with
+  /autonomous-dev-loop while I'm gone"), running unattended for ~8
+  hours. Routing: deepseek implementing (Haiku-Agent fallback if
+  deepseek becomes unavailable — not needed this cycle), deepseek or
+  the lead reviewing depending on risk level. Scheduled hourly wakeup
+  armed as a backup safety net only.
+- **Seat caps derived from real deck math before writing anything**:
+  Rummy 2-4 (single 52-card deck, 10-card hands — 5 players leaves
+  only 1 stock card, a degenerate deal; matches the user's own
+  fallback suggestion exactly), Phase 10 2-6 (108-card deck comfortably
+  supports 6, matches real Phase 10's own official cap independently).
+  Not introducing a second deck for Rummy at higher counts — out of
+  scope, real complexity not asked for.
+- **Shipped (spec 35): Rummy engine N-player generalization.**
+  Investigated the actual codebase before writing the spec (found
+  `bot.ts`/`scoring.ts` already fully N-player-safe — zero changes
+  needed there — narrowing the real scope to `state.ts`/`rules.ts`).
+  `playerIds` tuple → array, new `seatOrder` field + `RUMMY_MIN/
+  MAX_SEATS` exports mirroring Uno's pattern, `dealRound`/
+  `createRummyGame` generalized via loops, `START_NEXT_ROUND`'s starter
+  rotation rebuilt to mirror Uno's exact mechanism (fresh
+  `createTurnState` + `advanceTurn` N times) instead of the old
+  alternating-swap, `finishRoundByGoingOut` collapsed into one uniform
+  per-seat scoring formula.
+- **Caught a real bug in my own spec mid-cycle, not the implementer's
+  fault.** The match-win rule I originally locked ("going-out player
+  wins outright if they cross target") silently changed existing
+  2-player behavior in a real case (both cross target, opponent scores
+  strictly higher — old code gave the win to the higher scorer, not
+  automatically to whoever went out). Caught this by reading the
+  implementer's in-progress diff (it had — correctly, per my own
+  flawed instruction — changed a previously-passing 2-player test's
+  expected value, which is exactly the situation my own spec told it
+  to stop and report rather than silently fix). Dispatched a precise
+  correction: restore 2-player parity exactly (strictly-highest-scorer
+  wins; going-out player only wins a tie for highest), generalized
+  properly to N candidates. Also caught a second, smaller spec error
+  in the same pass: I'd claimed "exactly one test file" for the module
+  when there are actually five (`bot.test.ts` needed a one-line fix
+  for the new `seatOrder` field; the other three test pure standalone
+  functions untouched by this change).
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (958/958, 953 baseline + 5 new, 0 removed — confirmed no existing
+  assertion was weakened), `npm run build` (clean) myself after the
+  correction landed. Read the corrected `finishRoundByGoingOut`/match-
+  win code directly rather than trusting the implementer's report.
+- **Review**: ran Oscar myself (highest-risk milestone in the charter —
+  real scoring-correctness logic, and my own spec had already produced
+  one real bug this cycle) rather than delegate to deepseek. Traced the
+  match-win logic against all six old 2-player branches by hand,
+  independently verified the rotation arithmetic for 2 AND 3 players
+  (not just accepting the implementer's 3-player trace), and spot-
+  checked the arithmetic in the two riskiest new tests against the
+  actual `meldedCardValue`/`deadwoodValue` rank tables — including the
+  subtle unmelded-ace-vs-melded-ace-low-ace distinction (15 vs 5),
+  which the test's own numbers got right. Verdict: approve, no
+  blockers.
+- **Continue?** Yes — engine milestone done, moving directly to Rummy's
+  screens milestone (opponent area → seat-tile grid showing full laid
+  melds, per the "Rummy and Phase10 Full Tables.dc.html" mockup's own
+  reference pattern) without pausing, per the charter's explicit
+  unattended-operation instruction.

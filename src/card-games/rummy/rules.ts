@@ -67,35 +67,48 @@ function finishRoundByGoingOut(
   newObligated: string | null,
   newDiscard?: Zone,
 ): ActionOutcome<RummyPublicState, RummyPrivateState> {
-  const opponentId = publicState.turn.playerOrder.find((p) => p !== playerId)!
-  const opponentHand = privateStates[opponentId].hand
-
   // Score by CONTRIBUTION, not by whose meld a card physically sits in — a card either player
   // laid off onto the other's meld still scores to whoever played it.
   const groups = allMeldGroups(newMelds, newLayoffs)
   const contributedBy = (cardId: string) => contributorOf(newMelds, newLayoffs, cardId)
-  const playerDelta = playerContributedMeldValue(groups, contributedBy, playerId)   // going-out player's hand is empty, no deadwood
-  const opponentDelta = playerContributedMeldValue(groups, contributedBy, opponentId) - deadwood(opponentHand.cards)
 
-  const newScores = {
-    ...publicState.scores,
-    [playerId]: publicState.scores[playerId] + playerDelta,
-    [opponentId]: publicState.scores[opponentId] + opponentDelta,
+  // One uniform formula for every seated player, the going-out player included: their hand is
+  // empty, so deadwood([]) is 0 and their delta is exactly their own meld contribution. At 2
+  // players this is provably identical to the old two-formula split (going-out player got
+  // contribution only, "opponent" got contribution minus deadwood) — the split was never
+  // necessary; one loop covers every seat, so N-player rounds score everyone symmetrically.
+  const newScores: Record<string, number> = {}
+  for (const p of publicState.seatOrder) {
+    const handCards = p === playerId ? [] : privateStates[p].hand.cards
+    newScores[p] = publicState.scores[p]
+      + playerContributedMeldValue(groups, contributedBy, p)
+      - deadwood(handCards)
   }
 
-  // Match win: either player's score may cross the target this round (their own round score
-  // could in principle be negative, but they can only WIN by being at or above target).
-  // If both are at/above target simultaneously, the player who went out (playerId) wins the
-  // tiebreak — an explicit, defined rule for an edge case that will almost never occur.
+  // Match win: every player at/above target is a candidate. Among them, the STRICTLY
+  // HIGHEST scorer wins — this preserves the old 2-player if/else tree exactly, where an
+  // opponent who scored strictly higher won even though the other player went out. A tie for
+  // the highest score is broken by the going-out player winning IF they're part of the tie
+  // (the old `newScores[playerId] >= newScores[opponentId] ? playerId : opponentId` tiebreak,
+  // generalized from 2 candidates to N); if the going-out player is NOT part of the tie, the
+  // tied player with the earliest position in the FIXED seatOrder wins — deterministic,
+  // never object-iteration order. All candidate/tie lists are filtered in seatOrder order, so
+  // the first element is always the earliest seat.
   let matchWinnerId: string | null = null
-  const playerAtTarget = newScores[playerId] >= publicState.target
-  const opponentAtTarget = newScores[opponentId] >= publicState.target
-  if (playerAtTarget && opponentAtTarget) {
-    matchWinnerId = newScores[playerId] >= newScores[opponentId] ? playerId : opponentId
-  } else if (playerAtTarget) {
-    matchWinnerId = playerId
-  } else if (opponentAtTarget) {
-    matchWinnerId = opponentId
+  const atTarget = publicState.seatOrder.filter((p) => newScores[p] >= publicState.target)
+  if (atTarget.length > 0) {
+    let maxScore = newScores[atTarget[0]]
+    for (const p of atTarget) {
+      if (newScores[p] > maxScore) maxScore = newScores[p]
+    }
+    const tiedForMax = atTarget.filter((p) => newScores[p] === maxScore)
+    if (tiedForMax.length === 1) {
+      matchWinnerId = tiedForMax[0]                       // lone highest scorer, going-out or not
+    } else if (tiedForMax.includes(playerId)) {
+      matchWinnerId = playerId                            // going-out player wins a highest-score tie
+    } else {
+      matchWinnerId = tiedForMax[0]                       // earliest seatOrder position among the tied
+    }
   }
 
   return {
@@ -131,26 +144,40 @@ function makeValidator(
       if (!publicState.roundOver || publicState.matchWinnerId) {
         return { ok: false, reason: 'round is not over, or the match is already decided' }
       }
-      const [prevA, prevB] = publicState.turn.playerOrder
-      const nextOrder: [string, string] = [prevB, prevA]   // alternate who starts each round
-      const { p0Hand, p1Hand, stock: newStock, discardPile } = dealRound(nextOrder, rng)
+      const { hands, stock: newStock, discardPile } = dealRound(publicState.seatOrder, rng)
       onStockChange(newStock)
+      // The next round's starter rotates through the FIXED seatOrder (never the previous
+      // round's turn order): seatOrder[roundNumber % seatOrder.length], where roundNumber is
+      // the 1-based round that just ended — round 1 ends → seatOrder[1] starts round 2, etc.,
+      // wrapping to seatOrder[0] every len rounds. (Uno's 0-based round indexes the starter
+      // with nextRound % len; the 1-based equivalent here is roundNumber % len.) Build the
+      // turn fresh, then advanceTurn exactly that many times — exactly Uno's pattern.
+      let turn = createTurnState<RummyPhase>(publicState.seatOrder, 'draw')
+      for (let i = 0; i < publicState.roundNumber % publicState.seatOrder.length; i++) turn = advanceTurn(turn, 'draw')
+      const melds: Record<string, Zone[]> = {}
+      const handCounts: Record<string, number> = {}
+      const newPrivateStates: Record<string, RummyPrivateState> = {}
+      for (const seatedPlayer of publicState.seatOrder) {
+        melds[seatedPlayer] = []
+        handCounts[seatedPlayer] = cardCount(hands[seatedPlayer])
+        newPrivateStates[seatedPlayer] = { hand: hands[seatedPlayer] }
+      }
       return {
         ok: true,
         publicState: {
           ...publicState,
-          turn: createTurnState<RummyPhase>(nextOrder, 'draw'),
+          turn,
           discardPile,
           stockCount: cardCount(newStock),
-          melds: { [nextOrder[0]]: [], [nextOrder[1]]: [] },
+          melds,
           layoffs: [],
           obligatedCardId: null,
           roundNumber: publicState.roundNumber + 1,
           roundOver: false,
           roundWinnerId: null,
-          handCounts: { [nextOrder[0]]: cardCount(p0Hand), [nextOrder[1]]: cardCount(p1Hand) },
+          handCounts,
         },
-        privateStates: { [nextOrder[0]]: { hand: p0Hand }, [nextOrder[1]]: { hand: p1Hand } },
+        privateStates: newPrivateStates,
       }
     }
 

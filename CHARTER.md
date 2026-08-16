@@ -1,120 +1,124 @@
-# Charter: Uno seat-tile table redesign (2026-08-16)
+# Charter: Rummy + Phase 10 N-player expansion (2026-08-16)
 
-First of a planned three-game rollout (Uno, then Rummy, then Phase 10) of a
-shared visual direction: replace the vertical opponent-rail list with a
-wrapping 3-column seat-tile grid, and cap seat count at 6 (down from Uno's
-current 10) so the grid is always a clean layout (up to 3×2, never a
-ragged partial row) with no scrolling at any seat count. Rummy and Phase 10
-are explicitly NOT part of this charter — they wait on this one working out
-in the user's own judgment before starting.
+Both games go from hardcoded 2-player to real N-player, using the exact
+same architectural pattern already proven for Mexican Train, Wahoo, and
+Uno (turn-engine/state generalized to `playerIds: string[]` + `Record`
+throughout, `HostHandle.sendTo` for private hands, bot-per-empty-seat,
+seat-tile opponent grid matching Uno's now-shipped pattern). **User pre-
+approved this charter verbatim at invocation** ("go ahead and set the
+number of players... just use the same basic patterns... get this going
+with /autonomous-dev-loop while I'm gone") — no separate sign-off wait,
+per the loop's own pre-approval rule.
 
-Design source: two Claude-Design mockup files the user reviewed and gave
-explicit, specific feedback on (both read in full before this charter was
-written):
-- `~/Downloads/Uno Opponent Layout Options.dc.html` — establishes the
-  3-column wrapping seat-tile grid (`1b`/`2b`/`4c` directions) as the
-  chosen family over the oval "around the table" ring (`1a` — rejected:
-  hardest to build, hardest to degrade on mobile, biggest departure from
-  every other Pips game) and the plain chip-strip (`1c`/`2c`/`4a` — rejected:
-  reads as a roster/tag list, not "a table full of people," and hardest to
-  spot whose turn it is at high seat counts).
-- `~/Downloads/Rummy and Phase10 Full Tables.dc.html` — the reference
-  implementation of the seat-tile grid at 6 players, used ONLY for the tile
-  shape/grid mechanics (3-col grid, per-seat card/border/turn-fill
-  treatment) — its specific CONTENT choices for Uno's tile (bare hand-count
-  number, no visible card-back fan; call-Uno button hidden entirely except
-  on the one vulnerable seat; deck+discard placed upper-right) are
-  EXPLICITLY REJECTED per the user's direct feedback below and must not be
-  carried over.
+## Seat caps — decided from real deck math, not guessed
 
-## User sign-offs (2026-08-16)
+- **Rummy: 2–4.** `createStandardDeck()` is a single 52-card deck, current
+  hand size 10. At 5 players, `5×10+1=51` leaves only 1 card in the stock
+  — a degenerate, essentially-unplayable stock. At 6 it doesn't fit at
+  all (`6×10+1=61 > 52`). The user's own fallback ("we may want to limit
+  Rummy to 4 just for ease") is confirmed correct by this math — 4 leaves
+  11 cards in stock, a real playable margin. NOT introducing a second
+  deck to reach a higher cap — out of scope, adds real complexity (deck-
+  index-aware duplicate-card handling throughout melds/layoffs) the user
+  didn't ask for.
+- **Phase 10: 2–6.** `createPhase10Deck()` is 108 cards (96 number + 4
+  skip + 8 wild — confirmed by reading the file), hand size 10. At 6
+  players, `6×10+1=61`, leaving 47 in stock — comfortable. 6 also matches
+  real Phase 10's own official player cap (the user's own claim,
+  consistent with the deck-size math independently). This is the same
+  cap Uno just shipped with, for an unrelated reason (grid/pacing) — a
+  coincidence in the number, not a fact this charter should derive from
+  Uno.
 
-- **Seat cap: 6**, not the mockup's open question. Phase 10 needs a real
-  card per player at up to 6 for its own deck-size reasons (out of scope
-  this charter, noted for later); Rummy's multi-deck question at 6+ is
-  also out of scope. For Uno specifically, 6 is purely a layout/pacing
-  choice (108-card deck has no dealing-math constraint at 6) — chosen for
-  grid consistency across all three games and because higher player
-  counts hurt turn-pacing/engagement independent of whether the table can
-  render them.
-- **Preserve, do not regress, three things the mockup's Uno tile lost**
-  (explicit, direct quotes from the user):
-  1. "the uno held cards being a number instead of a fan out of cards" —
-     each opponent tile must keep the EXISTING small `UnoCardBack`
-     card-back-stack visual (currently `.uno-opp-stack`, `size="small"`),
-     not regress to a bare text count like the mockup shows.
-  2. "the uno button not being always visible but slightly grayed out" —
-     keep the EXISTING `UnoCallButton` behavior exactly: always rendered
-     on every tile (yours and every opponent's), grayed out when there's
-     nothing to call, a subtle shift to full opacity when active. The
-     mockup only renders a button on the one vulnerable seat — do not
-     adopt that; the whole point of "always visible but quiet" (locked
-     design decision from the original Uno charter, spec 34e) is that the
-     eye is not drawn to it activating.
-  3. "draw and discard have to be in the center somehow, not in the upper
-     right" — the CURRENT shipped table already places the stock+discard
-     centre band between the opponent area and the hand (not upper-right
-     like the mockup) — preserve that placement, do not move it to match
-     the mockup's corner position.
-- What DOES change: the opponent rail's layout only — from a vertical list
-  of full-width rows to a wrapping grid of compact tiles (3 columns,
-  reads as up to 2 rows at 6 opponents), each tile keeping every piece of
-  information/interaction the current row has (name, seat-color dot, turn
-  highlight via the established full-fill treatment, hidden-hand card-back
-  stack, count, the always-visible Uno-call button) just laid out to fit a
-  smaller tile instead of a full-width row.
-- Seat cap reduction is real, not cosmetic: `UNO_MAX_SEATS` goes from 10 to
-  6 in the engine (`src/card-games/uno/state.ts`), not just a UI limit —
-  update every place that currently assumes up to 10 (tests, the seat-ink
-  palette in `App.tsx`, Landing's "2–10 players" copy, README's "2–10"
-  copy).
+## Shared pattern (mirrors Uno's original charter + the seat-tile
+redesign charter, applied to both games identically)
 
-## Milestone (single slice)
+For EACH game, in this order:
 
-1. `UNO_MAX_SEATS = 6` in `src/card-games/uno/state.ts`; fix every test
-   assertion/property-test range that assumed up to 10 seats (`uno.test.ts`
-   has the real hits — read it, don't guess which lines).
-2. `UnoTable.tsx`/`.css`: replace `.uno-opp-rail` (vertical list of
-   `.uno-opp-row`) with a wrapping 3-column grid of seat tiles, preserving
-   every piece of content/interaction listed above. Everything else on the
-   table (rail with scoreboard/log/status, centre deck+discard+color-picker,
-   your hand, deal intro, sounds, bot-hold timing, reveal gate) is
-   UNCHANGED — this is an opponent-layout-only redesign.
-3. `UnoRoom.tsx`, `App.tsx` (`UNO_SEAT_INKS` — trim to exactly 6 entries),
-   `Landing.tsx` ("2–10 players" → "2–6 players"), `README.md` ("Uno seats
-   2–10" → "Uno seats 2–6"). `UnoRoom.tsx` needs NO code change (its seat
-   slots already derive from `UNO_MAX_SEATS`) — just confirm this by
-   reading it, don't blindly edit it.
+1. **Engine N-player generalization** (`src/card-games/<game>/state.ts`,
+   `rules.ts`, `bot.ts`): `playerIds: [string, string]` → `string[]`
+   (min 2, max per the cap above) everywhere; every 2-hardcoded field
+   (`melds: {[playerIds[0]]:..., [playerIds[1]]:...}`,
+   `handCounts`, `scores`, etc.) becomes a loop over `playerIds`,
+   `Record<string, T>` throughout — same transformation Wahoo/MT/Uno
+   already did from their own 2-player-only starting points (there is
+   no 2-player-only precedent left to copy FROM at this layer; copy the
+   N-player SHAPE those games ended up with, not a literal diff). Turn
+   order, scoring, round-end, deal — all already game-agnostic over
+   player count at the `src/engine/turn-engine.ts` layer; this milestone
+   is about the game-specific state/rules files only.
+2. **Screens**: convert the single hardcoded `opponentId`/`opponentName`/
+   `opponentColor`/`opponentHandCount` block into the N-player seat-tile
+   grid pattern Uno just shipped (`.uno-opp-tile`-equivalent: wrapping
+   flex grid, 3 tiles per row, `--turn` fill treatment, capped tile
+   width). Content per tile is NOT the same as Uno's (a hidden count) —
+   Rummy/Phase10 opponents lay melds/phases face-up, so each tile shows
+   the real thing: every card of every meld/phase group they've actually
+   laid, not just a count (per the "Rummy and Phase10 Full Tables.dc.html"
+   mockup's own working reference implementation at 6 players — its tile
+   approach, where "each panel's height is content-driven (not fixed)...
+   nothing is capped, cropped, or hidden behind a tap," is the pattern to
+   follow, already validated by the user's own review of that mockup).
+   Your own hand/melds/phase section is UNCHANGED — this milestone only
+   touches the opponent area, exactly like the Uno seat-tile charter did.
+3. **Wiring** (`src/App.tsx`): mirror Uno's `unoBroadcast`/lobby-vs-game
+   view/bot-per-seat/`sendTo`-per-guest pattern exactly (Uno's own
+   charter, and its wiring spec 34g in particular, is the closest and
+   most recent precedent — read it before writing this milestone's spec,
+   don't re-derive from Mexican Train/Wahoo's older, slightly different
+   shape). Room code prefixes (`RM-`, `P10-`) stay as-is — only the seat
+   count and lobby/bot-fill logic change. Landing shelf notes and
+   README's player-count sentence get updated to match the new caps.
+
+## Sequencing
+
+Rummy first (smaller cap, simpler deck), then Phase 10 (same pattern,
+proven once already). Each game gets its own engine → screens → wiring
+milestone sequence, each independently landed/verified/reviewed/
+committed before the next starts — same discipline as every prior
+charter this project has run, not a big-bang combined change.
 
 ## Non-goals
 
-Rummy, Phase 10 (explicitly next, not this charter — do not touch their
-files). Any other table-layout element (rail, centre band, hand, deal
-intro). House rules, call-mechanism, bot-pacing behavior — all unchanged.
+A second deck for Rummy at higher counts. Any change to Uno (already
+shipped, out of scope). Any change to melds/phases/scoring RULES
+themselves — this is a player-count and layout expansion only, the game
+rules are unchanged, just now evaluated over N players instead of 2.
+Mobile-specific layout work (same scope boundary the Uno charter used).
 
-## Definition of done
+## Definition of done (per game)
 
-tsc/tests/build green. Oscar-equivalent adversarial review (deepseek may
-run the review pass per the user's explicit permission this round, to
-conserve the lead's own context for a long unattended session — but the
-lead still does a final personal read of the diff before declaring done).
-A **mandatory visual check by the lead** in an actual browser — deepseek
-has no vision and cannot verify this — at minimum: a 6-seat live match
-(host + 5 bots) showing the full 3×2 grid with no scrolling, a close-up
-check that the card-back fan, always-visible-but-quiet call button, and
-centered deck/discard are all genuinely present and look right, and a
-check at a lower seat count (2-3) that the grid doesn't look broken/sparse.
-This charter is not done until that visual check happens and looks right
-— "tests pass" is necessary but explicitly insufficient per the user's own
-words ("this MUST look good").
+Engine tests pass at every seat count 2 through the cap (mirror Uno's
+own property-test pattern — cycle every seat count across trials, not
+just spot-check 2 and the max). Live N-player match (host + enough bots
+to hit the cap) through a full round: melds/phases laid by multiple
+opponents simultaneously visible correctly in the tile grid, round-end
+scoring correct, a full match to the target score. tsc/tests/build
+green throughout. Oscar (or deepseek acting as reviewer, per routing
+below) review with no unresolved blockers. **Mandatory visual check by
+the lead** in an actual browser, same standard as the Uno seat-tile
+charter — deepseek/Haiku cannot verify this, and "tests pass" alone is
+not sufficient.
 
 ## Budget / routing
 
-Single-slice charter, expect 1-3 cycles (redesign + fix-ups from review/
-visual check). deepseek-shell implements; review may run via deepseek per
-user permission, lead does final read + the mandatory visual pass. Session
-running unattended overnight — proceed through cycles without stopping to
-ask; the user's own instruction pre-authorizes running to completion,
-including commit + push once the visual check passes, so the work is
-captured and deployed by morning. Only stop early if genuinely blocked
-(not just "would like input").
+Large charter, comparable in scope to two fresh game modules — expect
+many cycles (directed-mode default: up to 25, renew if genuinely still
+in flight and productive). **Implementer: deepseek (deepseek-shell),
+falling back to a Haiku-model Agent sub-agent if deepseek becomes
+unavailable mid-run** (same spec, same delegation contract, just a
+different execution surface — note the fallback explicitly in the
+devlog if it's ever used, don't silently swap). **Reviewer: deepseek
+running the Oscar persona for lower-risk slices (engine mechanical
+generalization, copy-only changes), the lead (this session, Sonnet)
+directly for higher-risk slices (wiring, the meld/phase tile-content
+design, anything touching scoring correctness)** — same proportional-
+depth judgment this project has used throughout, not a fixed rule.
+Session running unattended for an extended period (~8 hours) — proceed
+through cycles without stopping to ask; commit + push each landed,
+verified, reviewed, visually-checked milestone rather than batching,
+so the user finds real incremental progress on return, not one giant
+unreviewed diff. A scheduled wakeup is armed as a backup safety net
+only (per the loop's own template — task-free, just "resume per
+ROADMAP.md") in case a usage limit or other interruption kills the
+session mid-run; normal operation should not need it to fire.
