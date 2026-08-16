@@ -128,6 +128,15 @@ const MT_ACTION_MS = 1100
 // This buffer is IN ADDITION to the MT_ACTION_MS the loop already pays on
 // its next iteration, so buffer + MT_ACTION_MS should cover the full clip.
 const MT_HORN_BUFFER_MS = 2500
+// Battleship: streak (hit = go again) and free-for-all (every shot = go
+// again) variants can chain many bot shots with only BASE_MS between them,
+// but ship-miss/-hit/-sunk run 1.97s/3.67s/5.66s — sized here so BASE_MS +
+// buffer comfortably clears each clip before the next shot fires.
+const SHOT_SOUND_BUFFER_MS: Record<'hit' | 'miss' | 'sunk', number> = {
+  miss: 1100,
+  hit: 2800,
+  sunk: 4800,
+}
 
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -1190,6 +1199,17 @@ export default function App() {
       battleshipSessionRef.current = result.bs
       const snap = deriveSnapshot(result.bs.session, battleshipLocalPlayerId!)
       setBattleshipView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: battleshipOpponentNameRef.current })
+      // A streak/free-for-all extra turn keeps the SAME bot firing every
+      // BASE_MS with no natural pause. ship-miss/-hit/-sunk run 2/3.7/5.7s —
+      // far longer than BASE_MS — so a hot streak stacks shot sounds on top
+      // of each other. Hold the next shot off long enough for this one's
+      // sound to finish before firing again.
+      const newPs = result.bs.session.publicState
+      if (newPs.stage === 'battle' && currentPlayer(newPs.turn) === botId) {
+        const extra = SHOT_SOUND_BUFFER_MS[newPs.lastShot?.result ?? 'miss']
+        await wait(extra)
+        if (battleshipStale(key)) return
+      }
     }
   }
 

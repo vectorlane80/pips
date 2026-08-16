@@ -43,6 +43,7 @@ export function FarkleTable({
 
   useEffect(() => {
     const p = soundSigRef.current
+    let bustTimer: number | undefined
     if (p.wasMyTurn) {
       const rollChanged = rollSig !== p.rollSig
       const hotDice = rollChanged && p.keptLen > 0 && f.kept.length === 0 && f.dice.length === 6
@@ -55,10 +56,19 @@ export function FarkleTable({
       if (f.log.length > p.logLen) {
         const tone = f.log[f.log.length - 1].tone
         if (tone === 'bank') play('bank-points')
-        else if (tone === 'farkle') play('farkle-bust')
+        else if (tone === 'farkle') {
+          // The bust is the direct result of the roll that just landed —
+          // wait for the dice flicker (useDiceAnimation: 7 x 60ms = 420ms)
+          // to settle on the real values before announcing it, so the sound
+          // doesn't call the result before the dice visually show it.
+          bustTimer = window.setTimeout(() => play('farkle-bust'), 420)
+        }
       }
     }
     soundSigRef.current = { rollSig, selKey, logLen: f.log.length, keptLen: f.kept.length, wasMyTurn: isMyTurn }
+    return () => {
+      if (bustTimer !== undefined) window.clearTimeout(bustTimer)
+    }
   }, [rollSig, selKey, f.log.length, f.kept.length, f.dice.length, isMyTurn, play])
 
   // Auto-advance after my own farkle: wait ~1.8s so the bust sound lands, then hand
