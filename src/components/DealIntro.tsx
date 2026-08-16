@@ -65,6 +65,18 @@ const FLIGHT_TRANSITION = 'transform 0.26s cubic-bezier(0.25, 0.8, 0.35, 1)'
 const FLIGHT_DURATION_MS = 260
 const PILE_SLIVER_PX = 7 // px of each fan card visible in a growing pile
 
+// Pure duration estimate for the full empty→shuffle→deal→settle sequence
+// given how many cards will actually get an individual flight (i.e. the same
+// value a caller passes as `maxFlights`, or the natural total if under the
+// default cap). Lets a host-authoritative game (Uno) hold bot activity off
+// until every client's local intro has had time to finish, without needing
+// any client-to-host animation-complete signal — see spec 34i.
+export function estimateDealIntroMs(totalFlights: number): number {
+  const flights = Math.max(totalFlights, 1)
+  return EMPTY_PHASE_DELAY_MS + SHUFFLE_TICK_INTERVAL_MS * SHUFFLE_TICK_COUNT
+    + FLIGHT_INTERVAL_MS * Math.max(flights - 1, 0) + FLIGHT_DURATION_MS
+}
+
 type Phase = 'empty' | 'shuffle' | 'deal' | 'settled'
 
 const STATUS_TEXT: Record<Phase, string> = {
@@ -94,6 +106,15 @@ export interface DealIntroProps {
   onComplete: () => void
   /** Sound played once when shuffling starts; defaults to the card shuffle. */
   shuffleSound?: SoundName
+  /**
+   * Caps how many individual card flights animate before the rest of the
+   * deal just appears (computeDealFlights' own default, 10). Callers whose
+   * total dealt cards can exceed that — e.g. Uno's up-to-10-seat × 7-card
+   * hands — should pass the real total so every card gets its own flight;
+   * otherwise the leftover cards silently pop into the pile the instant the
+   * capped animation ends, which reads as a broken shuffle.
+   */
+  maxFlights?: number
 }
 
 /** Position of `el` (border-box top-left) relative to `root`'s padding-box top-left. */
@@ -156,6 +177,7 @@ export function DealIntro({
   renderCardBack,
   onComplete,
   shuffleSound: shuffleSoundProp = 'shuffle',
+  maxFlights,
 }: DealIntroProps): JSX.Element {
   const { play } = useSound()
 
@@ -183,7 +205,7 @@ export function DealIntro({
   // rendered pile counts, and the shuffle sound always agree with the values
   // the mount effect captured.
   const [flights] = useState(() =>
-    computeDealFlights(yourHandSize, others.map((o) => o.handSize)),
+    computeDealFlights(yourHandSize, others.map((o) => o.handSize), maxFlights),
   )
   const [shuffleSound] = useState(() => shuffleSoundProp)
 

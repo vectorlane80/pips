@@ -87,10 +87,11 @@ import { ChessResults } from './screens/ChessResults'
 import { ChessRoom } from './screens/ChessRoom'
 
 // ---- Uno (separate parallel session, per CHARTER.md resolution #7) ----
-import { createUnoGame, resolveHouseRules, UNO_MAX_SEATS, UNO_MIN_SEATS, type UnoAction, type UnoHouseRuleKey, type UnoPublicState, type UnoSession } from './card-games/uno/state'
+import { createUnoGame, resolveHouseRules, UNO_HAND_SIZE, UNO_MAX_SEATS, UNO_MIN_SEATS, type UnoAction, type UnoHouseRuleKey, type UnoPublicState, type UnoSession } from './card-games/uno/state'
 import { applyUnoAction, runUnoBotTurn } from './card-games/uno/rules'
 import { unoBotStrategy } from './card-games/uno/bot'
 import type { UnoCard } from './card-games/uno/deck'
+import { estimateDealIntroMs } from './components/DealIntro'
 import { UnoTable } from './screens/UnoTable'
 import { UnoResults } from './screens/UnoResults'
 import { UnoRoom } from './screens/UnoRoom'
@@ -121,6 +122,17 @@ const PASS_ANIMATION_BUFFER_MS = 450
 // MT-specific pacing: measured against the actual sound assets so bot turns
 // don't outrun their own sounds. domino-play/domino-draw run ~1.03s; a bare
 // BASE_MS (900ms) gap between actions clips their tail.
+// Uno: BASE_MS (900ms) was fine for a single bot but with several bots
+// sharing a table, a human's own turns get buried in a run of back-to-back
+// 900ms plays that blur together ("fast forward"). A slower, card-game-scale
+// pace gives each bot's play (and its sound) room to actually register.
+const UNO_ACTION_MS = 1600
+// Extra hold after every round start (initial deal, rematch, or START_NEXT_
+// ROUND) before ANY bot acts — human or bot, nobody should be mid-animation
+// on their local DealIntro when a bot's first move lands. estimateDealIntroMs
+// covers the intro itself; this buffer is slack for network latency and
+// per-client render/paint time on top of that estimate.
+const UNO_DEAL_HOLD_BUFFER_MS = 700
 const MT_ACTION_MS = 1100
 // train-horn runs 3.6s. Any action that opens a train (pass-open OR a dead
 // draw — both honk, see MexicanTrainTable's `action.opened !== null` sound
@@ -333,6 +345,12 @@ export default function App() {
   // to invalidate any setTimeout scheduled against a now-stale window.
   const unoWindowKeyRef = useRef<string | null>(null)
   const unoReflexGenRef = useRef(0)
+  // Deal-hold: no bot (turn loop or Uno-call reflex) may act until this
+  // timestamp. Set every time unoBroadcast() observes the round counter
+  // change — covers the initial deal, every rematch, and every START_NEXT_
+  // ROUND, from one central place rather than each round-starting call site.
+  const unoLastRoundRef = useRef<number | null>(null)
+  const unoBotsHeldUntilRef = useRef(0)
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -2405,6 +2423,12 @@ export default function App() {
       return
     }
     const session = unoSessionRef.current!
+    const currentRound = session.session.publicState.round
+    if (currentRound !== unoLastRoundRef.current) {
+      unoLastRoundRef.current = currentRound
+      const totalCards = session.session.publicState.seatOrder.length * UNO_HAND_SIZE
+      unoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(totalCards) + UNO_DEAL_HOLD_BUFFER_MS
+    }
     const hostSnap = deriveSnapshot(session.session, unoLocalPlayerIdRef.current!)
     setUnoView({
       kind: 'game',
@@ -2579,8 +2603,10 @@ export default function App() {
 
   async function runUnoBots(botId: string, key: string) {
     while (!unoStale(key)) {
-      await wait(BASE_MS)
+      const holdRemaining = unoBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : UNO_ACTION_MS)
       if (unoStale(key)) return
+      if (Date.now() < unoBotsHeldUntilRef.current) continue
       const session = unoSessionRef.current!
       const ps = session.session.publicState
       if (ps.stage !== 'play') return
@@ -2688,15 +2714,25 @@ export default function App() {
   // counter before acting, so a reflex scheduled against an old window can
   // never fire a stale CALL_UNO after that window has closed.
 
-  function rollUnoBotReflex(difficulty: BotDifficulty, _isSelf: boolean): { delayMs: number; skip: boolean } {
-    // Same distribution for self-calls and catches — the load-bearing dynamic
-    // is the delay sometimes exceeding a fast catcher's 1s window, not a
-    // self/catch asymmetry. Easy straddles/exceeds 1000ms (often loses races);
-    // hard is mostly under 1000ms (usually wins them).
-    const tier =
-      difficulty === 'easy' ? { min: 900, max: 1500, skip: 0.2 } :
-      difficulty === 'hard' ? { min: 400, max: 800, skip: 0.03 } :
-      { min: 600, max: 1100, skip: 0.1 }
+  function rollUnoBotReflex(difficulty: BotDifficulty, isSelf: boolean): { delayMs: number; skip: boolean } {
+    // Self-calls: the load-bearing dynamic is the delay sometimes exceeding a
+    // fast catcher's 1s window, so easy straddles/exceeds 1000ms (often loses
+    // races) and hard is mostly under 1000ms (usually wins them).
+    //
+    // Catches: UnoTable's useCatchStagger gives the vulnerable player — human
+    // OR bot — an exclusive first 1000ms to self-call before ANY catch button
+    // enables in the UI. A bot catcher must honor that same floor, not just
+    // roll from the self-call distribution — otherwise a medium/hard bot can
+    // (and reliably will, since their un-floored ranges dip well under 1000ms)
+    // catch a human before the human's own UI even lets them click their own
+    // button, which reads as broken/unfair rather than "a fast bot."
+    const tier = isSelf
+      ? (difficulty === 'easy' ? { min: 900, max: 1500, skip: 0.2 } :
+         difficulty === 'hard' ? { min: 400, max: 800, skip: 0.03 } :
+         { min: 600, max: 1100, skip: 0.1 })
+      : (difficulty === 'easy' ? { min: 1000, max: 1500, skip: 0.2 } :
+         difficulty === 'hard' ? { min: 1000, max: 1100, skip: 0.03 } :
+         { min: 1000, max: 1300, skip: 0.1 })
     const delayMs = tier.min + Math.random() * (tier.max - tier.min)
     const skip = Math.random() < tier.skip
     return { delayMs, skip }

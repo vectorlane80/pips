@@ -100,6 +100,15 @@
   gap: clamp(16px, 2.4vw, 26px);
 }
 
+/* Rummy/Phase10's table-card is flex-direction: column, so their DealIntro
+   gets the browser's default cross-axis stretch (full width) for free. Uno's
+   is row-reverse — align-items there controls vertical alignment, not width
+   — so without this, DealIntro renders at its own natural (much narrower)
+   content width instead of spanning the table like the other games'. */
+.uno-table-card > .deal-intro {
+  width: 100%;
+}
+
 /* ---- Right rail: scoreboard + turn log + status ---- */
 
 .uno-rail {

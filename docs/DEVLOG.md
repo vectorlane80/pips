@@ -2394,3 +2394,143 @@ shipping each verified charter promptly.
   yet; will request authorization same as the main charter once the
   user confirms the fixes read correctly (and once real Uno audio
   files replace the six placeholders).
+
+## Cycle 9 — 2026-08-16 (real audio + a second live-play bug batch)
+- **Real Uno audio landed**: user dropped in five correctly-named
+  files plus one (`uno-caught.mp3`) that didn't match the filename the
+  registry imports (`uno-called-on.mp3`, still byte-identical to the
+  `error.mp3` placeholder at that point) — renamed to match; all six
+  confirmed as valid, distinct MP3s and confirmed present in the built
+  `dist/assets/` bundle before committing.
+- **Deploy verification**: confirmed the push actually reached
+  `origin/main` and that GitHub Actions' `deploy.yml` (triggers on
+  every push to `main`) ran and succeeded, then loaded the live
+  `vectorlanelabs.github.io/pips/` site directly and confirmed its
+  served JS bundle hash matched the local build's hash byte-for-byte —
+  not just "the workflow said success," the actual deployed artifact
+  was checked.
+- **User then live-played on production and found four more real
+  bugs** (three from a single message, one more from a follow-up) —
+  diagnosed and fixed all four directly (no implementer round-trip;
+  scoped, well-understood, low-risk):
+  1. **Deal-intro "pop-in" glitch.** `DealIntro`'s internal flight cap
+     (`computeDealFlights`'s `maxFlights` default, 10) was never
+     exposed as a prop, so any Uno deal exceeding 10 total dealt cards
+     (any 2+ player game, since 2×7=14) silently truncated the
+     animation and popped the remaining cards into the piles the
+     instant the capped sequence ended — the "shuffle looks terrible"
+     report. Added an optional `maxFlights` prop to `DealIntro`
+     (threaded through to `computeDealFlights`, default unchanged for
+     every other caller — Rummy/Phase10/Dominoes/MexicanTrain don't
+     pass it, so their behavior is untouched), and `UnoTable` now
+     passes the real total (`hand.length` + every opponent's
+     `handSize`) so no card ever pops in uninvited. Live-verified with
+     a 3-player/21-card deal: all three piles animated to their full
+     counts, no jump.
+  2. **Spurious/duplicate sounds after the shuffle.** The sound-diffing
+     effect's hooks run every render regardless of the `showIntro`
+     overlay (React doesn't conditionally skip hooks based on which
+     JSX branch a component returns) — so bot turns during the
+     multi-second deal-intro fired their sounds in real time, hidden
+     behind the curtain, which read as unexplained/duplicate noise
+     right as the overlay dropped. Fixed by gating every `play()` call
+     in the effect behind `!showIntro` while unconditionally still
+     updating the ref baseline every render — so nothing "catches up"
+     retroactively once the overlay closes, since the baseline never
+     fell behind in the first place.
+  3. **Draw sound semantics, corrected per explicit user clarification
+     mid-fix**: a plain deck draw (click-to-draw) now plays the same
+     generic `card-draw` every other card game uses (reverted an
+     earlier judgment call from cycle 8 that had `uno-draw` replace it
+     — wrong per the user's stated intent). `uno-draw` is reserved for
+     a draw-two or wild-four actually landing, heard by everyone at
+     the table at the moment it's played (not deferred to the victim's
+     reveal click) — draw2 plays `uno-draw` alone, wild4 plays BOTH
+     `uno-wild` and `uno-draw` together (the user's stated preference
+     over the alternative of splitting the two sounds across landing
+     vs. reveal time). Removed the now-redundant "reveal prompt sound"
+     branch this subsumed.
+  4. **Bots catching a human faster than the promised 1-second grace
+     window — a real fairness bug, not a perception issue.** Traced
+     `rollUnoBotReflex` in `App.tsx` and found its `isSelf` parameter
+     was unused (prefixed `_isSelf`) — catch attempts against a human
+     used the exact same delay distribution as a bot's own self-call
+     roll, whose medium-difficulty floor is 600ms, well under the
+     1000ms `useCatchStagger` grace period `UnoTable`'s own UI
+     promises the vulnerable player. A medium or hard bot could
+     genuinely call Uno on a human before the human's own catch button
+     had even become clickable — exactly what the user reported
+     ("no way that took me 1 second"). Fixed by giving catch rolls
+     (not self-call rolls, which keep their original distribution and
+     "sometimes miss" design intent) a hard 1000ms floor across all
+     three difficulty tiers, with the difficulty variance now only in
+     how much LONGER than 1000ms a catch takes (easy 1000-1500ms, hard
+     1000-1100ms).
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (953/953, unchanged — none of these four fixes needed new tests,
+  each is either a timing/sequencing correction or a one-line prop
+  threading change), `npm run build` (clean) after every edit. Live-
+  verified the deal-intro and sort fixes directly in the browser
+  (3-player, 21-card deal, zero console errors); the sound-timing and
+  bot-catch-floor fixes were verified by tracing the exact code path
+  against the reported symptom rather than by ear/stopwatch (no way to
+  audibly or precisely time-verify through the browser tooling), so
+  these are code-verified, not live-timed.
+- **Continue?** Holding for user confirmation and commit authorization,
+  same as cycle 8.
+
+## Cycle 10 — 2026-08-16 (bot pacing/deal-race + deal-intro width)
+- **Bots were racing ahead of the deal-intro animation.** The overlay
+  is purely local client state (`showIntro` in `UnoTable.tsx`); the
+  host's actual bot turn loop in `App.tsx` has no visibility into it
+  and never paused for it, so bot turns (and now-muted sounds, since
+  cycle 9) were genuinely happening while the deal animation played —
+  "the player should never be left out of anything" was being
+  violated for real, not just as a sound-timing artifact. Fixed with a
+  host-side hold: exported a pure `estimateDealIntroMs(totalFlights)`
+  from `DealIntro.tsx` (same constants the animation itself uses), and
+  `unoBroadcast()` now detects every round-counter change (initial
+  deal, rematch, START_NEXT_ROUND — one central detection point covers
+  all three) and sets `unoBotsHeldUntilRef` to `now +
+  estimateDealIntroMs(seatCount × UNO_HAND_SIZE) + 700ms` network/
+  render safety buffer. `runUnoBots`'s loop checks this before every
+  action and waits out the remainder if still held. Live-verified with
+  a 3-player/21-card deal: zero bot plays appeared until the intro had
+  visibly finished settling.
+- **Bot pacing was too fast, and got worse with more bots.** Uno's
+  turn loop was using the same generic `BASE_MS` (900ms) shared by
+  every simple game in this codebase — with several bots at a table, a
+  human's own turns get buried between multiple back-to-back 900ms
+  plays that blur together (the user's "fast forward" report scales
+  exactly with bot count, confirming this diagnosis). Introduced a
+  Uno-specific `UNO_ACTION_MS = 1600` or replacing the shared constant
+  for Uno's own loop.
+- **Deal-intro rendered too narrow.** Traced precisely: Rummy/Phase10's
+  table-card wrapper is `flex-direction: column`, so the browser's
+  default cross-axis `align-items: stretch` gives their `DealIntro` a
+  full-width box for free. Uno's wrapper is `flex-direction:
+  row-reverse` (needed for its rail+board two-column layout) — on a
+  row axis, `align-items` controls vertical alignment, not width, so
+  `DealIntro` was rendering at its own narrow natural content width
+  instead. Fixed with one scoped CSS rule (`.uno-table-card >
+  .deal-intro { width: 100% }`) — no changes to the shared `DealIntro`
+  component or any other game. Live-verified: the pale box now spans
+  the full table width, matching Rummy/Phase10's look.
+- **Not implemented — flagged as a real, larger design question**: the
+  user raised how the N-player opponent rail scales at high seat
+  counts (stacking vertically means heavy scrolling and no way to see
+  everyone at once in a maxed-out room), explicitly framed as
+  unresolved and relevant to the already-planned Rummy/Phase10 seat-
+  count expansion, not just Uno. No code changes made for this —
+  discussed with the user directly rather than guessing at a redesign.
+- **Verification:** re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (953/953, unchanged — all three fixes are timing/CSS/prop-threading
+  corrections, no new testable pure logic), `npm run build` (clean)
+  after every edit. Live-verified the deal-hold and the width fix
+  directly in the browser (3-player/21-card deal: full-width intro,
+  zero bot plays during the animation, exactly one play landed after
+  settling). The pacing constant is a judgment-call number, not
+  independently verifiable by ear through the tooling — flagged as
+  such rather than claimed as confirmed.
+- **Continue?** Holding for user confirmation and commit authorization;
+  the N-player layout question is still open and undecided.

@@ -343,62 +343,73 @@ export function UnoTable({
   useEffect(() => {
     const p = soundSigRef.current
     const roundChanged = publicState.round !== p.round
-    const handGrew = hand.length > p.handLen
     const la = publicState.lastAction
-    const ownDraw = la !== null && la.kind === 'draw' && la.by === localPlayerId
 
-    // Own-action diffs. Judgment call: 'uno-draw' REPLACES the generic
-    // 'card-draw' for Uno's own deck draws, so the same event never fires
-    // both sounds.
-    if (p.wasMyTurn) {
-      if (stockCount > p.stockCount) {
-        play('shuffle')
-      } else if (discardLen > p.discardLen) {
-        play('card-play')
-      } else if (stockCount < p.stockCount) {
-        // When the stock shrank because I resolved a draw2/wild4, the NEXT
-        // player drew those cards, not me — suppress the draw sound.
-        const drewForNext = la !== null && la.kind === 'play' && la.by === localPlayerId && la.drewCount > 0
-        if (!drewForNext) play('uno-draw')
+    // While the deal-intro overlay is showing, the real table (and this
+    // effect) still runs every render underneath it — bot turns don't pause
+    // for a client-side animation. Playing sounds for actions the player
+    // can't see yet, or catching up on all of them at once the instant the
+    // overlay drops, both read as broken. So: keep the ref baseline current
+    // every render (below), but skip every play() call while showIntro is
+    // true — nothing "catches up" once it closes, since the baseline never
+    // fell behind.
+    if (!showIntro) {
+      // Own-action diffs — draws always use the same generic 'card-draw'
+      // every other card game uses; there is no Uno-specific "I drew"
+      // sound. (uno-draw is reserved for draw-two/wild-four landing, below,
+      // heard by everyone at the table, not just the drawer.)
+      if (p.wasMyTurn) {
+        if (stockCount > p.stockCount) {
+          play('shuffle')
+        } else if (discardLen > p.discardLen) {
+          play('card-play')
+        } else if (stockCount < p.stockCount) {
+          // When the stock shrank because I resolved a draw2/wild4, the NEXT
+          // player drew those cards, not me — suppress my own draw sound
+          // (the action-flavored block below already covers that landing).
+          const drewForNext = la !== null && la.kind === 'play' && la.by === localPlayerId && la.drewCount > 0
+          if (!drewForNext) play('card-draw')
+        }
+      }
+
+      // Action-flavored sounds — everyone witnesses a skip/reverse/wild/draw
+      // landing, once per distinct new play. A wild4 plays BOTH uno-wild and
+      // uno-draw together (it's simultaneously a color choice and a forced
+      // draw); a plain draw2 plays only uno-draw.
+      if (!roundChanged && actionSig !== p.actionSig && la !== null && la.kind === 'play' && la.card !== null) {
+        if (la.card.kind === 'skip') play('uno-skip')
+        else if (la.card.kind === 'reverse') play('uno-reverse')
+        else if (la.card.kind === 'wild') play('uno-wild')
+        else if (la.card.kind === 'wild4') { play('uno-wild'); play('uno-draw') }
+        else if (la.card.kind === 'draw2') play('uno-draw')
+      }
+
+      // Uno-window sounds.
+      const windowClosed = p.unoWindowPlayerId !== null && publicState.unoWindow === null && publicState.stage === 'play' && !roundChanged
+      if (windowClosed) {
+        // Caught: MY window closed while my hand grew by exactly 2 with no new
+        // lastAction — a CALL_UNO catch. (A draw2/wild4 would change lastAction.)
+        const caughtMe = p.unoWindowPlayerId === localPlayerId && hand.length - p.handLen === 2 && actionSig === p.actionSig
+        // Self-call: a window closed with NO other state change at all.
+        const selfCall = !caughtMe && actionSig === p.actionSig && stockCount === p.stockCount && discardLen === p.discardLen
+        if (caughtMe) play('uno-called-on')
+        else if (selfCall) play('uno-call')
+      }
+
+      if (p.stage !== 'roundOver' && publicState.stage === 'roundOver' && publicState.roundResult !== null) {
+        play('round-win')
+      }
+      if (p.matchWinnerId === null && publicState.matchWinnerId !== null) {
+        play('game-win')
+      }
+      if (notice && !noticeSeenRef.current) {
+        play('error')
+        noticeSeenRef.current = true
+      } else if (!notice) {
+        noticeSeenRef.current = false
       }
     }
 
-    // Action-flavored sounds — everyone witnesses a skip/reverse/wild landing.
-    if (!roundChanged && actionSig !== p.actionSig && la !== null && la.kind === 'play' && la.card !== null) {
-      if (la.card.kind === 'skip') play('uno-skip')
-      else if (la.card.kind === 'reverse') play('uno-reverse')
-      else if (la.card.kind === 'wild' || la.card.kind === 'wild4') play('uno-wild')
-    }
-
-    // Forced draw (draw2/wild4) landing on me → the §8 reveal prompt sound.
-    if (!roundChanged && handGrew && !ownDraw && la !== null && la.kind === 'play' && la.drewCount > 0 && la.card !== null && (la.card.kind === 'draw2' || la.card.kind === 'wild4')) {
-      play('uno-draw')
-    }
-
-    // Uno-window sounds.
-    const windowClosed = p.unoWindowPlayerId !== null && publicState.unoWindow === null && publicState.stage === 'play' && !roundChanged
-    if (windowClosed) {
-      // Caught: MY window closed while my hand grew by exactly 2 with no new
-      // lastAction — a CALL_UNO catch. (A draw2/wild4 would change lastAction.)
-      const caughtMe = p.unoWindowPlayerId === localPlayerId && hand.length - p.handLen === 2 && actionSig === p.actionSig
-      // Self-call: a window closed with NO other state change at all.
-      const selfCall = !caughtMe && actionSig === p.actionSig && stockCount === p.stockCount && discardLen === p.discardLen
-      if (caughtMe) play('uno-called-on')
-      else if (selfCall) play('uno-call')
-    }
-
-    if (p.stage !== 'roundOver' && publicState.stage === 'roundOver' && publicState.roundResult !== null) {
-      play('round-win')
-    }
-    if (p.matchWinnerId === null && publicState.matchWinnerId !== null) {
-      play('game-win')
-    }
-    if (notice && !noticeSeenRef.current) {
-      play('error')
-      noticeSeenRef.current = true
-    } else if (!notice) {
-      noticeSeenRef.current = false
-    }
     soundSigRef.current = {
       stockCount, discardLen,
       stage: publicState.stage, matchWinnerId: publicState.matchWinnerId, wasMyTurn: isMyTurn,
@@ -406,7 +417,7 @@ export function UnoTable({
       unoWindowPlayerId: publicState.unoWindow?.playerId ?? null,
       actionSig,
     }
-  }, [stockCount, discardLen, publicState.stage, publicState.roundResult, publicState.matchWinnerId, publicState.unoWindow, publicState.lastAction, publicState.round, isMyTurn, notice, hand.length, localPlayerId, actionSig, play])
+  }, [stockCount, discardLen, publicState.stage, publicState.roundResult, publicState.matchWinnerId, publicState.unoWindow, publicState.lastAction, publicState.round, isMyTurn, notice, hand.length, localPlayerId, actionSig, play, showIntro])
 
   // ---- Computed ----
   const sortedHand = useMemo(() => sortUnoHand(hand), [hand])
@@ -528,6 +539,11 @@ export function UnoTable({
             shuffleSound="shuffle"
             renderCardBack={(p) => <UnoCardBack {...p} />}
             onComplete={() => setShowIntro(false)}
+            // Default cap (10) truncates well short of a real deal once seat
+            // count × UNO_HAND_SIZE (7) grows past a couple of players — the
+            // rest of the hand would silently pop in the instant the capped
+            // animation ends. Pass the real total so every card gets a flight.
+            maxFlights={hand.length + others.reduce((sum, o) => sum + o.handSize, 0)}
           />
         ) : (
         <>
