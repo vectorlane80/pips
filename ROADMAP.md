@@ -1,8 +1,31 @@
 # Roadmap
 
-Charter: Uno — see `CHARTER.md`.
+Charter: Uno seat-tile table redesign — see `CHARTER.md`.
 
-## Charter: Uno (2026-08-15) — in progress
+## Charter: Uno seat-tile table redesign (2026-08-16) — done
+- [x] Single slice (spec 34i): `UNO_MAX_SEATS` 10→6, opponent rail
+      redesigned from a vertical row list to a wrapping 3-column seat-
+      tile grid, per two Claude-Design mockups the user reviewed and
+      gave specific feedback on. All three explicitly-locked
+      requirements verified preserved: the card-back hand-fan visual
+      (`.uno-opp-stack`, shrunk to fit but still a real fanned pile,
+      confirmed legible in live screenshots), the always-visible-but-
+      quiet call button (`UnoCallButton`/`unoCallDisabled` untouched),
+      and the centered deck+discard band (untouched by this diff).
+      3 test assertions fixed for the new 6-seat ceiling (verified by
+      hand: 108-card deck, 6×7=42 dealt + 1 starter = 65 stock
+      remainder). 953 tests unchanged / tsc / build green throughout.
+      Oscar review: approve, no blockers — one initial suspicion (could
+      the flex-wrap tile grid ever produce 4-per-row instead of 3 at a
+      wide viewport) investigated and disproven via live DOM
+      measurement, not just CSS-spec reasoning. Live-verified visually
+      at both extremes: full 6-player match (clean 3+2 grid, no
+      scrolling) and 2-player match (single tile stays compact, doesn't
+      stretch/look sparse). First of a planned Uno→Rummy→Phase10 rollout
+      of this shared visual direction — Rummy/Phase10 explicitly wait on
+      this one working out in the user's own judgment, not started here.
+
+## Charter: Uno (2026-08-15) — done
 - [x] M1 — Uno module (spec 34): 108-card deck, N-player (2-10) state/rules/
       bot, 68 tests. Oscar review: approve, no blockers (two nits, neither
       requiring action). 899 tests total / tsc / build green.

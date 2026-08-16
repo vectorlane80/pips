@@ -263,47 +263,75 @@
   box-shadow: 0 5px 0 var(--ink);
 }
 
-/* ---- Opponent rail: one row per opponent seat ---- */
+/* ---- Opponent tiles: a wrapping grid of compact seat tiles, 3 per row ---- */
 
 .uno-opp-rail {
+  --uno-opp-gap: clamp(10px, 1.6vw, 14px);
   display: flex;
-  flex-direction: column;
-  gap: clamp(10px, 1.6vw, 14px);
+  flex-wrap: wrap;
+  gap: var(--uno-opp-gap);
 }
 
-.uno-opp-row {
+/* Tile grows to fill its row but is capped at exactly one third of the row
+   width: three tiles fill a row cleanly, while 1-2 tiles (2-3 player games)
+   stay compact instead of stretching across the whole row. */
+.uno-opp-tile {
+  flex: 1 1 190px;
+  max-width: calc((100% - 2 * var(--uno-opp-gap)) / 3);
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
   border: 3px solid var(--grey-border);
   border-radius: 16px;
-  padding: 10px 14px;
+  padding: 10px 12px;
   background: #fff;
   transition: background 0.2s, border-color 0.2s;
 }
 
-/* Active (current player) row is filled with the seat color — matching the
+.uno-opp-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The count/button line may wrap onto a second line inside the tile on very
+   narrow screens; the button keeps right-aligning via .uno-call-btn's
+   margin-left: auto. */
+.uno-opp-tile-bottom {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Active (current player) tile is filled with the seat color — matching the
    scoreboard row's treatment — and the sub text / dot border lighten to read
    on the fill (MexicanTrain's seat-card trick). */
-.uno-opp-row--turn .uno-opp-count {
+.uno-opp-tile--turn .uno-opp-count {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.uno-opp-row--turn .uno-seat-dot {
+.uno-opp-tile--turn .uno-seat-dot {
   border-color: rgba(255, 255, 255, 0.85);
 }
 
 .uno-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 700;
   font-size: 15px;
   white-space: nowrap;
 }
 
-/* Tight hidden-hand stack: 14px-wide small backs overlapping 8px (6px of
-   each card stays visible) — a tighter stack than Rummy/Phase10's 30px
-   fan cards at -15 (same half-width-ish ratio at a third of the width);
-   this is a hidden-count display, not a playable hand. The count label
-   carries the real number. */
+/* Tight hidden-hand stack: 14px-wide small backs overlapping 10px (4px of
+   each card stays visible) — a tighter overlap than Rummy/Phase10's 30px fan
+   cards at -15, so up to 8 backs read as a small face-down pile inside the
+   compact tile. This is a hidden-count display, not a playable hand; the
+   count label carries the real number. */
 .uno-opp-stack {
   display: flex;
   align-items: center;
@@ -311,7 +339,7 @@
 }
 
 .uno-opp-stack .uno-card-back--small + .uno-card-back--small {
-  margin-left: -8px;
+  margin-left: -10px;
 }
 
 .uno-opp-count {
@@ -322,6 +350,7 @@
 }
 
 .uno-turn-tag {
+  flex: none;
   color: #fff;
   font-size: 11px;
   font-weight: 700;

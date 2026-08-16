@@ -2534,3 +2534,71 @@ shipping each verified charter promptly.
   such rather than claimed as confirmed.
 - **Continue?** Holding for user confirmation and commit authorization;
   the N-player layout question is still open and undecided.
+
+## Cycle 11 — 2026-08-16 (new charter: Uno seat-tile table redesign)
+- **Trigger**: user shared two Claude-Design mockup files (`Uno Opponent
+  Layout Options.dc.html`, `Rummy and Phase10 Full Tables.dc.html`),
+  chose the seat-tile-grid direction over the rejected oval-ring and
+  chip-strip alternatives, set a 6-player cap (a layout/pacing choice
+  for Uno specifically — 108-card deck has no dealing-math constraint
+  at 6, unlike the Rummy/Phase10 deck-size reasoning that will apply
+  when their turn comes), and gave three specific, explicit rejections
+  of things the mockup's own Uno tile got wrong that had to be
+  preserved from the ALREADY-SHIPPED table instead. Invoked via
+  `/autonomous-dev-loop` with explicit permission to delegate the
+  adversarial review to deepseek to conserve the lead's context for an
+  unattended overnight run, and an explicit instruction that a personal
+  visual check by the lead is mandatory regardless ("deepseek lacks
+  vision, and this MUST look good").
+- **Shipped** (spec 34i, single slice): `UNO_MAX_SEATS` 10→6 in the
+  engine (not just a UI limit); the opponent area rebuilt from
+  `.uno-opp-row` (vertical list, one full-width row per seat) into
+  `.uno-opp-tile` (wrapping 3-column grid) while preserving every
+  locked requirement — card-back hand-fan (shrunk: cap 14→8 backs,
+  overlap -8px→-10px, still reads as a real pile), always-visible
+  grayed-out-until-relevant Uno-call button (component and its disabled
+  logic byte-for-byte untouched), and the centered deck+discard band
+  (completely outside this diff's scope, confirmed untouched). Trimmed
+  `UNO_SEAT_INKS` to 6 entries, fixed 3 test assertions for the new
+  ceiling, updated Landing/README/UnoRoom copy from "2–10"/"ten" to
+  "2–6"/"six".
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (953/953, net zero — 3 existing assertions fixed, none added), `npm
+  run build` (clean) myself, not trusting the implementer's report.
+  Hand-verified the stock-remainder arithmetic for the new 6-player
+  test case (108 − 42 − 1 = 65) and the property test's seat-count
+  coverage (`2 + (trial % 5)` cycles exactly {2,3,4,5,6}).
+- **Review**: ran Oscar myself (chose not to delegate this one to
+  deepseek, since I already had full context of the diff from
+  verification and a second round-trip would have cost more than it
+  saved) — approve, no blockers. The one substantive investigation:
+  whether the flex-wrap tile CSS (`flex: 1 1 190px` + a ⅓-width
+  `max-width` cap) actually guarantees 3-per-row, since flex-wrap's
+  line-breaking uses an item's flex-basis, not its grown max-width —
+  a real, non-obvious CSS risk, not a manufactured one. Resolved by
+  live DOM measurement (not just re-deriving the CSS spec on paper) at
+  the app's widest real viewport (1280px, at/above `.uno-table`'s own
+  1260px cap): rail width 756px, exactly 3 tiles at 243px computed
+  width on row 1, 2 on row 2 — a hypothetical 4th tile would need 802px
+  at flex-basis sizing, more than was ever available given the table's
+  own width ceiling. Initial suspicion disproven by evidence, not
+  assumed away. One nit fixed same-cycle: `UnoRoom.tsx`'s "Two to ten
+  seats" copy, which the implementer had correctly flagged as
+  out-of-scope for its own spec but which needed fixing before landing.
+- **Mandatory visual check** (the lead's own, per the charter's explicit
+  requirement that "tests pass" is insufficient): live in the browser,
+  a full 6-player match showed a clean 3+2 tile grid with no scrolling,
+  every tile carrying a legible card-back fan, a consistently-present
+  grayed Uno-call button, and the deck+discard band still centered
+  below the grid, not moved to a corner. A 2-player match showed the
+  single opponent tile staying compact (width-capped) rather than
+  stretching or looking sparse. Landing shelf and lobby copy both
+  confirmed reading "2–6"/"six" live, not just in source.
+- **Continue?** No — charter definition of done met (tests green,
+  Oscar approve, mandatory visual check passed at both seat-count
+  extremes). Per the charter's explicit pre-authorization for this
+  unattended overnight run, landing (commit + push) now rather than
+  waiting for morning chat confirmation. Rummy and Phase 10 remain
+  explicitly out of scope — next steps for those wait on the user's own
+  judgment of how this one turned out, not on this session continuing
+  unprompted.

@@ -39,7 +39,7 @@ export function Landing({
     { title: 'Hangman', note: '2 players', color: '#ff5d73', onClick: () => onPickGame('hangman') },
     { title: 'Rummy', note: '2 players', color: '#1aa06d', onClick: onPickRummy },
     { title: 'Phase 10', note: '2 players', color: '#ff9f1c', onClick: onPickPhase10 },
-    { title: 'Uno', note: '2–10 players', color: '#e11d2e', onClick: onPickUno },
+    { title: 'Uno', note: '2–6 players', color: '#e11d2e', onClick: onPickUno },
   ]
 
   return (

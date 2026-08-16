@@ -2388,9 +2388,9 @@ export default function App() {
 
   // ---- Uno helpers ----
 
-  // Seat inks, fixed per seat index 0..9 — extends MT's 8-color palette with
-  // two more distinct hexes so a full 10-seat Uno table keeps unique colors.
-  const UNO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0', '#f97316', '#64748b', '#ec4899', '#8b5cf6']
+  // Seat inks, fixed per seat index 0..5 — the first six of MT's 8-color
+  // palette, one per seat under Uno's 6-seat cap.
+  const UNO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#9333ea', '#0fb5a0']
 
   // The actor key must re-key on any field that can change within the SAME
   // player's turn (a draw-then-play is two actions, same turnNumber), so the

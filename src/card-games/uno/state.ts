@@ -64,7 +64,7 @@ export interface UnoSession {
 }
 
 export const UNO_MIN_SEATS = 2
-export const UNO_MAX_SEATS = 10
+export const UNO_MAX_SEATS = 6
 export const UNO_HAND_SIZE = 7
 export const UNO_TARGET = 500
 

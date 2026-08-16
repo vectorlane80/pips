@@ -607,39 +607,45 @@ export function UnoTable({
             </div>
           )}
 
-          {/* Opponent rail: one row per opponent seat, current seat
-              highlighted with the seat color + a turn tag */}
+          {/* Opponent tiles: a wrapping grid, 3 compact tiles per row; the
+              current seat's tile is filled with the seat color + a turn tag */}
           <div className="uno-opp-rail">
             {opponentIds.map((seatId) => {
               const color = colors[seatId] ?? 'var(--slate-pip)'
               const isTurn = seatId === currentPlayer(publicState.turn)
               const count = publicState.handCounts[seatId] ?? 0
-              const stackCount = Math.min(count, 14) // visual cap, like Rummy/Phase10
+              // Visual cap for the compact tile (Rummy/Phase10 fan 14 on their
+              // full-width rows); the count label carries the real number.
+              const stackCount = Math.min(count, 8)
               return (
                 <div
                   key={seatId}
-                  className={`uno-opp-row${isTurn ? ' uno-opp-row--turn' : ''}`}
+                  className={`uno-opp-tile${isTurn ? ' uno-opp-tile--turn' : ''}`}
                   style={isTurn ? { background: color, borderColor: color, color: '#fff' } : undefined}
                 >
-                  <span
-                    className="uno-seat-dot"
-                    style={isTurn
-                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
-                      : { background: color }}
-                  />
-                  <span className="uno-opp-name" style={isTurn ? undefined : { color }}>{names[seatId] ?? seatId}</span>
-                  <div className="uno-opp-stack">
-                    {Array.from({ length: stackCount }, (_, i) => (
-                      <UnoCardBack key={i} size="small" />
-                    ))}
+                  <div className="uno-opp-tile-top">
+                    <span
+                      className="uno-seat-dot"
+                      style={isTurn
+                        ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
+                        : { background: color }}
+                    />
+                    <span className="uno-opp-name" style={isTurn ? undefined : { color }}>{names[seatId] ?? seatId}</span>
+                    {isTurn && <span className="uno-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
                   </div>
-                  <span className="uno-opp-count">{count} cards</span>
-                  {isTurn && <span className="uno-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
-                  <UnoCallButton
-                    disabled={unoCallDisabled(seatId)}
-                    onClick={() => onCallUno(seatId)}
-                    ariaLabel={`Call UNO on ${names[seatId] ?? seatId}`}
-                  />
+                  <div className="uno-opp-tile-bottom">
+                    <div className="uno-opp-stack">
+                      {Array.from({ length: stackCount }, (_, i) => (
+                        <UnoCardBack key={i} size="small" />
+                      ))}
+                    </div>
+                    <span className="uno-opp-count">{count} cards</span>
+                    <UnoCallButton
+                      disabled={unoCallDisabled(seatId)}
+                      onClick={() => onCallUno(seatId)}
+                      ariaLabel={`Call UNO on ${names[seatId] ?? seatId}`}
+                    />
+                  </div>
                 </div>
               )
             })}

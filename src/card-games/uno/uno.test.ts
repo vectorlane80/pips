@@ -108,8 +108,8 @@ describe('deal', () => {
     expect(pub.scores).toEqual({ p1: 0, p2: 0 })
   })
 
-  it('deals 7 to each of 3, 5 and 10 players with the correct stock remainder', () => {
-    for (const n of [3, 5, 10]) {
+  it('deals 7 to each of 3, 5 and 6 players with the correct stock remainder', () => {
+    for (const n of [3, 5, 6]) {
       const players = Array.from({ length: n }, (_, i) => `p${i + 1}`)
       const uno = createUnoGame(players, 42)
       const pub = uno.session.publicState
@@ -149,7 +149,7 @@ describe('deal', () => {
 
   it('exposes the seat bounds and constants', () => {
     expect(UNO_MIN_SEATS).toBe(2)
-    expect(UNO_MAX_SEATS).toBe(10)
+    expect(UNO_MAX_SEATS).toBe(6)
     expect(UNO_HAND_SIZE).toBe(7)
     expect(UNO_TARGET).toBe(500)
   })
@@ -915,7 +915,7 @@ describe('bot', () => {
 describe('property-based invariants', () => {
   it('stock, conservation, handCounts and wire-safety invariants hold across long random legal sequences', () => {
     for (let trial = 0; trial < 50; trial++) {
-      const n = 2 + (trial % 9)   // cycles 2..10 so every seat count gets covered
+      const n = 2 + (trial % 5)   // cycles 2..6 so every seat count gets covered
       const players = Array.from({ length: n }, (_, i) => `p${i}`)
       let uno = createUnoGame(players, trial)
       for (let actionIndex = 0; actionIndex < 300; actionIndex++) {
