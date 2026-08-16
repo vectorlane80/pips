@@ -1,5 +1,7 @@
 /* ===================================================================
-   RummyTable — three-band table layout + discard reach-in
+   RummyTable — N-player table: opponent tile grid / discard reach-in /
+   your melds + hand. Opponent tiles mirror Uno's wrapping-grid container
+   mechanics but keep Rummy's real-meld content and fan-size hidden hand.
    =================================================================== */
 
 /* ---- Outer container ---- */
@@ -26,6 +28,42 @@
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* ---- Header scoreboard: one pill per seated player, always visible ---- */
+
+.rummy-scoreboard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rummy-score-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 5px 14px;
+  box-shadow: 0 3px 0 #c9c9e0;
+}
+
+.rummy-score-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+  flex: none;
+}
+
+.rummy-score-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
 }
 
 .rummy-game-label {
@@ -74,47 +112,108 @@
   flex-direction: column;
 }
 
-/* ---- Their side (top band) ---- */
+/* ---- Opponent tiles: a wrapping grid of content-driven seat tiles ---- */
+/* Container mechanics mirror Uno's .uno-opp-rail (flex-wrap, gap), but tile
+   CONTENT and sizing differ: Rummy tiles show real, readable meld cards and
+   the larger CardBack size="fan" hidden hand — no Uno compact 8-back stack,
+   no fixed cap on melds. Each tile's height is content-driven: a player with
+   3 melds gets a taller tile than one with 1. */
 
-.rummy-their-side {
+.rummy-opp-rail {
+  --rummy-opp-gap: clamp(10px, 1.6vw, 14px);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--rummy-opp-gap);
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
-.rummy-their-side-left {
+.rummy-opp-tile {
+  flex: 1 1 260px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-.rummy-their-name {
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.rummy-their-count {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted-text);
-}
-
-.rummy-their-fan {
+.rummy-opp-tile-top {
   display: flex;
-  margin-top: 6px;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
-/* ---- Their melds ---- */
+.rummy-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
 
-.rummy-their-melds {
+.rummy-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.rummy-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Active (current player) tile is filled with the seat color — matching the
+   turn-chip treatment — and the hidden-hand label / dot border lighten to
+   read on the fill. */
+.rummy-opp-tile--turn .rummy-opp-tile-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rummy-opp-tile--turn .rummy-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.rummy-opp-tile-hand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rummy-opp-tile-fan {
+  display: flex;
+  flex: none;
+}
+
+.rummy-opp-tile-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+/* ---- Opponent tile melds ---- */
+
+.rummy-opp-tile-melds {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 /* ---- Centre band ---- */

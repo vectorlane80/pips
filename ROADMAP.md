@@ -22,11 +22,31 @@ Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
       re-verified the match-win logic against all 2-player branches and
       spot-checked test arithmetic against the actual rank/meld value
       tables rather than trusting the implementer's report.
-- [ ] Rummy screens: opponent area → seat-tile grid showing full laid
-      melds per tile (not a hidden count like Uno — melds are public
-      information), your hand/melds section unchanged
-- [ ] Rummy wiring: App.tsx N-player PeerJS lobby/bot-fill/sendTo,
-      mirroring Uno's spec-34g pattern
+- [x] Rummy screens + wiring (spec 36, combined — screen prop changes
+      would have broken App.tsx's existing 2-player caller if landed
+      separately, so unlike Uno's charter these couldn't be split).
+      RummyRoom → N-seat lobby (Uno pattern). RummyTable opponent area
+      → wrapping tile grid, content-height-driven, showing every real
+      meld card (not a hidden count) — the trickiest part, a full
+      layoff generalization (`crossLayoffGroups`/`selfExtensionCards`/
+      `crossLayoffCaption`) replacing the old 2-boolean 2-player logic:
+      self-extensions merge silently, cross-layoffs render on the
+      LAYER's own section (opponent tile or "your melds") captioned
+      "on your group"/"on {name}'s group", multiple layoff records from
+      the same layer onto the same meld combined into one cluster.
+      RummyResults → N-player standings loop. App.tsx wiring fully
+      rewritten to Uno's lobby/`sendTo`/bot-per-seat model, replacing
+      the old single-guest-or-single-bot direct-connect flow. 958 tests
+      (unchanged, screens/wiring don't get dedicated test files here)
+      / tsc / build green. Oscar review: approve, no blockers (the
+      lead independently verified the layoff generalization by reading
+      the code directly; Oscar's adversarial pass focused on the
+      wiring's private-hand delivery, lobby gating, and rematch/seat-
+      order preservation). Live-verified: full 4-player match, N-seat
+      lobby cap enforcement, real melds rendering in content-driven
+      tiles, layoff-eligible highlighting, host-side rule enforcement
+      correctly rejecting an illegal lay-off attempt (no meld of my own
+      down yet) — zero console errors throughout.
 - [ ] Phase 10 engine: same generalization, 2–6 seats (108-card deck
       comfortably supports 6; matches real Phase 10's own official cap)
 - [ ] Phase 10 screens: opponent area → seat-tile grid showing full laid

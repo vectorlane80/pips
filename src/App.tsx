@@ -21,11 +21,12 @@ import { decideConnect4Move } from './games/connect4'
 import { decideHangmanLetter } from './games/hangman'
 
 // ---- Rummy (separate parallel session, per CHARTER.md resolution #7) ----
-import { createRummyGame, type RummySession, type RummyPublicState, type RummyPrivateState, type RummyAction } from './card-games/rummy/state'
+import { createRummyGame, RUMMY_MAX_SEATS, RUMMY_MIN_SEATS, type RummySession, type RummyPublicState, type RummyAction } from './card-games/rummy/state'
 import { applyRummyAction, runRummyBotTurn } from './card-games/rummy/rules'
 import { rummyBotStrategy } from './card-games/rummy/bot'
 import { deriveSnapshot, shouldAcceptUpdate } from './engine/sync'
 import { currentPlayer } from './engine/turn-engine'
+import type { Card } from './card-engine/cards'
 import { RummyTable } from './screens/RummyTable'
 import { RummyResults } from './screens/RummyResults'
 import { RummyRoom } from './screens/RummyRoom'
@@ -96,7 +97,9 @@ import { UnoTable } from './screens/UnoTable'
 import { UnoResults } from './screens/UnoResults'
 import { UnoRoom } from './screens/UnoRoom'
 
-type RummyView = { revision: number; publicState: RummyPublicState; privateState: RummyPrivateState; opponentName: string }
+type RummyView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
 type Phase10View = { revision: number; publicState: Phase10PublicState; privateState: Phase10PrivateState; opponentName: string }
 type BattleshipView = { revision: number; publicState: BattleshipPublicState; privateState: BattleshipPrivateState; opponentName: string }
 type DominoesView = { revision: number; publicState: DominoesPublicState; privateState: DominoesPrivateState; opponentName: string }
@@ -167,11 +170,11 @@ export default function App() {
   const [rummyRole, setRummyRole] = useState<'host' | 'guest' | null>(null)
   const [rummyCode, setRummyCode] = useState('')
   const [rummyLocalPlayerId, setRummyLocalPlayerId] = useState<string | null>(null)
-  const [rummyOpponentId, setRummyOpponentId] = useState<string | null>(null)
-  const [rummyOpponentName, setRummyOpponentName] = useState('')
   const [rummyView, setRummyView] = useState<RummyView | null>(null)
   const [rummyConnection, setRummyConnection] = useState<'connected' | 'disconnected'>('connected')
-  const [rummyWaiting, setRummyWaiting] = useState(false)
+  const [rummyNotice, setRummyNotice] = useState<string | null>(null)
+  const [rummyStarted, setRummyStarted] = useState(false)
+  const [rummySeats, setRummySeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
 
   // ---- Phase 10 ----
   const [phase10Role, setPhase10Role] = useState<'host' | 'guest' | null>(null)
@@ -268,8 +271,10 @@ export default function App() {
   const rummyGuestRef = useRef<GuestHandle<RummyAction> | null>(null)
   const rummyBotBusyRef = useRef(false)
   const rummyLocalPlayerIdRef = useRef<string | null>(null)
-  const rummyOpponentIdRef = useRef<string | null>(null)
-  const rummyOpponentNameRef = useRef('')
+  const rummySeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const rummyStartedRef = useRef(false)
+  const rummyNamesRef = useRef<Record<string, string>>({})
+  const rummyBotSeatsRef = useRef<Set<string>>(new Set())
   const phase10SessionRef = useRef<Phase10Session | null>(null)
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
   const phase10GuestRef = useRef<GuestHandle<Phase10Action> | null>(null)
@@ -438,7 +443,7 @@ export default function App() {
   function liveGameNow(): RoutedGame | null {
     const legacy = roomRef.current
     if (legacy && legacy.screen !== 'room' && legacy.screen !== 'results') return legacy.game
-    if (rummyRole && rummyView && !rummyView.publicState.matchWinnerId) return 'rummy'
+    if (rummyRole && rummyStarted && rummyView?.kind === 'game' && !rummyView.publicState.matchWinnerId) return 'rummy'
     if (phase10Role && phase10View && !phase10View.publicState.matchWinnerId) return 'phase10'
     if (battleshipRole && battleshipView && battleshipView.publicState.stage !== 'over') return 'battleship'
     if (dominoesRole && dominoesView && dominoesView.publicState.stage !== 'over') return 'dominoes'
@@ -453,7 +458,7 @@ export default function App() {
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -585,13 +590,16 @@ export default function App() {
     setRummyCode('')
     setRummyLocalPlayerId(null)
     rummyLocalPlayerIdRef.current = null
-    setRummyOpponentId(null)
-    rummyOpponentIdRef.current = null
-    setRummyOpponentName('')
-    rummyOpponentNameRef.current = ''
     setRummyView(null)
     setRummyConnection('connected')
-    setRummyWaiting(false)
+    setRummyNotice(null)
+    setRummyStarted(false)
+    rummyStartedRef.current = false
+    setRummySeats([])
+    rummySeatsRef.current = []
+    rummyBotBusyRef.current = false
+    rummyBotSeatsRef.current.clear()
+    rummyNamesRef.current = {}
     // Phase 10
     phase10HostRef.current?.destroy()
     phase10HostRef.current = null
@@ -782,23 +790,58 @@ export default function App() {
 
   // ---- Rummy helpers ----
 
+  // Fixed per-seat ink palette, zipped against seatOrder the same way Uno's
+  // UNO_SEAT_INKS is. Rummy's cap is 4 seats, so 4 entries (first 4 of Uno's
+  // own palette — same visual language across games).
+  const RUMMY_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+
+  // The actor key must re-key on any field that can change within the SAME
+  // player's turn (a draw-then-play is two actions, same turnNumber), so the
+  // loop re-evaluates after a draw that doesn't advance the turn.
   function rummyActorKey(session: RummySession): string {
     const ps = session.session.publicState
-    return `${ps.roundNumber}:${ps.turn.turnNumber}`
+    return `${ps.roundNumber}:${ps.turn.turnNumber}:${ps.turn.phase}:${ps.obligatedCardId ?? ''}:${ps.stockCount}:${ps.discardPile.cards.length}:${ps.layoffs.length}`
   }
 
   function rummyStale(key: string) {
     return !rummySessionRef.current || rummyActorKey(rummySessionRef.current) !== key
   }
 
-  function rummyUpdateViews() {
+  // Hands are PRIVATE and up to 3 guests can be seated, so a single broadcast
+  // cannot carry every hand (any guest would see the others'). Lobby phase →
+  // broadcast the roster view; game phase → per-guest sendTo with only that
+  // guest's own hand. The host's own view comes from its local snapshot.
+  function rummyBroadcast() {
+    if (!rummyStartedRef.current) {
+      const view: RummyView = {
+        kind: 'lobby',
+        roster: rummySeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === rummyLocalPlayerIdRef.current })),
+      }
+      setRummyView(view)
+      rummyHostRef.current?.broadcast(view)
+      return
+    }
     const session = rummySessionRef.current!
     const hostSnap = deriveSnapshot(session.session, rummyLocalPlayerIdRef.current!)
-    setRummyView({ revision: hostSnap.revision, publicState: hostSnap.publicState, privateState: hostSnap.privateState!, opponentName: rummyOpponentNameRef.current })
-    const opponentId = rummyOpponentIdRef.current
-    if (opponentId && opponentId !== 'bot') {
-      const guestSnap = deriveSnapshot(session.session, opponentId)
-      rummyHostRef.current?.broadcast({ revision: guestSnap.revision, publicState: guestSnap.publicState, privateState: guestSnap.privateState!, opponentName: name })
+    setRummyView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      hand: hostSnap.privateState!.hand.cards,
+      names: { ...rummyNamesRef.current },
+    })
+    const names = { ...rummyNamesRef.current }
+    for (const seat of rummySeatsRef.current) {
+      if (seat.playerId === rummyLocalPlayerIdRef.current) continue
+      if (rummyBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      rummyHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        hand: guestSnap.privateState!.hand.cards,
+        names,
+      })
     }
   }
 
@@ -811,53 +854,78 @@ export default function App() {
     setRummyCode(code)
     setRummyLocalPlayerId(hostId)
     rummyLocalPlayerIdRef.current = hostId
-    setRummyWaiting(true)
+    setRummyStarted(false)
+    rummyStartedRef.current = false
+    setRummySeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    rummySeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    setRummyNotice(null)
     setError(null)
     rummyHostRef.current = createHost<RummyView, RummyAction>(code, {
       onJoin(guestId, guestName) {
-        if (rummySessionRef.current) {
-          rummyHostRef.current?.reject(guestId, 'That Rummy table is already full.')
+        if (rummyStartedRef.current) {
+          rummyHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
           return
         }
-        const seed = Math.floor(Math.random() * 2147483647)
-        rummySessionRef.current = createRummyGame([hostId, guestId], seed)
-        setRummyOpponentId(guestId)
-        rummyOpponentIdRef.current = guestId
-        setRummyOpponentName(guestName)
-        rummyOpponentNameRef.current = guestName
-        setRummyWaiting(false)
-        rummyUpdateViews()
+        if (rummySeatsRef.current.length >= RUMMY_MAX_SEATS) {
+          rummyHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        rummySeatsRef.current = [...rummySeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setRummySeats(rummySeatsRef.current)
+        rummyBroadcast()
       },
       onAction(guestId, action) {
-        if (!rummySessionRef.current || guestId !== rummyOpponentIdRef.current) return
-        const result = applyRummyAction(rummySessionRef.current!, guestId, action)
+        if (!rummyStartedRef.current) return
+        const session = rummySessionRef.current
+        if (!session) return
+        if (!rummySeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applyRummyAction(session, guestId, action)
         if (!result.outcome.ok) return
         rummySessionRef.current = result.rummy
-        rummyUpdateViews()
+        rummyBroadcast()
       },
       onLeave(guestId) {
-        // Guest left mid-hand: match cannot continue with only 1 player.
-        if (guestId !== rummyOpponentIdRef.current) return
-        setError('Opponent left the room.')
+        if (!rummyStartedRef.current) {
+          rummySeatsRef.current = rummySeatsRef.current.filter((s) => s.playerId !== guestId)
+          setRummySeats(rummySeatsRef.current)
+          rummyBroadcast()
+          return
+        }
+        const seat = rummySeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setRummyNotice(`${seat.name} disconnected.`)
       },
       onError(message) {
         setError(message)
       },
     })
+    rummyBroadcast()
   }
 
   function addRummyHouseBot() {
-    if (rummyRole !== 'host' || !rummyLocalPlayerId || !rummyWaiting) return
-    const botId = 'bot'
-    const botName = randomBotName([name.trim()])
+    if (rummyRole !== 'host' || rummyStartedRef.current) return
+    if (rummySeatsRef.current.length >= RUMMY_MAX_SEATS) return
+    const botId = `bot-${rummySeatsRef.current.length}`
+    const botName = randomBotName(rummySeatsRef.current.map((s) => s.name))
+    rummySeatsRef.current = [...rummySeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setRummySeats(rummySeatsRef.current)
+    rummyBotSeatsRef.current.add(botId)
+    rummyBroadcast()
+  }
+
+  function rummyStart() {
+    if (rummyRole !== 'host' || rummyStartedRef.current) return
+    const seats = rummySeatsRef.current
+    // Variable seat count: at least RUMMY_MIN_SEATS, at most RUMMY_MAX_SEATS —
+    // whatever is seated when the host presses Start, NOT a fixed-count gate.
+    if (seats.length < RUMMY_MIN_SEATS || seats.length > RUMMY_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    rummySessionRef.current = createRummyGame([rummyLocalPlayerId, botId], seed)
-    setRummyOpponentId(botId)
-    rummyOpponentIdRef.current = botId
-    setRummyOpponentName(botName)
-    rummyOpponentNameRef.current = botName
-    setRummyWaiting(false)
-    rummyUpdateViews()
+    rummySessionRef.current = createRummyGame(playerIds, seed)
+    rummyNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    rummyStartedRef.current = true
+    setRummyStarted(true)
+    rummyBroadcast()
   }
 
   async function runRummyBot(botId: string, key: string) {
@@ -866,12 +934,13 @@ export default function App() {
       if (rummyStale(key)) return
       const session = rummySessionRef.current!
       const ps = session.session.publicState
-      if (ps.roundOver || currentPlayer(ps.turn) !== botId) return
+      if (ps.roundOver || ps.matchWinnerId) return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!rummyBotSeatsRef.current.has(botId)) return
       const result = runRummyBotTurn(session, botId, rummyBotStrategy)
       if (!result.outcome.ok) return
       rummySessionRef.current = result.rummy
-      const snap = deriveSnapshot(result.rummy.session, rummyLocalPlayerId!)
-      setRummyView({ revision: snap.revision, publicState: snap.publicState, privateState: snap.privateState!, opponentName: rummyOpponentNameRef.current })
+      rummyBroadcast()
     }
   }
 
@@ -881,12 +950,12 @@ export default function App() {
     if (!session) return
     const ps = session.session.publicState
     if (ps.roundOver || ps.matchWinnerId) return
-    if (rummyOpponentId !== 'bot') return
-    if (currentPlayer(ps.turn) !== 'bot') return
+    const currentId = currentPlayer(ps.turn)
+    if (!rummyBotSeatsRef.current.has(currentId)) return
     rummyBotBusyRef.current = true
     const key = rummyActorKey(session)
     try {
-      await runRummyBot('bot', key)
+      await runRummyBot(currentId, key)
     } finally {
       rummyBotBusyRef.current = false
       setTimeout(() => runRummyBotsIfNeeded(), 50)
@@ -899,10 +968,15 @@ export default function App() {
     let localRevision = -1
     const handle = joinHost<RummyView, RummyAction>(code, name.trim(), {
       onState(view) {
+        if (view.kind === 'lobby') {
+          setRummyView(view)
+          setRummyStarted(false)
+          return
+        }
         if (!shouldAcceptUpdate(localRevision, view.revision)) return
         localRevision = view.revision
         setRummyView(view)
-        setRummyOpponentName(view.opponentName)
+        setRummyStarted(true)
       },
       onError() {
         resetToEntry()
@@ -929,24 +1003,28 @@ export default function App() {
 
   function rummyDispatch(action: RummyAction) {
     if (rummyRole === 'host' && rummyLocalPlayerId) {
-      const result = applyRummyAction(rummySessionRef.current!, rummyLocalPlayerId, action)
+      const session = rummySessionRef.current
+      if (!session) return
+      const result = applyRummyAction(session, rummyLocalPlayerId, action)
       if (!result.outcome.ok) return
       rummySessionRef.current = result.rummy
-      rummyUpdateViews()
+      rummyBroadcast()
     } else if (rummyRole === 'guest') {
       rummyGuestRef.current?.sendAction(action)
     }
   }
 
   function rummyRematch() {
-    if (rummyRole !== 'host' || !rummySessionRef.current || !rummyLocalPlayerId) return
+    if (rummyRole !== 'host' || !rummySessionRef.current) return
+    const ps = rummySessionRef.current.session.publicState
+    if (ps.matchWinnerId === null) return
     const prevRevision = rummySessionRef.current.session.revision
-    const playerIds = rummySessionRef.current.session.publicState.turn.playerOrder as [string, string]
+    const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
     const next = createRummyGame(playerIds, seed)
     next.session = { ...next.session, revision: prevRevision + 1 }
     rummySessionRef.current = next
-    rummyUpdateViews()
+    rummyBroadcast()
   }
 
   // ---- End Rummy helpers ----
@@ -2937,32 +3015,26 @@ export default function App() {
 
   // Bot turn trigger
   useEffect(() => {
-    if (rummyRole !== 'host' || !rummyView) return
+    if (rummyRole !== 'host' || !rummyView || rummyView.kind !== 'game') return
     runRummyBotsIfNeeded()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rummyRole, rummyView])
 
   // Round transition (pause then start next round)
   useEffect(() => {
-    if (rummyRole !== 'host' || !rummyView) return
+    if (rummyRole !== 'host' || !rummyView || rummyView.kind !== 'game') return
     if (rummyView.publicState.roundOver && !rummyView.publicState.matchWinnerId) {
       const t = setTimeout(() => {
-        const result = applyRummyAction(rummySessionRef.current!, rummyLocalPlayerId!, { type: 'START_NEXT_ROUND' })
+        const result = applyRummyAction(rummySessionRef.current!, rummyLocalPlayerIdRef.current!, { type: 'START_NEXT_ROUND' })
         if (result.outcome.ok) {
           rummySessionRef.current = result.rummy
-          rummyUpdateViews()
+          rummyBroadcast()
         }
       }, ROUND_PAUSE_MS)
       return () => clearTimeout(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rummyRole, rummyView?.publicState.roundOver])
-
-  // ---- Derived opponentId for guest (avoid async ordering bug) ----
-  const resolvedRummyOpponentId = useMemo(() => {
-    if (!rummyView || !rummyLocalPlayerId) return null
-    return rummyView.publicState.turn.playerOrder.find((id) => id !== rummyLocalPlayerId) ?? null
-  }, [rummyView, rummyLocalPlayerId])
+  }, [rummyRole, rummyView])
 
   // ---- Phase 10 effects (host-only) ----
 
@@ -3286,30 +3358,38 @@ export default function App() {
   }
 
   // ---- Rummy session active ----
-  // Rummy waiting screen (host waiting for opponent) — mirrors the shared Room.tsx
-  // layout dice games use, so Rummy's start flow doesn't feel like a different app.
-  if (rummyRole === 'host' && rummyWaiting) {
+  // Rummy lobby — 2 to 4 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way).
+  if (rummyRole && !rummyStarted) {
+    const roster = rummyRole === 'host'
+      ? rummySeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === rummyLocalPlayerId }))
+      : (rummyView?.kind === 'lobby' ? rummyView.roster : [])
     return (
       <RummyRoom
         code={rummyCode}
         localName={name}
-        notice={error}
+        isHost={rummyRole === 'host'}
+        seats={roster}
+        notice={rummyNotice ?? error}
         onAddHouseBot={addRummyHouseBot}
+        onStartGame={rummyStart}
         onLeave={resetToEntry}
       />
     )
   }
 
   // Rummy match results
-  if (rummyView?.publicState.matchWinnerId) {
+  if (rummyView?.kind === 'game' && rummyView.publicState.matchWinnerId) {
+    const rummyColors = Object.fromEntries(rummyView.publicState.seatOrder.map((id, i) => [id, RUMMY_SEAT_INKS[i]]))
     return (
       <RummyResults
         localPlayerId={rummyLocalPlayerId ?? ''}
         localName={name}
-        opponentName={rummyOpponentName}
+        names={rummyView.names}
+        colors={rummyColors}
         publicState={rummyView.publicState}
         isHost={rummyRole === 'host'}
-        notice={error}
+        notice={rummyNotice ?? error}
         onRematch={rummyRematch}
         onBackToShelf={resetToEntry}
       />
@@ -3317,23 +3397,19 @@ export default function App() {
   }
 
   // Rummy table (active game)
-  if (rummyView && rummyLocalPlayerId) {
-    const opponentHandCount = resolvedRummyOpponentId
-      ? (rummyView.publicState.handCounts[resolvedRummyOpponentId] ?? 0)
-      : 0
-
+  if (rummyView?.kind === 'game' && rummyLocalPlayerId) {
+    const rummyColors = Object.fromEntries(rummyView.publicState.seatOrder.map((id, i) => [id, RUMMY_SEAT_INKS[i]]))
     return (
       <RummyTable
         code={rummyCode}
         localPlayerId={rummyLocalPlayerId}
         localName={name}
-        opponentName={rummyOpponentName}
-        opponentColor="var(--violet)"
-        opponentHandCount={opponentHandCount}
+        names={rummyView.names}
+        colors={rummyColors}
         connection={rummyConnection}
-        notice={error}
+        notice={rummyNotice ?? error}
         publicState={rummyView.publicState}
-        hand={rummyView.privateState.hand.cards}
+        hand={rummyView.hand}
         onDrawStock={() => rummyDispatch({ type: 'DRAW_FROM_STOCK' })}
         onDrawDiscard={(index) => rummyDispatch({ type: 'DRAW_FROM_DISCARD', index })}
         onLayDownMeld={(cardIds) => rummyDispatch({ type: 'LAY_DOWN_MELD', cardIds })}

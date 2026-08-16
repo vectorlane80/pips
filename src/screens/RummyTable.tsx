@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type { Card, Rank, Suit } from '../card-engine/cards'
-import type { RummyPublicState } from '../card-games/rummy/state'
+import type { RummyLayoff, RummyPublicState } from '../card-games/rummy/state'
 import { fullMeldCards } from '../card-games/rummy/state'
 import { currentPlayer } from '../engine/turn-engine'
 import { classifyMeld, isAceHighRun } from '../card-games/rummy/melds'
@@ -8,7 +8,6 @@ import { deadwood } from '../card-games/rummy/scoring'
 import { rankValue, rankValueAceHigh } from '../card-games/rummy/rank'
 import { DealIntro } from '../components/DealIntro'
 import { PlayingCard, CardBack, suitGlyph, suitColor } from '../components/PlayingCard'
-import { ScoreHeader } from '../components/ScoreHeader'
 import { Wordmark } from '../components/Wordmark'
 import { SoundToggle } from '../components/SoundToggle'
 import { TurnSoundToggle } from '../components/TurnSoundToggle'
@@ -23,13 +22,12 @@ export interface RummyTableProps {
   code: string
   localPlayerId: string
   localName: string
-  opponentName: string
-  opponentColor: string
-  opponentHandCount: number
+  names: Record<string, string>        // playerId -> display name
+  colors: Record<string, string>       // playerId -> seat ink
   connection: 'connected' | 'disconnected'
   notice?: string | null
   publicState: RummyPublicState
-  hand: Card[]
+  hand: Card[]                         // your private hand
   onDrawStock: () => void
   onDrawDiscard: (index: number) => void
   onLayDownMeld: (cardIds: string[]) => void
@@ -64,10 +62,64 @@ function sortMeldForDisplay(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => valueFn(a.rank) - valueFn(b.rank))
 }
 
+// ---- Layoff generalization ----
+//
+// A layoff onto a meld's OWN OWNER's meld (self-extension) merges directly into
+// that meld's cards — no caption, cards just appear as part of the cluster.
+// This is keyed by `l.playerId === l.targetPlayerId`, which works at any seat
+// count unchanged.
+//
+// A layoff by someone OTHER than the meld's owner (cross-layoff) renders in
+// the LAYER's own section as a captioned mini-cluster. Multiple layoff
+// records by the same layer onto the same target meld (they can chain across
+// a round) are combined into ONE cluster per (layer, target) pair, not one
+// cluster per record.
+
+interface CrossLayoffGroup {
+  key: string
+  targetPlayerId: string
+  targetMeldIndex: number
+  cards: Card[]
+}
+
+function selfExtensionCards(layoffs: RummyLayoff[], playerId: string, meldIndex: number): Card[] {
+  return layoffs
+    .filter((l) => l.playerId === playerId && l.targetPlayerId === playerId && l.targetMeldIndex === meldIndex)
+    .flatMap((l) => l.cards)
+}
+
+function crossLayoffGroups(layoffs: RummyLayoff[], layerId: string): CrossLayoffGroup[] {
+  const groups = new Map<string, RummyLayoff[]>()
+  for (const l of layoffs) {
+    if (l.playerId !== layerId || l.targetPlayerId === layerId) continue
+    const key = `${l.targetPlayerId}|${l.targetMeldIndex}`
+    const list = groups.get(key) ?? []
+    list.push(l)
+    groups.set(key, list)
+  }
+  return [...groups.entries()].map(([key, list]) => {
+    const [targetPlayerId, targetMeldIndex] = key.split('|')
+    return {
+      key,
+      targetPlayerId,
+      targetMeldIndex: Number(targetMeldIndex),
+      cards: list.flatMap((l) => l.cards),
+    }
+  })
+}
+
+function crossLayoffCaption(
+  targetPlayerId: string,
+  localPlayerId: string,
+  names: Record<string, string>,
+): string {
+  return targetPlayerId === localPlayerId ? 'on your group' : `on ${names[targetPlayerId] ?? targetPlayerId}'s group`
+}
+
 function computeStatus(
   publicState: RummyPublicState,
   isMyTurn: boolean,
-  opponentName: string,
+  names: Record<string, string>,
   localPlayerId: string,
   hoverIndex: number | null,
   hand: Card[],
@@ -75,13 +127,20 @@ function computeStatus(
 ): StatusLine {
   // Round over
   if (publicState.roundOver) {
-    const winnerName = publicState.roundWinnerId === localPlayerId ? 'You' : opponentName
+    const winnerId = publicState.roundWinnerId
+    const winnerName = winnerId === null
+      ? 'Nobody'
+      : winnerId === localPlayerId
+        ? 'You'
+        : (names[winnerId] ?? winnerId)
     return { pre: `${winnerName} went out!`, card: null, post: '' }
   }
 
+  const currentId = currentPlayer(publicState.turn)
+
   // Not my turn
   if (!isMyTurn) {
-    return { pre: `${opponentName}'s turn`, card: null, post: '' }
+    return { pre: `${names[currentId] ?? currentId}'s turn`, card: null, post: '' }
   }
 
   // My turn — draw phase
@@ -286,9 +345,8 @@ export function RummyTable({
   code,
   localPlayerId,
   localName,
-  opponentName,
-  opponentColor,
-  opponentHandCount,
+  names,
+  colors,
   connection,
   notice,
   publicState,
@@ -304,24 +362,17 @@ export function RummyTable({
   // ---- Derived ----
   void localName // preserved in props for M4b wiring; unused in this presentational milestone
   void onOpenRules // rules overlay now managed as local state; prop kept for future wiring
-  const opponentId = publicState.turn.playerOrder.find((id) => id !== localPlayerId)!
+  const opponentIds = publicState.seatOrder.filter((id) => id !== localPlayerId)
   const isMyTurn = currentPlayer(publicState.turn) === localPlayerId
   const canAct = isMyTurn && !publicState.roundOver
-  const theirMelds = publicState.melds[opponentId] ?? []
   const myMelds = publicState.melds[localPlayerId] ?? []
   const myDeadwood = deadwood(hand)
-
-  // Lay-offs onto your OWN meld merge visually into that same cluster (no callout needed).
-  // Lay-offs onto the OTHER player's meld always render on the LAYER's own side as a separate,
-  // captioned mini-cluster — never inside the target's cluster across the table.
-  const myOwnExtensions = publicState.layoffs.filter((l) => l.playerId === localPlayerId && l.targetPlayerId === localPlayerId)
-  const theirOwnExtensions = publicState.layoffs.filter((l) => l.playerId === opponentId && l.targetPlayerId === opponentId)
-  const myCrossLayoffs = publicState.layoffs.filter((l) => l.playerId === localPlayerId && l.targetPlayerId === opponentId)
-  const theirCrossLayoffs = publicState.layoffs.filter((l) => l.playerId === opponentId && l.targetPlayerId === localPlayerId)
+  const currentId = currentPlayer(publicState.turn)
+  const humanCount = publicState.seatOrder.filter((id) => !id.startsWith('bot')).length
 
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
-  useTurnStartSound(isMyTurn, opponentId === 'bot' ? 1 : 2, playTurnStart)
+  useTurnStartSound(isMyTurn, humanCount, playTurnStart)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'suit' | 'rank'>('suit')
@@ -449,8 +500,8 @@ export function RummyTable({
   }, [hand, sortBy, justDrawn])
 
   const status = useMemo(
-    () => computeStatus(publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand, justDrawn),
-    [publicState, isMyTurn, opponentName, localPlayerId, hoverIndex, hand, justDrawn],
+    () => computeStatus(publicState, isMyTurn, names, localPlayerId, hoverIndex, hand, justDrawn),
+    [publicState, isMyTurn, names, localPlayerId, hoverIndex, hand, justDrawn],
   )
 
   const showRoundBanner = publicState.roundOver && !publicState.matchWinnerId && publicState.roundWinnerId
@@ -470,11 +521,14 @@ export function RummyTable({
   )
   const canLayOffSomewhere = useMemo(() => {
     if (!canLayOffAtAll) return false
-    return [
-      ...theirMelds.map((_, i) => fullMeldCards(publicState.melds, publicState.layoffs, opponentId, i)),
-      ...myMelds.map((_, i) => fullMeldCards(publicState.melds, publicState.layoffs, localPlayerId, i)),
-    ].some((cards) => canLayOffOnto(cards, selectedCards))
-  }, [canLayOffAtAll, theirMelds, myMelds, selectedCards, publicState.melds, publicState.layoffs, opponentId, localPlayerId])
+    for (const pid of publicState.seatOrder) {
+      const melds = publicState.melds[pid] ?? []
+      for (let i = 0; i < melds.length; i++) {
+        if (canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, pid, i), selectedCards)) return true
+      }
+    }
+    return false
+  }, [canLayOffAtAll, selectedCards, publicState.melds, publicState.layoffs, publicState.seatOrder])
 
   const lHint = lEnabled ? '' : layDownHint(selectedIds, hand, publicState.obligatedCardId, canLayOffSomewhere)
   const dHint = dEnabled ? '' : discardHint(selectedIds, isMyTurn, publicState.turn.phase, publicState.obligatedCardId, hand)
@@ -510,7 +564,14 @@ export function RummyTable({
 
   // ---- Render ----
   const pile = publicState.discardPile.cards
-  const fanCount = Math.min(opponentHandCount, 14)
+  const others = publicState.seatOrder
+    .filter((id) => id !== localPlayerId)
+    .map((id) => ({
+      id,
+      name: names[id] ?? id,
+      color: colors[id] ?? 'var(--slate-pip)',
+      handSize: publicState.handCounts[id] ?? 0,
+    }))
 
   return (
     <div className="rummy-table">
@@ -525,18 +586,19 @@ export function RummyTable({
               style={{ background: connection === 'connected' ? 'var(--green)' : 'var(--coral)' }}
             />
             <span className="rummy-peer-label">
-              {connection === 'connected' ? `peer to peer with ${opponentName}` : `connection to ${opponentName} lost`}
+              {connection === 'connected' ? `peer to peer · ${publicState.seatOrder.length} players` : 'connection lost'}
             </span>
           </span>
         </div>
-        <ScoreHeader
-          youScore={publicState.scores[localPlayerId] ?? 0}
-          youColor="var(--green-text)"
-          opponentName={opponentName}
-          opponentScore={publicState.scores[opponentId] ?? 0}
-          opponentColor={opponentColor}
-          hint={`to ${publicState.target}`}
-        />
+        <div className="rummy-scoreboard">
+          {publicState.seatOrder.map((pid) => (
+            <span key={pid} className="rummy-score-pill">
+              <span className="rummy-score-dot" style={{ background: colors[pid] ?? 'var(--slate-pip)' }} />
+              {names[pid] ?? pid} {publicState.scores[pid] ?? 0}
+            </span>
+          ))}
+          <span className="rummy-score-hint">to {publicState.target}</span>
+        </div>
         <div className="rummy-header-actions">
           <TurnSoundToggle enabled={turnSoundEnabled} onToggle={() => setTurnSoundEnabled(!turnSoundEnabled)} />
           <SoundToggle enabled={enabled} onToggle={() => setEnabled(!enabled)} />
@@ -557,63 +619,90 @@ export function RummyTable({
       <div className="rummy-table-card">
         {showIntro ? (
           <DealIntro
-            others={[{ id: opponentId, name: opponentName, color: opponentColor, handSize: opponentHandCount }]}
+            others={others}
             yourHandSize={hand.length}
             renderCardBack={(p) => <CardBack {...p} />}
             onComplete={() => setShowIntro(false)}
           />
         ) : (
         <>
-        {/* Their side */}
-        <div className="rummy-their-side">
-          <div className="rummy-their-side-left">
-            <div className="rummy-their-name" style={{ color: opponentColor }}>{opponentName}</div>
-            <div className="rummy-their-count">{opponentHandCount} cards · hidden</div>
-            {fanCount > 0 && (
-              <div className="rummy-their-fan">
-                {Array.from({ length: fanCount }, (_, i) => (
-                  <CardBack
-                    key={i}
-                    size="fan"
-                    style={{ marginLeft: i === 0 ? 0 : -15 }}
+        {/* Opponent tiles: a wrapping grid, one tile per opponent seat */}
+        <div className="rummy-opp-rail">
+          {opponentIds.map((seatId) => {
+            const seatColor = colors[seatId] ?? 'var(--slate-pip)'
+            const seatName = names[seatId] ?? seatId
+            const isTurn = seatId === currentId
+            const handCount = publicState.handCounts[seatId] ?? 0
+            const fanCount = Math.min(handCount, 14)
+            const seatMelds = publicState.melds[seatId] ?? []
+            const seatCrossGroups = crossLayoffGroups(publicState.layoffs, seatId)
+
+            return (
+              <div
+                key={seatId}
+                className={`rummy-opp-tile${isTurn ? ' rummy-opp-tile--turn' : ''}`}
+                style={isTurn ? { background: seatColor, borderColor: seatColor, color: '#fff' } : undefined}
+              >
+                <div className="rummy-opp-tile-top">
+                  <span
+                    className="rummy-seat-dot"
+                    style={isTurn
+                      ? { background: '#fff', borderColor: 'rgba(255, 255, 255, 0.85)' }
+                      : { background: seatColor }}
                   />
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="rummy-their-melds">
-            {theirMelds.length > 0 ? (
-              theirMelds.map((meld, i) => {
-                const selfExt = theirOwnExtensions.filter((l) => l.targetMeldIndex === i).flatMap((l) => l.cards)
-                const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, opponentId, i), selectedCards)
-                return (
-                  <MeldCluster
-                    key={meld.id}
-                    cards={[...meld.cards, ...selfExt]}
-                    ownerColor={opponentColor}
-                    ownerShadow="var(--grey-border-3)"
-                    onLayOff={eligible ? () => handleLayOff(opponentId, i) : undefined}
-                  />
-                )
-              })
-            ) : (
-              <span className="rummy-melds-empty">{opponentName} has laid down nothing yet</span>
-            )}
-            {theirCrossLayoffs.map((l) => {
-              const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, localPlayerId, l.targetMeldIndex), selectedCards)
-              return (
-                <div key={l.id} className="rummy-meld-extension">
-                  <div className="rummy-meld-extension-caption">on your group</div>
-                  <MeldCluster
-                    cards={l.cards}
-                    ownerColor={opponentColor}
-                    ownerShadow="var(--grey-border-3)"
-                    onLayOff={eligible ? () => handleLayOff(localPlayerId, l.targetMeldIndex) : undefined}
-                  />
+                  <span className="rummy-opp-name" style={isTurn ? undefined : { color: seatColor }}>{seatName}</span>
+                  {isTurn && <span className="rummy-turn-tag" style={{ background: '#fff', color: 'var(--ink)' }}>turn</span>}
                 </div>
-              )
-            })}
-          </div>
+                <div className="rummy-opp-tile-hand">
+                  {fanCount > 0 && (
+                    <div className="rummy-opp-tile-fan">
+                      {Array.from({ length: fanCount }, (_, i) => (
+                        <CardBack
+                          key={i}
+                          size="fan"
+                          style={{ marginLeft: i === 0 ? 0 : -15 }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <span className="rummy-opp-tile-count">{handCount} cards · hidden</span>
+                </div>
+                <div className="rummy-opp-tile-melds">
+                  {seatMelds.length > 0 ? (
+                    seatMelds.map((meld, i) => {
+                      const selfExt = selfExtensionCards(publicState.layoffs, seatId, i)
+                      const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, seatId, i), selectedCards)
+                      return (
+                        <MeldCluster
+                          key={meld.id}
+                          cards={[...meld.cards, ...selfExt]}
+                          ownerColor={seatColor}
+                          ownerShadow="var(--grey-border-3)"
+                          onLayOff={eligible ? () => handleLayOff(seatId, i) : undefined}
+                        />
+                      )
+                    })
+                  ) : (
+                    <span className="rummy-melds-empty">{seatName} has laid down nothing yet</span>
+                  )}
+                  {seatCrossGroups.map((group) => {
+                    const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, group.targetPlayerId, group.targetMeldIndex), selectedCards)
+                    return (
+                      <div key={group.key} className="rummy-meld-extension">
+                        <div className="rummy-meld-extension-caption">{crossLayoffCaption(group.targetPlayerId, localPlayerId, names)}</div>
+                        <MeldCluster
+                          cards={group.cards}
+                          ownerColor={seatColor}
+                          ownerShadow="var(--grey-border-3)"
+                          onLayOff={eligible ? () => handleLayOff(group.targetPlayerId, group.targetMeldIndex) : undefined}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Centre band */}
@@ -621,7 +710,7 @@ export function RummyTable({
           {/* Round-over banner */}
           {showRoundBanner && (
             <div className="rummy-round-banner">
-              {publicState.roundWinnerId === localPlayerId ? 'You' : opponentName}
+              {publicState.roundWinnerId === localPlayerId ? 'You' : (names[publicState.roundWinnerId!] ?? publicState.roundWinnerId)}
               {' won this round — '}
               {publicState.scores[publicState.roundWinnerId!] ?? 0}
               {' points. Round '}
@@ -690,9 +779,9 @@ export function RummyTable({
           <div className="rummy-centre-right">
             <span
               className="rummy-turn-chip"
-              style={{ background: isMyTurn ? 'var(--green-text)' : opponentColor }}
+              style={{ background: isMyTurn ? 'var(--green-text)' : (colors[currentId] ?? 'var(--slate-pip)') }}
             >
-              {isMyTurn ? 'Your turn' : `${opponentName}'s turn`}
+              {isMyTurn ? 'Your turn' : `${names[currentId] ?? currentId}'s turn`}
             </span>
             <StatusDisplay status={status} />
           </div>
@@ -703,7 +792,7 @@ export function RummyTable({
           <div className="rummy-your-melds">
             {myMelds.length > 0 ? (
               myMelds.map((meld, i) => {
-                const selfExt = myOwnExtensions.filter((l) => l.targetMeldIndex === i).flatMap((l) => l.cards)
+                const selfExt = selfExtensionCards(publicState.layoffs, localPlayerId, i)
                 const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, localPlayerId, i), selectedCards)
                 return (
                   <MeldCluster
@@ -716,14 +805,14 @@ export function RummyTable({
             ) : (
               <span className="rummy-melds-empty">You have laid nothing down yet</span>
             )}
-            {myCrossLayoffs.map((l) => {
-              const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, opponentId, l.targetMeldIndex), selectedCards)
+            {crossLayoffGroups(publicState.layoffs, localPlayerId).map((group) => {
+              const eligible = canLayOffAtAll && canLayOffOnto(fullMeldCards(publicState.melds, publicState.layoffs, group.targetPlayerId, group.targetMeldIndex), selectedCards)
               return (
-                <div key={l.id} className="rummy-meld-extension">
-                  <div className="rummy-meld-extension-caption">on {opponentName}'s group</div>
+                <div key={group.key} className="rummy-meld-extension">
+                  <div className="rummy-meld-extension-caption">{crossLayoffCaption(group.targetPlayerId, localPlayerId, names)}</div>
                   <MeldCluster
-                    cards={l.cards}
-                    onLayOff={eligible ? () => handleLayOff(opponentId, l.targetMeldIndex) : undefined}
+                    cards={group.cards}
+                    onLayOff={eligible ? () => handleLayOff(group.targetPlayerId, group.targetMeldIndex) : undefined}
                   />
                 </div>
               )

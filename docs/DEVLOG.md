@@ -2667,3 +2667,76 @@ shipping each verified charter promptly.
   melds, per the "Rummy and Phase10 Full Tables.dc.html" mockup's own
   reference pattern) without pausing, per the charter's explicit
   unattended-operation instruction.
+
+## Cycle 13 — 2026-08-16 (Rummy screens + wiring, spec 36)
+- **Shipped (spec 36, deliberately combined, not split like Uno's
+  charter was).** Investigated first and found a real sequencing
+  constraint the original charter plan missed: unlike Uno (net-new,
+  nothing in App.tsx to break), Rummy already has WORKING 2-player
+  wiring — changing RummyTable/RummyRoom/RummyResults' prop interfaces
+  without updating App.tsx in the same commit would leave tsc red at
+  an intermediate state, violating this project's own absolute rule.
+  Combined screens+wiring into one spec rather than the 3-way split
+  used for Uno.
+- **RummyRoom** → N-seat lobby (2-4), mirroring UnoRoom's seat-slot/
+  add-bot/start-game pattern; Rummy previously had no explicit "start"
+  step at all (adding a bot immediately began the match).
+- **RummyTable** → opponent area rebuilt as a wrapping tile grid with
+  CONTENT-DRIVEN height (a player with 3 melds gets a taller tile than
+  one with 1 — nothing capped or hidden, per the mockup's own working
+  reference), showing every real meld card rather than Uno's hidden-
+  count approach, since Rummy's opponent melds are genuinely public
+  information a player needs to read. The hard part: generalizing the
+  old 2-player layoff rendering (two hardcoded booleans: am I the
+  layer, is the target me-or-them) to N players via
+  `crossLayoffGroups`/`selfExtensionCards`/`crossLayoffCaption` — self-
+  extensions merge silently into the base meld; cross-layoffs render on
+  the LAYER's own section (whichever seat played them), captioned
+  generically ("on your group" if the local player owns the target,
+  else the target's name), with multiple layoff records from the same
+  layer onto the same meld combined into one visual cluster instead of
+  one per record.
+- **RummyResults** → N-player ranked-standings loop replacing the
+  hardcoded 2-row build.
+- **App.tsx** → full rewrite from the old single-guest-or-single-bot
+  direct-connect model to Uno's lobby/broadcast/`sendTo`/bot-per-seat
+  shape: multi-guest `onJoin` with spectator-block + seat-cap
+  rejection, `rummyBroadcast()` (lobby roster broadcast vs. per-guest
+  private-hand `sendTo` once the match starts), `rummyStart()`/
+  `addRummyHouseBot()` supporting a genuinely variable seat count,
+  `rummyRematch()` preserving `seatOrder` exactly.
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent — one real
+  narrowing bug caught and fixed mid-cycle: a `useEffect` dependency
+  array referencing `rummyView?.publicState.roundOver` lost TypeScript's
+  narrowing after a `rummyView.kind !== 'game'` guard; fixed by
+  depending on the whole `rummyView` object instead of a property
+  chain), `npm test` (958/958, unchanged — screens/wiring changes don't
+  get dedicated test files in this codebase's established practice),
+  `npm run build` (clean). Read the actual `RummyTable.tsx` layoff-
+  generalization code directly myself (not just the implementer's
+  report) — confirmed `crossLayoffGroups`/`crossLayoffCaption` are used
+  symmetrically for both opponent tiles and the local player's own
+  melds section, and traced the caption/render-location logic against
+  the spec's design by hand.
+- **Review**: ran Oscar focused specifically on the piece I hadn't yet
+  personally verified — the App.tsx wiring (private-hand delivery over
+  PeerJS is a real risk area). Read `rummyBroadcast`/`startRummyHost`/
+  `addRummyHouseBot`/`rummyStart`/the bot loop/`rummyRematch` directly,
+  traced the private-hand `sendTo` path to confirm no cross-seat
+  leakage is structurally possible, confirmed lobby gating order and
+  bot-seat-count genericity, confirmed no cross-contamination into any
+  other game's wiring. Verdict: approve, no blockers.
+- **Mandatory visual check**: live 4-player match — N-seat lobby fill/
+  cap enforcement, deal intro scaled to 4 players, the 3-tile opponent
+  grid rendering real melds with content-driven tile height (visually
+  confirmed one tile growing taller than its siblings as that seat laid
+  down cards), the layoff-eligible gold-ring highlighting appearing
+  correctly on an opponent's meld, and the host-side validator
+  correctly rejecting my own illegal lay-off attempt (no meld of my own
+  down yet) — confirming client and host rules agree. Zero console
+  errors throughout.
+- **Continue?** Yes — Rummy's full milestone sequence (engine, screens+
+  wiring) is done. Moving directly to Phase 10's equivalent sequence
+  (engine 2-6 seats, then its own screens+wiring spec, likely also
+  combined for the same tsc-must-stay-green reason) without pausing,
+  per the charter's unattended-operation instruction.
