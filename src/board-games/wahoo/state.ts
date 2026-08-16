@@ -4,7 +4,6 @@ import { createRng } from '../../engine/rng.ts'
 import { createTurnState, type TurnState } from '../../engine/turn-engine.ts'
 import {
   LANE_END,
-  LANE_START,
   OWNER_TRACK_LEN,
   SHORTCUT_ENTRIES,
   SHORTCUT_EXITS,
@@ -39,7 +38,7 @@ export type WahooEvent =
   | { kind: 'out'; by: string; bumpedId: string | null } // brought a marble out of base
   | { kind: 'shortcut'; by: string; bumpedId: string | null } // entered center
   | { kind: 'exit'; by: string; bumpedId: string | null } // left center
-  | { kind: 'bust'; by: string } // triple six
+  | { kind: 'bust'; by: string; die: 6 } // triple six
   | { kind: 'pass'; by: string; die: number } // no legal move; die so clients can show the roll
   | { kind: 'win'; by: string }
 
@@ -128,17 +127,15 @@ export function createWahooGame(playerIds: string[], seed: number): WahooSession
   return { session: createHostSession(publicState, privateStates), rng }
 }
 
-// Whether an own marble sits on the given absolute track hole (any player's
-// relative coordinates converted to absolute, so cross-seat collisions count).
-function ownAt(positions: MarblePos[], arm: number, rel: number): boolean {
-  const abs = trackIndexFor(arm, rel)
-  return positions.some((q) => q >= 0 && q <= OWNER_TRACK_LEN - 1 && trackIndexFor(arm, q) === abs)
-}
-
-// Whether an own marble sits in any lane slot between `from` and `to`
-// inclusive — the no-pass/no-jump rule for the home lane.
-function laneOccupied(positions: MarblePos[], from: number, to: number): boolean {
-  return positions.some((q) => q >= from && q <= to)
+// Whether the given absolute track hole is occupied by SOME player's marble
+// sitting at THAT player's own come-out hole (relative 0) — i.e. a marble on
+// its own start space. Distinct per-player entry holes mean at most one
+// player's rel-0 can ever map to a given abs hole.
+function startProtected(publicState: WahooPublicState, abs: number): boolean {
+  return Object.keys(publicState.positions).some(
+    (pid) =>
+      publicState.positions[pid].includes(0) && trackIndexFor(publicState.seatArms[pid], 0) === abs,
+  )
 }
 
 // The complete move generator for one player with a shown die. The validator
@@ -184,26 +181,19 @@ export function legalMoves(publicState: WahooPublicState, playerId: string, die:
     }
   }
 
-  // advance: exact count everywhere. On the track only the landing hole matters
-  // (own marbles block, opponents get bumped); the lane has a no-pass rule.
+  // advance: exact count everywhere. No jumping or landing on an own marble
+  // anywhere in the path (track, lane, or across the track→lane boundary);
+  // opponents only matter at the landing hole (they get bumped there, and
+  // only there — passing over them is fine), except landing on an opponent's
+  // own start space, which is never allowed (see startProtected).
   for (let i = 0; i < 4; i++) {
     const p = positions[i]
     if (p < 0) continue
     const to = p + die
     if (to > LANE_END) continue // overshoot past the deepest lane slot is illegal
-    if (p >= LANE_START) {
-      // lane-internal advance: no own marble in the path slots p+1..to
-      if (!laneOccupied(positions, p + 1, to)) moves.push({ marbleIdx: i, kind: 'advance' })
-    } else if (to <= OWNER_TRACK_LEN - 1) {
-      // track landing: must be free of own marbles in absolute terms
-      if (!ownAt(positions, arm, to)) moves.push({ marbleIdx: i, kind: 'advance' })
-    } else {
-      // entering the lane from the track: no own marble in lane slots
-      // LANE_START..to (the lane entry consumes the count exactly at the
-      // 0..62 → 63..66 boundary; a marble never lands on its own rel 63..66
-      // track holes)
-      if (!laneOccupied(positions, LANE_START, to)) moves.push({ marbleIdx: i, kind: 'advance' })
-    }
+    if (positions.some((q) => q > p && q <= to)) continue // own marble jumped or landed on
+    if (to <= OWNER_TRACK_LEN - 1 && startProtected(publicState, trackIndexFor(arm, to))) continue
+    moves.push({ marbleIdx: i, kind: 'advance' })
   }
 
   return moves

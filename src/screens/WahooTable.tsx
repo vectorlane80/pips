@@ -208,7 +208,11 @@ export function WahooTable({
   // ---- Local state ----
   const { play, enabled, setEnabled, turnSoundEnabled, setTurnSoundEnabled, playTurnStart } = useSound()
   const humanCount = publicState.turn.playerOrder.filter((id) => !id.startsWith('bot')).length
-  useTurnStartSound(myTurn, humanCount, playTurnStart)
+  // While the die is still flickering (roll/pass/bust), hold off the "your
+  // turn" chime — otherwise it can fire mid-animation when a pass/bust flips
+  // turn ownership in the same state update as the flicker starts.
+  const [rollAnimating, setRollAnimating] = useState(false)
+  useTurnStartSound(myTurn && !rollAnimating, humanCount, playTurnStart)
   const [rulesOpen, setRulesOpen] = useState(false)
   const [paneW, setPaneW] = useState(0)
   // The most recent roll, kept so the die still shows a (muted) value between
@@ -253,15 +257,17 @@ export function WahooTable({
     const ev = publicState.lastEvent
     if (ev !== lastEventRef.current) {
       if (ev !== null) {
-        // A pass is a roll with no legal move: the die still got rolled, so it
-        // plays the roll sound, sticks to lastRoll, and flickers like any roll.
-        if (ev.kind === 'roll' || ev.kind === 'pass') {
-          play('dice-roll')
+        // A pass is a roll with no legal move, and a bust is the 3rd-six
+        // resolution: all three still show the die that was rolled, so they
+        // play a sound, stick to lastRoll, and flicker like any roll.
+        if (ev.kind === 'roll' || ev.kind === 'pass' || ev.kind === 'bust') {
+          play(ev.kind === 'bust' ? 'farkle-bust' : 'dice-roll')
           setLastRoll({ die: ev.die, by: ev.by })
           // Replicate useDiceAnimation's flicker (7 frames × 60ms of random
           // faces, then the real value) keyed to this roll event, so equal
           // consecutive rolls re-animate. A newer roll bumps the run id, which
           // strands any in-flight tick from an earlier run.
+          setRollAnimating(true)
           const id = ++flickerRun.current
           let frame = 0
           const tick = () => {
@@ -273,11 +279,11 @@ export function WahooTable({
             } else {
               setDieFlicker(null)
               setDieRotation(Math.random() * 10 - 5)
+              setRollAnimating(false)
             }
           }
           tick()
         }
-        else if (ev.kind === 'bust') play('farkle-bust')
         else if (ev.kind === 'move' || ev.kind === 'out' || ev.kind === 'shortcut' || ev.kind === 'exit') {
           if (ev.bumpedId !== null) play('farkle-bust')
           else play('piece-drop')

@@ -84,22 +84,63 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
     if (action.type === 'ROLL') {
       if (publicState.turn.phase !== 'roll') return { ok: false, reason: 'die already rolled' }
       const die = 1 + Math.floor(rng() * 6)
+      const streak = die === 6 ? publicState.sixStreak + 1 : 0
+
+      // Third consecutive 6: bust immediately, no move required. Sends home
+      // whichever marble was actually moved most recently in this chain
+      // (lastMoved) — if nothing has been moved yet this chain (e.g. the first
+      // two sixes both had no legal move), there is nothing to send home and
+      // the turn simply ends.
+      if (streak >= 3) {
+        const busted =
+          publicState.lastMoved && publicState.lastMoved.playerId === playerId
+            ? (() => {
+                const arr = [...publicState.positions[playerId]]
+                arr[publicState.lastMoved!.marbleIdx] = -1
+                return arr
+              })()
+            : publicState.positions[playerId]
+        const centerBy =
+          publicState.centerBy &&
+          publicState.centerBy.playerId === playerId &&
+          publicState.lastMoved &&
+          publicState.lastMoved.playerId === playerId &&
+          publicState.centerBy.marbleIdx === publicState.lastMoved.marbleIdx
+            ? null
+            : publicState.centerBy
+        return {
+          ok: true,
+          publicState: {
+            ...publicState,
+            positions: { ...publicState.positions, [playerId]: busted },
+            centerBy,
+            turn: advanceTurn(publicState.turn, 'roll'),
+            die: null,
+            sixStreak: 0,
+            lastMoved: null,
+            lastEvent: { kind: 'bust', by: playerId, die: 6 },
+          },
+          privateStates,
+        }
+      }
+
       const rolled: WahooPublicState = {
         ...publicState,
         turn: setPhase(publicState.turn, 'move'),
         die,
+        sixStreak: streak,
         lastEvent: { kind: 'roll', by: playerId, die },
       }
-      // No legal move: resolve the turn immediately. A 6 with no legal move
-      // does NOT grant another roll — the chain needs a move.
+      // No legal move: resolve the turn immediately. A non-six ends the turn; a
+      // six (even moveless) still grants another roll — the streak already
+      // accounts for it above.
       if (legalMoves(rolled, playerId, die).length === 0) {
         return {
           ok: true,
           publicState: {
             ...rolled,
-            turn: advanceTurn(rolled.turn, 'roll'),
+            turn: die === 6 ? extraTurn(publicState.turn, 'roll') : advanceTurn(publicState.turn, 'roll'),
             die: null,
-            sixStreak: 0,
             lastEvent: { kind: 'pass', by: playerId, die },
           },
           privateStates,
@@ -144,46 +185,12 @@ function makeValidator(rng: () => number): ActionValidator<WahooPublicState, Wah
         }
       }
 
-      // Six chain: a 6 grants an extra roll (streak 1–2) or busts the marble
-      // that just moved back to base on the third consecutive 6.
-      if (die === 6) {
-        const streak = publicState.sixStreak + 1
-        if (streak >= 3) {
-          const busted = [...positions[playerId]]
-          busted[move.marbleIdx] = -1
-          return {
-            ok: true,
-            publicState: {
-              ...movedState,
-              positions: { ...positions, [playerId]: busted },
-              centerBy: move.kind === 'shortcut' ? null : centerBy,
-              sixStreak: 0,
-              die: null,
-              turn: advanceTurn(publicState.turn, 'roll'),
-              lastEvent: { kind: 'bust', by: playerId },
-            },
-            privateStates,
-          }
-        }
-        return {
-          ok: true,
-          publicState: {
-            ...movedState,
-            sixStreak: streak,
-            die: null,
-            turn: extraTurn(publicState.turn, 'roll'),
-          },
-          privateStates,
-        }
-      }
-
       return {
         ok: true,
         publicState: {
           ...movedState,
-          sixStreak: 0,
           die: null,
-          turn: advanceTurn(publicState.turn, 'roll'),
+          turn: die === 6 ? extraTurn(publicState.turn, 'roll') : advanceTurn(publicState.turn, 'roll'),
         },
         privateStates,
       }

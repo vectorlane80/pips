@@ -14,7 +14,7 @@ import {
 } from './state.ts'
 import { applyWahooAction, runWahooBotTurn } from './rules.ts'
 import { wahooBotStrategy } from './bot.ts'
-import { HOME_ENTRANCE_REL, LANE_END, LANE_START, SHORTCUT_ENTRIES, SHORTCUT_EXITS } from './board.ts'
+import { HOME_ENTRANCE_REL, LANE_END, LANE_START, SHORTCUT_ENTRIES, SHORTCUT_EXITS, trackIndexFor } from './board.ts'
 
 function buildWahoo(config: {
   playerIds?: string[]
@@ -239,6 +239,51 @@ describe('advance', () => {
   })
 })
 
+describe('start-space protection and own-marble jumping', () => {
+  it('never allows an advance to land on an opponent sitting at ITS OWN come-out hole (rel 0)', () => {
+    // p2 (arm 2) sits at its own come-out (rel 0) = absolute trackIndexFor(2,0) = 41.
+    // p1 (arm 0) at rel 30 with die 2 would land on absolute 32+9=41 too.
+    expect(trackIndexFor(2, 0)).toBe(41)
+    expect(trackIndexFor(0, 32)).toBe(41)
+    const wh = buildWahoo({
+      phase: 'move',
+      die: 2,
+      positions: { p1: [30, -1, -1, -1], p2: [0, -1, -1, -1] },
+    })
+    expect(legalMoves(wh.session.publicState, 'p1', 2)).toEqual([])
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(r.outcome.ok).toBe(false)
+    // The same absolute hole remains bumpable when the opponent is merely
+    // passing through at a NON-zero relative position -- already covered by
+    // 'detects cross-seat collisions in absolute terms and bumps the
+    // opponent' above; not duplicated here.
+  })
+
+  it('an own marble 3 relative spaces ahead blocks a 5-roll advance of the marble behind it', () => {
+    const wh = buildWahoo({
+      phase: 'move',
+      die: 5,
+      positions: { p1: [5, 8, -1, -1], p2: [-1, -1, -1, -1] },
+    })
+    expect(legalMoves(wh.session.publicState, 'p1', 5).some((m) => m.marbleIdx === 0)).toBe(false)
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(r.outcome.ok).toBe(false)
+  })
+
+  it('an own marble just past LANE_START blocks an advance crossing the track/lane boundary', () => {
+    // marble 0 at rel 60, marble 1 (own) at rel 64 (just past LANE_START=63).
+    // die 5 would move marble 0 to rel 65, jumping over marble 1 mid-lane.
+    const wh = buildWahoo({
+      phase: 'move',
+      die: 5,
+      positions: { p1: [60, LANE_START + 1, -1, -1], p2: [-1, -1, -1, -1] },
+    })
+    expect(legalMoves(wh.session.publicState, 'p1', 5).some((m) => m.marbleIdx === 0)).toBe(false)
+    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(r.outcome.ok).toBe(false)
+  })
+})
+
 describe('home lane', () => {
   it('enters the lane with an exact count', () => {
     let wh = buildWahoo({ phase: 'move', die: 1, positions: { p1: [HOME_ENTRANCE_REL, -1, -1, -1], p2: [-1, -1, -1, -1] } })
@@ -423,10 +468,10 @@ describe('exit', () => {
 })
 
 describe('six chain', () => {
-  it('roll 6 + move grants an extra roll; the third consecutive 6 busts the moved marble', () => {
+  it('roll 6 + move grants an extra roll; the third consecutive 6 busts on ROLL, no MOVE needed', () => {
     // seed 749: the first three host rolls are all 6
     let wh = buildWahoo({ phase: 'roll', rngSeed: 749, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } })
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= 2; i++) {
       let r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
       expect(r.outcome.ok).toBe(true)
       wh = r.wh
@@ -440,33 +485,58 @@ describe('six chain', () => {
       wh = r.wh
       pub = wh.session.publicState
       expect(pub.lastMoved).toEqual({ playerId: 'p1', marbleIdx: 0 })
-      if (i < 3) {
-        expect(pub.sixStreak).toBe(i)
-        expect(pub.die).toBeNull()
-        expect(pub.turn.phase).toBe('roll')
-        expect(currentPlayer(pub.turn)).toBe('p1') // extra roll for the same player
-        expect(pub.turn.turnNumber).toBe(i + 1)
-        expect(pub.positions['p1'][0]).toBe(5 + 6 * i)
-      } else {
-        expect(pub.sixStreak).toBe(0)
-        expect(pub.die).toBeNull()
-        expect(pub.positions['p1'][0]).toBe(-1) // busted back to base
-        expect(pub.turn.phase).toBe('roll')
-        expect(currentPlayer(pub.turn)).toBe('p2') // turn passes
-        expect(pub.turn.turnNumber).toBe(4)
-        expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1' })
-      }
+      expect(pub.sixStreak).toBe(i)
+      expect(pub.die).toBeNull()
+      expect(pub.turn.phase).toBe('roll')
+      expect(currentPlayer(pub.turn)).toBe('p1') // extra roll for the same player
+      expect(pub.turn.turnNumber).toBe(i + 1)
+      expect(pub.positions['p1'][0]).toBe(5 + 6 * i)
     }
+
+    // The 3rd six busts immediately on the ROLL action itself, sending home
+    // the marble from lastMoved (moved on the 2nd six) -- no MOVE submitted.
+    const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.wh.session.publicState
+    expect(pub.sixStreak).toBe(0)
+    expect(pub.die).toBeNull()
+    expect(pub.positions['p1'][0]).toBe(-1) // busted back to base
+    expect(pub.turn.phase).toBe('roll')
+    expect(currentPlayer(pub.turn)).toBe('p2') // turn passes
+    expect(pub.turn.turnNumber).toBe(4)
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
   })
 
-  it('a 6 with no legal move is a pass: streak dies, no extra roll', () => {
+  it('a third six always busts, even with no legal move, and no lastMoved leaves positions unchanged', () => {
     // the marble at the entrance (rel 62) overshoots with a 6 (68 > 66); every
     // lane marble overshoots too, nothing is in base or the center — no legal
-    // moves.
+    // moves. sixStreak is pre-seeded at 2 with no lastMoved, so this third six
+    // busts immediately with nothing to send home.
     const wh = buildWahoo({
       phase: 'roll',
       rngSeed: 4, // first roll is a 6
       sixStreak: 2,
+      positions: { p1: [HOME_ENTRANCE_REL, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
+    })
+    const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.wh.session.publicState
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
+    expect(pub.die).toBeNull()
+    expect(pub.sixStreak).toBe(0)
+    expect(pub.turn.phase).toBe('roll')
+    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(pub.turn.turnNumber).toBe(2)
+    expect(pub.positions['p1']).toEqual([HOME_ENTRANCE_REL, LANE_START, LANE_START + 1, LANE_START + 2])
+  })
+
+  it('a 6 with no legal move still grants an extra roll on the 1st/2nd six of a chain', () => {
+    // p1 has no base marbles and every other marble overshoots on a 6 -- no
+    // legal move at all. This is the 1st six of the chain (sixStreak starts
+    // at 0), so it must grant an extra roll, not end the turn.
+    const wh = buildWahoo({
+      phase: 'roll',
+      rngSeed: 4, // first roll is a 6
       positions: { p1: [HOME_ENTRANCE_REL, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 6)).toEqual([])
@@ -475,10 +545,38 @@ describe('six chain', () => {
     const pub = r.wh.session.publicState
     expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 6 })
     expect(pub.die).toBeNull()
-    expect(pub.sixStreak).toBe(0)
+    expect(pub.sixStreak).toBe(1)
     expect(pub.turn.phase).toBe('roll')
-    expect(currentPlayer(pub.turn)).toBe('p2')
+    expect(currentPlayer(pub.turn)).toBe('p1') // same player, extra roll
     expect(pub.turn.turnNumber).toBe(2)
+  })
+
+  it('three consecutive moveless sixes still bust on the third, leaving positions unchanged', () => {
+    // All marbles parked deep in the lane so nothing can ever move; three
+    // consecutive ROLL calls each land a 6 (contrived by hand-seeding
+    // sixStreak between rolls is not needed here -- we drive it via real
+    // consecutive ROLLs against a seed whose first three rolls are all 6).
+    let wh = buildWahoo({
+      phase: 'roll',
+      rngSeed: 749, // first three host rolls are all 6
+      positions: { p1: [LANE_START, LANE_START + 1, LANE_START + 2, LANE_END], p2: [-1, -1, -1, -1] },
+    })
+    for (let i = 1; i <= 2; i++) {
+      const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+      expect(r.outcome.ok).toBe(true)
+      wh = r.wh
+      const pub = wh.session.publicState
+      expect(pub.lastEvent).toEqual({ kind: 'pass', by: 'p1', die: 6 })
+      expect(pub.sixStreak).toBe(i)
+      expect(currentPlayer(pub.turn)).toBe('p1')
+    }
+    const r = applyWahooAction(wh, 'p1', { type: 'ROLL' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.wh.session.publicState
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
+    expect(pub.sixStreak).toBe(0)
+    expect(pub.positions['p1']).toEqual([LANE_START, LANE_START + 1, LANE_START + 2, LANE_END])
+    expect(currentPlayer(pub.turn)).toBe('p2')
   })
 })
 

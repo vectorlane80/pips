@@ -209,10 +209,11 @@ describe('attack: lane privacy', () => {
 })
 
 describe('attack: six-chain integrity', () => {
-  it('extraTurn does not leak sixStreak into the next players turn', () => {
-    // p1 rolls a 6, moves (streak -> 1, extra turn). Then rolls again and gets a
-    // NO-LEGAL-MOVE roll (pass): streak must reset to 0 and turn must pass to p2
-    // with a clean slate, not carry streak=1 forward.
+  it('a triple-six bust does not leak sixStreak into the next players turn', () => {
+    // p1 rolls a 6, moves (streak -> 1, extra turn). Then, with the chain
+    // already at sixStreak 2 and no legal move available for a third six,
+    // the ROLL itself busts immediately (no move needed) and hands the turn
+    // to p2 with a clean slate, not carrying the chain forward.
     let wh = buildWahoo({
       phase: 'roll',
       rngSeed: 749, // first roll is 6 (see wahoo.test.ts)
@@ -228,19 +229,21 @@ describe('attack: six-chain integrity', () => {
     expect(wh.session.publicState.sixStreak).toBe(1)
     expect(currentPlayer(wh.session.publicState.turn)).toBe('p1')
 
-    // Force a no-legal-move state for p1's extra roll manually (all marbles
-    // parked such that nothing can move), then roll. The marble at 57 wants 63
-    // but the lane slot is occupied; every lane marble overshoots with a 6.
+    // Force the third-six bust for p1's extra roll manually (sixStreak
+    // already at 2, no legal move for the marble that would be busted since
+    // lastMoved isn't set here -- positions are irrelevant to the bust path,
+    // it fires on the roll itself regardless of legal moves).
     const stuck = buildWahoo({
       playerIds: ['p1', 'p2'],
       phase: 'roll',
       rngSeed: 4, // first roll is 6, see wahoo.test.ts "6 with no legal move"
-      sixStreak: 1,
+      sixStreak: 2,
       positions: { p1: [57, LANE_START, LANE_START + 1, LANE_START + 2], p2: [-1, -1, -1, -1] },
     })
-    const passResult = applyWahooAction(stuck, 'p1', { type: 'ROLL' })
-    expect(passResult.outcome.ok).toBe(true)
-    const pub = passResult.wh.session.publicState
+    const bustResult = applyWahooAction(stuck, 'p1', { type: 'ROLL' })
+    expect(bustResult.outcome.ok).toBe(true)
+    const pub = bustResult.wh.session.publicState
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
     expect(pub.sixStreak).toBe(0)
     expect(currentPlayer(pub.turn)).toBe('p2')
 
@@ -263,18 +266,29 @@ describe('attack: six-chain integrity', () => {
 
   it('bust on the third six clears centerBy when the busted marble just entered center this turn', () => {
     // p1 at rel 17 shortcuts into the center via corner 22 (die = 22-17+1 = 6),
-    // and this is the third consecutive six.
+    // as the 2nd six's move (sixStreak was already set to 2 by the preceding
+    // ROLL; the MOVE handler no longer touches sixStreak, so it grants an
+    // extra roll rather than busting here). Then the 3rd six is rolled and
+    // busts the marble that just entered center, clearing centerBy.
     const wh = buildWahoo({
       phase: 'move',
       die: 6,
       sixStreak: 2,
+      rngSeed: 749, // next rng() call (the following ROLL) yields a 6
       positions: { p1: [17, -1, -1, -1], p2: [-1, -1, -1, -1] },
     })
     expect(legalMoves(wh.session.publicState, 'p1', 6)).toContainEqual({ marbleIdx: 0, kind: 'shortcut' })
-    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
+    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'shortcut' } })
+    expect(moved.outcome.ok).toBe(true)
+    const movedPub = moved.wh.session.publicState
+    expect(movedPub.sixStreak).toBe(2)
+    expect(movedPub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 0, entryCornerRel: SHORTCUT_ENTRIES[1] })
+    expect(currentPlayer(movedPub.turn)).toBe('p1') // extra roll
+
+    const r = applyWahooAction(moved.wh, 'p1', { type: 'ROLL' })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1' })
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
     expect(pub.positions['p1']).toEqual([-1, -1, -1, -1]) // busted back to base
     expect(pub.centerBy).toBeNull() // must not be left dangling on the marble that no longer exists there
     expect(pub.sixStreak).toBe(0)
@@ -282,19 +296,27 @@ describe('attack: six-chain integrity', () => {
 
   it('bust on the third six leaves an UNRELATED, pre-existing centerBy alone', () => {
     // p1 already has marble 1 sitting in the center from an earlier turn. The
-    // third six this turn moves marble 0 (a plain advance) and busts it — the
-    // center marble must be untouched.
+    // 2nd six's move advances marble 0. Then the 3rd six busts marble 0 --
+    // the unrelated center marble must be untouched.
     const wh = buildWahoo({
       phase: 'move',
       die: 6,
       sixStreak: 2,
+      rngSeed: 749, // next rng() call (the following ROLL) yields a 6
       positions: { p1: [5, -2, -1, -1], p2: [-1, -1, -1, -1] },
       centerBy: { playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] },
     })
-    const r = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    const moved = applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } })
+    expect(moved.outcome.ok).toBe(true)
+    const movedPub = moved.wh.session.publicState
+    expect(movedPub.sixStreak).toBe(2)
+    expect(movedPub.lastMoved).toEqual({ playerId: 'p1', marbleIdx: 0 })
+    expect(currentPlayer(movedPub.turn)).toBe('p1') // extra roll
+
+    const r = applyWahooAction(moved.wh, 'p1', { type: 'ROLL' })
     expect(r.outcome.ok).toBe(true)
     const pub = r.wh.session.publicState
-    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1' })
+    expect(pub.lastEvent).toEqual({ kind: 'bust', by: 'p1', die: 6 })
     expect(pub.positions['p1']).toEqual([-1, -2, -1, -1]) // marble 0 busted, marble 1 still centered
     expect(pub.centerBy).toEqual({ playerId: 'p1', marbleIdx: 1, entryCornerRel: SHORTCUT_ENTRIES[0] })
   })
@@ -366,8 +388,14 @@ describe('attack: serialization across every event kind', () => {
     {
       name: 'bust',
       build: () =>
-        buildWahoo({ phase: 'move', die: 6, sixStreak: 2, positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] } }),
-      act: (wh) => applyWahooAction(wh, 'p1', { type: 'MOVE', move: { marbleIdx: 0, kind: 'advance' } }).wh,
+        buildWahoo({
+          phase: 'roll',
+          rngSeed: 4, // next roll is a 6, see wahoo.test.ts
+          sixStreak: 2,
+          lastMoved: { playerId: 'p1', marbleIdx: 0 },
+          positions: { p1: [5, -1, -1, -1], p2: [-1, -1, -1, -1] },
+        }),
+      act: (wh) => applyWahooAction(wh, 'p1', { type: 'ROLL' }).wh,
     },
     {
       name: 'pass',
