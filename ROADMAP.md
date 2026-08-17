@@ -2,7 +2,7 @@
 
 Charter: Skip-Bo — see `CHARTER.md`.
 
-## Charter: Skip-Bo (2026-08-17) — in progress
+## Charter: Skip-Bo (2026-08-17) — done
 - [x] Card-engine module (spec 40): deck.ts (162-card deck), state.ts,
       rules.ts, bot.ts + tests. 2-4 seats, no scores/match layer —
       single-round instant win when a stockpile empties. Mirrors
@@ -39,7 +39,28 @@ Charter: Skip-Bo — see `CHARTER.md`.
       Every item fixed per the new "nothing gets left behind" rule
       (see DEVLOG Cycle 18 for the full 9-item disposition list) before
       landing — nothing deferred, nothing silently dropped.
-- [ ] Wiring (spec 42): App.tsx, Landing.tsx, README.md.
+- [x] Wiring (spec 42): App.tsx, Landing.tsx, README.md, plus route.ts
+      (a new routed-game segment, a necessary addition beyond the
+      spec's literal file list). Mirrors Rummy's lobby/broadcast/
+      `sendTo`/bot-per-seat wiring shape exactly, with two deliberate
+      deviations: a fresh-game rematch (no score carryover, matching
+      Battleship/Dominoes/Checkers/Chess's precedent, not Rummy's
+      next-round model) and — the spec's own flagged hardest problem —
+      per-ACTION bot pacing rather than per-turn, since Skip-Bo is the
+      first game where one turn can chain many consecutive plays.
+      1017 tests (unchanged) / tsc / build green. Oscar review (lead,
+      personally — highest risk tier of the charter, host-authoritative
+      state + private-hand delivery): approve, two nits, both accepted
+      with no fix needed (an inherited, already-precedented lobby-view
+      guard omission; a cosmetic bot-id counter gap with zero
+      correctness impact) — recorded per the "nothing gets left behind"
+      rule even though neither warranted a code change.
+
+**Charter complete.** Skip-Bo is a real, playable 2-4 player game end
+to end — engine, screens, and wiring all landed, following this
+codebase's established card-game conventions throughout rather than
+the design handoff's rejected three-panel layout and borrowed
+Dominoes/Mexican-Train shuffle animation.
 
 Design handoff (`Design Handoff/SKIPBO.md`) is authoritative for rules
 and card art only — its layout and deal/shuffle animation are

@@ -97,6 +97,15 @@ import { UnoTable } from './screens/UnoTable'
 import { UnoResults } from './screens/UnoResults'
 import { UnoRoom } from './screens/UnoRoom'
 
+// ---- Skip-Bo (separate parallel session, per CHARTER.md resolution #7) ----
+import { createSkipBoGame, SKIPBO_MAX_SEATS, SKIPBO_MIN_SEATS, type SkipBoAction, type SkipBoPublicState, type SkipBoSession } from './card-games/skipbo/state'
+import { applySkipBoAction, runSkipBoBotTurn } from './card-games/skipbo/rules'
+import { skipBoBotStrategy } from './card-games/skipbo/bot'
+import { topCard } from './card-engine/zones'
+import { SkipBoTable } from './screens/SkipBoTable'
+import { SkipBoResults } from './screens/SkipBoResults'
+import { SkipBoRoom } from './screens/SkipBoRoom'
+
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
@@ -118,6 +127,9 @@ type ChessView = { revision: number; publicState: ChessPublicState; opponentName
 type UnoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; houseRules: Record<UnoHouseRuleKey, boolean>; difficulty: BotDifficulty }
   | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
+type SkipBoView =
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; stockTop: Card | null; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -138,6 +150,12 @@ const UNO_ACTION_MS = 1600
 // covers the intro itself; this buffer is slack for network latency and
 // per-client render/paint time on top of that estimate.
 const UNO_DEAL_HOLD_BUFFER_MS = 700
+// Skip-Bo: a turn is a chain of individual card plays (stock/hand/discard),
+// each a state-changing animation and sound a human watches land. The bot
+// loop therefore waits BASE_MS before EVERY individual action — not once per
+// turn — so a full 4-bot table never blurs a run of plays together between a
+// human's own turns.
+const SKIPBO_DEAL_HOLD_BUFFER_MS = 700
 const MT_ACTION_MS = 1100
 // train-horn runs 3.6s. Any action that opens a train (pass-open OR a dead
 // draw — both honk, see MexicanTrainTable's `action.opened !== null` sound
@@ -264,6 +282,16 @@ export default function App() {
   const [unoHouseRules, setUnoHouseRules] = useState<Record<UnoHouseRuleKey, boolean>>(() => resolveHouseRules())
   const [unoDifficulty, setUnoDifficulty] = useState<BotDifficulty>('medium')
 
+  // ---- Skip-Bo ----
+  const [skipBoRole, setSkipBoRole] = useState<'host' | 'guest' | null>(null)
+  const [skipBoCode, setSkipBoCode] = useState('')
+  const [skipBoLocalPlayerId, setSkipBoLocalPlayerId] = useState<string | null>(null)
+  const [skipBoView, setSkipBoView] = useState<SkipBoView | null>(null)
+  const [skipBoConnection, setSkipBoConnection] = useState<'connected' | 'disconnected'>('connected')
+  const [skipBoNotice, setSkipBoNotice] = useState<string | null>(null)
+  const [skipBoStarted, setSkipBoStarted] = useState(false)
+  const [skipBoSeats, setSkipBoSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
   const guestRef = useRef<GuestHandle<Action> | null>(null)
@@ -365,6 +393,17 @@ export default function App() {
   // ROUND, from one central place rather than each round-starting call site.
   const unoLastRoundRef = useRef<number | null>(null)
   const unoBotsHeldUntilRef = useRef(0)
+  const skipBoSessionRef = useRef<SkipBoSession | null>(null)
+  const skipBoHostRef = useRef<HostHandle<SkipBoView> | null>(null)
+  const skipBoGuestRef = useRef<GuestHandle<SkipBoAction> | null>(null)
+  const skipBoBotBusyRef = useRef(false)
+  const skipBoLocalPlayerIdRef = useRef<string | null>(null)
+  const skipBoSeatsRef = useRef<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const skipBoStartedRef = useRef(false)
+  const skipBoNamesRef = useRef<Record<string, string>>({})
+  const skipBoBotSeatsRef = useRef<Set<string>>(new Set())
+  const skipBoBotCounterRef = useRef(0)
+  const skipBoBotsHeldUntilRef = useRef(0)
   // Routing: the popstate guard reads the live game from a ref (no stale closures).
   const liveGameRef = useRef<RoutedGame | null>(null)
   const pendingHostBootRef = useRef<RoutedGame | null>(null)
@@ -392,6 +431,8 @@ export default function App() {
     chessGuestRef.current?.destroy()
     unoHostRef.current?.destroy()
     unoGuestRef.current?.destroy()
+    skipBoHostRef.current?.destroy()
+    skipBoGuestRef.current?.destroy()
   }, [])
 
   // ---- Routing ----
@@ -461,13 +502,14 @@ export default function App() {
     if (mtRole && mtStarted && mtView?.kind === 'game' && mtView.publicState.stage !== 'over') return 'mexican-train'
     if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
     if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
+    if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -498,6 +540,7 @@ export default function App() {
       case 'mexican-train': startMTHost(); return
       case 'chess': startChessHost(); return
       case 'uno': startUnoHost(); return
+      case 'skipbo': startSkipBoHost(); return
     }
   }
 
@@ -779,6 +822,28 @@ export default function App() {
     setUnoDifficulty('medium')
     unoWindowKeyRef.current = null
     unoReflexGenRef.current = 0
+    // Skip-Bo
+    skipBoHostRef.current?.destroy()
+    skipBoHostRef.current = null
+    skipBoGuestRef.current?.destroy()
+    skipBoGuestRef.current = null
+    skipBoSessionRef.current = null
+    setSkipBoRole(null)
+    setSkipBoCode('')
+    setSkipBoLocalPlayerId(null)
+    skipBoLocalPlayerIdRef.current = null
+    setSkipBoView(null)
+    setSkipBoConnection('connected')
+    setSkipBoNotice(null)
+    setSkipBoStarted(false)
+    skipBoStartedRef.current = false
+    setSkipBoSeats([])
+    skipBoSeatsRef.current = []
+    skipBoBotBusyRef.current = false
+    skipBoBotSeatsRef.current.clear()
+    skipBoBotCounterRef.current = 0
+    skipBoNamesRef.current = {}
+    skipBoBotsHeldUntilRef.current = 0
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -2950,6 +3015,259 @@ export default function App() {
 
   // ---- End Uno helpers ----
 
+  // ---- Skip-Bo helpers ----
+
+  // Seat inks: same 4-entry palette as Rummy (Skip-Bo also caps at 4 seats).
+  const SKIPBO_SEAT_INKS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308']
+
+  // The actor key must re-key on any field that can change within the SAME
+  // player's turn — Skip-Bo turns are chains of individual plays, so
+  // buildPiles/handCounts/stockCounts (and the draw/used counters) must all
+  // be part of the key. Otherwise the loop would treat two successive plays
+  // as the same actor state and never re-evaluate between them.
+  function skipBoActorKey(session: SkipBoSession): string {
+    const ps = session.session.publicState
+    const piles = ps.buildPiles.map((p) => `${p.cards.length}:${p.nextNeeded}`).join(',')
+    return `${ps.turn.turnNumber}:${ps.roundOver}:${ps.winnerId ?? ''}:${piles}:${ps.drawCount}:${ps.usedCount}:${Object.values(ps.handCounts).join(',')}:${Object.values(ps.stockCounts).join(',')}`
+  }
+
+  function skipBoStale(key: string) {
+    return !skipBoSessionRef.current || skipBoActorKey(skipBoSessionRef.current) !== key
+  }
+
+  // Hands AND stockpiles are PRIVATE, and up to 3 guests can be seated, so a
+  // single broadcast cannot carry every hand/stock (any guest would see the
+  // others'). Lobby phase → broadcast the roster view; game phase → per-guest
+  // sendTo with only that guest's own hand and stock top. The host's own view
+  // comes from its local snapshot.
+  function skipBoBroadcast() {
+    if (!skipBoStartedRef.current) {
+      const view: SkipBoView = {
+        kind: 'lobby',
+        roster: skipBoSeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === skipBoLocalPlayerIdRef.current })),
+      }
+      setSkipBoView(view)
+      skipBoHostRef.current?.broadcast(view)
+      return
+    }
+    const session = skipBoSessionRef.current!
+    const hostSnap = deriveSnapshot(session.session, skipBoLocalPlayerIdRef.current!)
+    setSkipBoView({
+      kind: 'game',
+      revision: hostSnap.revision,
+      publicState: hostSnap.publicState,
+      hand: hostSnap.privateState!.hand.cards,
+      stockTop: topCard(hostSnap.privateState!.stock) ?? null,
+      names: { ...skipBoNamesRef.current },
+    })
+    const names = { ...skipBoNamesRef.current }
+    for (const seat of skipBoSeatsRef.current) {
+      if (seat.playerId === skipBoLocalPlayerIdRef.current) continue
+      if (skipBoBotSeatsRef.current.has(seat.playerId)) continue
+      const guestSnap = deriveSnapshot(session.session, seat.playerId)
+      skipBoHostRef.current?.sendTo(seat.playerId, {
+        kind: 'game',
+        revision: guestSnap.revision,
+        publicState: guestSnap.publicState,
+        hand: guestSnap.privateState!.hand.cards,
+        stockTop: topCard(guestSnap.privateState!.stock) ?? null,
+        names,
+      })
+    }
+  }
+
+  function startSkipBoHost() {
+    const code = `SB-${generateCode()}`
+    const hostId = peerIdForCode(code)
+    setSkipBoRole('host')
+    writeNameCookie(name)
+    pushGameUrl('skipbo')
+    setSkipBoCode(code)
+    setSkipBoLocalPlayerId(hostId)
+    skipBoLocalPlayerIdRef.current = hostId
+    setSkipBoStarted(false)
+    skipBoStartedRef.current = false
+    setSkipBoSeats([{ playerId: hostId, name: name.trim(), isBot: false }])
+    skipBoSeatsRef.current = [{ playerId: hostId, name: name.trim(), isBot: false }]
+    setSkipBoNotice(null)
+    setError(null)
+    skipBoHostRef.current = createHost<SkipBoView, SkipBoAction>(code, {
+      onJoin(guestId, guestName) {
+        if (skipBoStartedRef.current) {
+          skipBoHostRef.current?.reject(guestId, 'Game in progress — spectating comes later.')
+          return
+        }
+        if (skipBoSeatsRef.current.length >= SKIPBO_MAX_SEATS) {
+          skipBoHostRef.current?.reject(guestId, 'Table is full.')
+          return
+        }
+        skipBoSeatsRef.current = [...skipBoSeatsRef.current, { playerId: guestId, name: guestName, isBot: false }]
+        setSkipBoSeats(skipBoSeatsRef.current)
+        skipBoBroadcast()
+      },
+      onAction(guestId, action) {
+        if (!skipBoStartedRef.current) return
+        const session = skipBoSessionRef.current
+        if (!session) return
+        if (!skipBoSeatsRef.current.some((s) => s.playerId === guestId)) return
+        const result = applySkipBoAction(session, guestId, action)
+        if (!result.outcome.ok) return
+        skipBoSessionRef.current = result.game
+        skipBoBroadcast()
+      },
+      onLeave(guestId) {
+        if (!skipBoStartedRef.current) {
+          skipBoSeatsRef.current = skipBoSeatsRef.current.filter((s) => s.playerId !== guestId)
+          setSkipBoSeats(skipBoSeatsRef.current)
+          skipBoBroadcast()
+          return
+        }
+        const seat = skipBoSeatsRef.current.find((s) => s.playerId === guestId)
+        if (!seat) return
+        setSkipBoNotice(`${seat.name} disconnected.`)
+      },
+      onError(message) {
+        setError(message)
+      },
+    })
+    skipBoBroadcast()
+  }
+
+  function addSkipBoHouseBot() {
+    if (skipBoRole !== 'host' || skipBoStartedRef.current) return
+    if (skipBoSeatsRef.current.length >= SKIPBO_MAX_SEATS) return
+    skipBoBotCounterRef.current += 1
+    const botId = `bot-${skipBoBotCounterRef.current}`
+    const botName = randomBotName(skipBoSeatsRef.current.map((s) => s.name))
+    skipBoSeatsRef.current = [...skipBoSeatsRef.current, { playerId: botId, name: botName, isBot: true }]
+    setSkipBoSeats(skipBoSeatsRef.current)
+    skipBoBotSeatsRef.current.add(botId)
+    skipBoBroadcast()
+  }
+
+  function skipBoStart() {
+    if (skipBoRole !== 'host' || skipBoStartedRef.current) return
+    const seats = skipBoSeatsRef.current
+    if (seats.length < SKIPBO_MIN_SEATS || seats.length > SKIPBO_MAX_SEATS) return
+    const playerIds = seats.map((s) => s.playerId)
+    const seed = Math.floor(Math.random() * 2147483647)
+    skipBoSessionRef.current = createSkipBoGame(playerIds, seed)
+    skipBoNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
+    // Hold bots until every client's DealIntro (5 starting-hand cards per seat,
+    // stockpiles are not animated) has played out, plus latency slack.
+    skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    skipBoStartedRef.current = true
+    setSkipBoStarted(true)
+    skipBoBroadcast()
+  }
+
+  async function runSkipBoBot(botId: string, key: string) {
+    while (!skipBoStale(key)) {
+      const holdRemaining = skipBoBotsHeldUntilRef.current - Date.now()
+      await wait(holdRemaining > 0 ? holdRemaining : BASE_MS)
+      if (skipBoStale(key)) return
+      if (Date.now() < skipBoBotsHeldUntilRef.current) continue
+      const session = skipBoSessionRef.current!
+      const ps = session.session.publicState
+      if (ps.roundOver || ps.winnerId) return
+      if (currentPlayer(ps.turn) !== botId) return
+      if (!skipBoBotSeatsRef.current.has(botId)) return
+      const result = runSkipBoBotTurn(session, botId, skipBoBotStrategy)
+      if (!result.outcome.ok) return
+      skipBoSessionRef.current = result.game
+      skipBoBroadcast()
+    }
+  }
+
+  async function runSkipBoBotsIfNeeded() {
+    if (skipBoBotBusyRef.current) return
+    const session = skipBoSessionRef.current
+    if (!session) return
+    const ps = session.session.publicState
+    if (ps.roundOver || ps.winnerId) return
+    const currentId = currentPlayer(ps.turn)
+    if (!skipBoBotSeatsRef.current.has(currentId)) return
+    skipBoBotBusyRef.current = true
+    const key = skipBoActorKey(session)
+    try {
+      await runSkipBoBot(currentId, key)
+    } finally {
+      skipBoBotBusyRef.current = false
+      setTimeout(() => runSkipBoBotsIfNeeded(), 50)
+    }
+  }
+
+  function startSkipBoGuest(code: string) {
+    if (!code) return
+    setError(null)
+    let localRevision = -1
+    const handle = joinHost<SkipBoView, SkipBoAction>(code, name.trim(), {
+      onState(view) {
+        if (view.kind === 'lobby') {
+          setSkipBoView(view)
+          setSkipBoStarted(false)
+          return
+        }
+        if (!shouldAcceptUpdate(localRevision, view.revision)) return
+        localRevision = view.revision
+        setSkipBoView(view)
+        setSkipBoStarted(true)
+      },
+      onError() {
+        resetToEntry()
+        setError('Could not reach that room. Check the code and try again.')
+      },
+      onRejected(reason) {
+        resetToEntry()
+        setError(reason)
+      },
+      onConnected() {
+        setSkipBoConnection('connected')
+      },
+      onDisconnected() {
+        setSkipBoConnection('disconnected')
+      },
+    })
+    skipBoGuestRef.current = handle
+    setSkipBoRole('guest')
+    writeNameCookie(name)
+    pushGameUrl('skipbo')
+    setSkipBoCode(code)
+    handle.peerId.then((id) => { setSkipBoLocalPlayerId(id); skipBoLocalPlayerIdRef.current = id }).catch(() => {})
+  }
+
+  function skipBoDispatch(action: SkipBoAction) {
+    if (skipBoRole === 'host' && skipBoLocalPlayerId) {
+      const session = skipBoSessionRef.current
+      if (!session) return
+      const result = applySkipBoAction(session, skipBoLocalPlayerId, action)
+      if (!result.outcome.ok) return
+      skipBoSessionRef.current = result.game
+      skipBoBroadcast()
+    } else if (skipBoRole === 'guest') {
+      skipBoGuestRef.current?.sendAction(action)
+    }
+  }
+
+  // Skip-Bo is a single-round game: a rematch is a completely fresh deal with
+  // the same seat order (mirroring Dominoes/Battleship/Checkers/Chess — not
+  // Rummy/Uno's score-carrying match layer).
+  function skipBoRematch() {
+    if (skipBoRole !== 'host' || !skipBoSessionRef.current) return
+    const ps = skipBoSessionRef.current.session.publicState
+    if (ps.winnerId === null) return
+    const prevRevision = skipBoSessionRef.current.session.revision
+    const playerIds = [...ps.seatOrder]
+    const seed = Math.floor(Math.random() * 2147483647)
+    const next = createSkipBoGame(playerIds, seed)
+    next.session = { ...next.session, revision: prevRevision + 1 }
+    skipBoSessionRef.current = next
+    skipBoBotsHeldUntilRef.current = Date.now() + estimateDealIntroMs(playerIds.length * 5) + SKIPBO_DEAL_HOLD_BUFFER_MS
+    skipBoBroadcast()
+  }
+
+  // ---- End Skip-Bo helpers ----
+
   async function runFarkleBot(seatId: string, key: string) {
     while (!stale(key)) {
       const pace = roomRef.current!.botPace
@@ -3319,11 +3637,23 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unoRole, unoView])
 
+  // ---- Skip-Bo effects (host-only) ----
+
+  // Bot turn trigger. The actor key includes every field that can change
+  // within the SAME player's turn (a Skip-Bo turn is a chain of individual
+  // plays), so the inner loop re-evaluates after each play rather than
+  // running a whole turn at once.
+  useEffect(() => {
+    if (skipBoRole !== 'host' || !skipBoView) return
+    runSkipBoBotsIfNeeded()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipBoRole, skipBoView])
+
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, Chess, and Uno are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole) {
+  // Checkers, Mexican Train, Chess, Uno, and Skip-Bo are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole) {
     return (
       <Landing
         name={name}
@@ -3341,6 +3671,7 @@ export default function App() {
           else if (code.startsWith('MT-')) startMTGuest(code)
           else if (code.startsWith('CH-')) startChessGuest(code)
           else if (code.startsWith('UN-')) startUnoGuest(code)
+          else if (code.startsWith('SB-')) startSkipBoGuest(code)
           else startGuest(code)
         }}
         onPickGame={(g) => startHost(g)}
@@ -3353,6 +3684,7 @@ export default function App() {
         onPickMexicanTrain={startMTHost}
         onPickChess={startChessHost}
         onPickUno={startUnoHost}
+        onPickSkipBo={startSkipBoHost}
         error={error}
       />
     )
@@ -4098,6 +4430,71 @@ export default function App() {
           onLeave={resetToEntry}
         />
       </>
+    )
+  }
+
+  // ---- Skip-Bo session active ----
+  // Skip-Bo lobby — 2 to 4 seats. Host sees seats from state; guests see the
+  // lobby view the host broadcasts (buttons hidden either way).
+  if (skipBoRole && !skipBoStarted) {
+    const roster = skipBoRole === 'host'
+      ? skipBoSeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === skipBoLocalPlayerId }))
+      : (skipBoView?.kind === 'lobby' ? skipBoView.roster : [])
+    return (
+      <SkipBoRoom
+        code={skipBoCode}
+        localName={name}
+        isHost={skipBoRole === 'host'}
+        seats={roster}
+        notice={skipBoNotice ?? error}
+        onAddHouseBot={addSkipBoHouseBot}
+        onStartGame={skipBoStart}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // Skip-Bo results — single round; a stockpile hitting 0 wins immediately
+  // (possibly mid-turn), so roundOver + winnerId is the game-over signal.
+  if (skipBoView?.kind === 'game' && skipBoView.publicState.roundOver && skipBoView.publicState.winnerId) {
+    const skipBoColors = Object.fromEntries(skipBoView.publicState.seatOrder.map((id, i) => [id, SKIPBO_SEAT_INKS[i]]))
+    return (
+      <SkipBoResults
+        localPlayerId={skipBoLocalPlayerId ?? ''}
+        localName={name}
+        names={skipBoView.names}
+        colors={skipBoColors}
+        publicState={skipBoView.publicState}
+        isHost={skipBoRole === 'host'}
+        notice={skipBoNotice ?? error}
+        onRematch={skipBoRematch}
+        onBackToShelf={resetToEntry}
+      />
+    )
+  }
+
+  // Skip-Bo table (active game)
+  if (skipBoView?.kind === 'game' && skipBoLocalPlayerId) {
+    const skipBoColors = Object.fromEntries(skipBoView.publicState.seatOrder.map((id, i) => [id, SKIPBO_SEAT_INKS[i]]))
+    return (
+      <SkipBoTable
+        code={skipBoCode}
+        localPlayerId={skipBoLocalPlayerId}
+        localName={name}
+        names={skipBoView.names}
+        colors={skipBoColors}
+        connection={skipBoConnection}
+        notice={skipBoNotice ?? error}
+        publicState={skipBoView.publicState}
+        hand={skipBoView.hand}
+        stockTop={skipBoView.stockTop}
+        onPlayStock={() => skipBoDispatch({ type: 'PLAY_STOCK' })}
+        onPlayHand={(cardId) => skipBoDispatch({ type: 'PLAY_HAND', cardId })}
+        onPlayDiscard={(pileIndex) => skipBoDispatch({ type: 'PLAY_DISCARD', pileIndex })}
+        onDiscard={(cardId) => skipBoDispatch({ type: 'DISCARD', cardId })}
+        onPass={() => skipBoDispatch({ type: 'PASS' })}
+        onLeave={resetToEntry}
+      />
     )
   }
 

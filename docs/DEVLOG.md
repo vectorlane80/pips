@@ -3163,3 +3163,67 @@ shipping each verified charter promptly.
   authoritative PeerJS state, private-hand delivery) — will get a
   personal review, not delegated, matching this session's established
   risk-based routing.
+
+## Cycle 19 — 2026-08-17 — spec 42 (Skip-Bo wiring), charter complete
+- **Shipped**: `App.tsx`'s Skip-Bo wiring section (lobby/broadcast/
+  `sendTo`/bot-per-seat model mirroring Rummy's exact shape), plus
+  `route.ts` (new `'skipbo'` routed-game segment), `Landing.tsx` (shelf
+  tile), and `README.md` (seat range). Implementer needed 4 dispatch
+  rounds to get from spec-read to actual code — the first 3 were
+  almost entirely re-research with very little writing, including one
+  round that re-read files it had already read twice before, only
+  breaking the loop after an explicitly forceful "stop reading, start
+  editing" prompt. Worth watching if this pattern recurs on future
+  large-`App.tsx`-touching specs.
+- **The two properties this spec's own text flagged as hardest, both
+  independently verified by me by reading the actual code rather than
+  trusting the report**:
+  1. **Privacy.** `skipBoBroadcast`'s game-phase branch derives the
+     host's own `hand`/`stockTop` from a `deriveSnapshot` scoped to the
+     host's own id, then loops every other non-bot seat calling
+     `deriveSnapshot` freshly per seat before `sendTo` — no shared
+     broadcast of any private zone once more than one guest is seated.
+  2. **Bot pacing — the genuinely novel risk in this spec.** Skip-Bo is
+     the first game in this app where one turn can be many consecutive
+     actions (stock play, discard-pile play, several hand plays, then
+     a discard) instead of every sibling's 1-2-action turn. A naive
+     port of Rummy's bot-loop structure (wait once, then run the whole
+     turn) would have been invisible in Rummy but produced a visibly
+     bot-speed table here — exactly the kind of mistake CLAUDE.md's
+     "bots play at human speed" section exists to catch. Confirmed the
+     loop instead waits `BASE_MS` before **every individual action**
+     (one `runSkipBoBotTurn` call per iteration, one wait per
+     iteration), and re-checks `roundOver`/`winnerId` fresh at the top
+     of every iteration so a mid-turn win halts the loop instantly.
+- **Review**: personally, as Oscar (highest risk tier of the charter —
+  host-authoritative state, private-hand delivery — not delegated).
+  Independently re-derived every claim in my own verification prompt
+  rather than accepting them, plus checked `onJoin`'s guard ordering,
+  `onAction`'s guest-validation-before-mutation, the bot-id counter's
+  reset pairing, `skipBoActorKey`'s field coverage (traced which
+  action types mutate which fields myself to confirm nothing could
+  slip past the staleness check), and cross-contamination via
+  `git diff`. Verdict: approve, two nits, no blockers.
+- **Nit dispositions** (both real observations, neither silently
+  dropped): (1) lobby-view updates in `startSkipBoGuest`'s `onState`
+  don't run the revision-monotonicity guard the way game-phase updates
+  do — **accepted, no fix**: a lobby view is a stateless roster
+  snapshot with nothing ordering-sensitive to protect, and this is the
+  exact same pattern Rummy's own guest handler already uses, so it's
+  inherited precedent rather than a Skip-Bo-specific gap. (2) a
+  departing lobby guest doesn't free their slot in the bot-id counter,
+  so bot numbering can climb past the current seat count over a
+  lobby's lifetime — **accepted, no fix**: purely cosmetic (display
+  names come from `randomBotName`, not the numeric id), the counter's
+  only job is uniqueness and it still delivers that.
+- **Charter status: complete.** All three Skip-Bo milestones (engine,
+  screens, wiring) are landed. Skip-Bo is a real, playable 2-4 player
+  game end to end, following this codebase's established card-game
+  conventions throughout rather than the design handoff's rejected
+  layout/animation.
+- **Landed**: `specs/42-skipbo-wiring.md` + the wiring diff, committed.
+  User explicitly took over live testing this time ("you can push, I
+  will test") rather than the lead performing the usual mandatory
+  visual check — pushed on that basis.
+- **Continue?** No further work in scope for this charter. Nothing
+  else was requested.
