@@ -3062,3 +3062,104 @@ shipping each verified charter promptly.
 - **Continue?** Yes — moving directly to spec 41 (Skip-Bo screens:
   `SkipBoCard.tsx`/`.css`, `SkipBoRoom.tsx`, `SkipBoTable.tsx`/`.css`,
   `SkipBoResults.tsx`) without pausing.
+
+## Cycle 18 — 2026-08-17 — spec 41 (Skip-Bo screens), and the "nothing
+   gets left behind" rule's first real test under fire
+- **Shipped**: `SkipBoCard.tsx`/`.css` (numbered 1-4 teal/5-8 amber/9-
+  12 violet color-fill, rainbow-gradient wild, two-corner hand-card
+  index numbers, Skip-Bo's own navy+pink card back), `SkipBoRoom.tsx`
+  (N-seat lobby mirroring `RummyRoom.tsx`), `SkipBoTable.tsx`/`.css`
+  (header + cards-left chip row, `DealIntro` reused with
+  `yourHandSize={5}`, capped opponent tile grid, building-pile row with
+  the shared draw pile, select-then-confirm play across the 3 legal
+  sources), `SkipBoResults.tsx` (single-round winner callout + final
+  stockpile counts, NOT a Rummy-style score table). Also
+  `SkipBoRulesOverlay.tsx` — not in spec 41's file list, added because
+  every sibling table has one and Rules/Leave needs somewhere to route
+  to; a reasonable, correctly-executed extension, explicitly noted here
+  rather than silently landed as an unplanned file.
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (1017/1017 unchanged — screens don't get dedicated test files here),
+  `npm run build` (clean) myself. Confirmed the diff touched only the
+  named new files. Read the opponent-tile CSS and the `chooseBuildPile`
+  reuse directly before trusting the implementer's claims about them.
+- **Review**: delegated to deepseek-as-Oscar (no host-authoritative/
+  privacy risk in this spec — that's spec 42's job — so lower risk
+  tier than spec 40's engine review). This was a genuinely adversarial
+  pass, not a rubber stamp: it found 2 blocking, 2 major, and 5 minor
+  real issues, all with file:line evidence, not vague style complaints.
+- **The new "nothing gets left behind" rule (added earlier this cycle
+  to the `autonomous-dev-loop` skill itself) got its first real test
+  immediately** — a 9-item findings list is exactly the situation the
+  rule exists for. Full disposition, every item:
+  1. **Fixed (blocking).** The selection ring had no CSS rule at all
+     for tile cards (stockpile top / discard-pile top) — 2 of the 3
+     legal selection sources gave zero visual feedback when selected.
+     Added `.skipbo-card--tile.skipbo-card--selected`.
+  2. **Fixed (blocking).** The ring that did exist was yellow, not
+     spec 41's explicit pink `#be185d` — the implementer had pattern-
+     matched the sibling games' yellow instead of following Skip-Bo's
+     own locked color. Both hand and tile selected-rules now use
+     `#be185d`/`#8f0f47`.
+  3. **Fixed (major).** `playable`/`canDiscard` didn't gate on
+     `canAct`, unlike Rummy's own precedent — a real (if narrow)
+     window where a stale selection from a just-ended turn could
+     enable Play/Discard for one render. Added `canAct &&` to both,
+     to `handlePlay`/`handleDiscard`, and a new effect clearing
+     `selection` when `roundOver` flips true (a mid-turn win never
+     advances the turn, so the existing turn-boundary clear couldn't
+     catch it — a genuinely new edge case Rummy/Phase10 don't have,
+     since they have no mid-turn win).
+  4. **Fixed (major).** The sound diff missed two charter-mandated
+     events: discarding a hand card (checked only for hand-count
+     increase, never decrease) and the player's own draw-back-to-5
+     (which happens on the state transition where `wasMyTurn` had
+     *just* become false, so it fell outside the `p.wasMyTurn` guard
+     entirely). Fixed both — discard now correctly triggers
+     `'card-play'`, and the draw-to-5 check was moved outside the
+     `wasMyTurn` guard with a comment explaining why the refill fires
+     on the wrong side of that boundary.
+  5. **Fixed (minor).** `DealIntro` didn't pass `maxFlights`, so it
+     defaulted to 10 and would have silently truncated a 4-seat deal
+     (needs 20). Added the real total, matching Uno's own existing fix
+     for the identical problem.
+  6. **Fixed (minor).** `StatusLine.card` was dead code — always
+     `null`, copied from Rummy's shape and never populated, with a
+     matching dead CSS class. Deleted the field, its JSX branch, and
+     the CSS rule rather than leave an unused vestige.
+  7. **Fixed (minor).** `onOpenRules` was a genuinely dead prop (the
+     rules overlay is wired via local state) with a misleading "kept
+     for future wiring" comment — removed entirely. `connection` was
+     voided instead of used, an implementer-introduced deviation from
+     every sibling's header (Rummy/Phase10/Uno all surface a
+     disconnected state) — wired into the `TableHeader` meta line
+     matching Rummy's own exact pattern.
+  8. **Fixed (minor, 3 sub-items).** A comment overstating a NaN-
+     avoidance rationale that wasn't the real reason for the wild
+     sort-value choice; an empty-discard-pile CSS comment citing a
+     nonexistent precedent instead of `PlayingCard.css`'s actual
+     `CardBack--empty` pattern; `selectionMatches` using `as` casts
+     instead of real discriminated-union narrowing. All three
+     corrected — comments now say what's actually true, narrowing
+     replaces the casts.
+  9. **Accepted, not a defect.** `SkipBoRulesOverlay.tsx` existing
+     outside spec 41's file list — Oscar correctly flagged this as a
+     process note for the lead rather than a code issue. Disposition:
+     accepted as a reasonable, correctly-executed extension (every
+     sibling table has one; Skip-Bo's Rules button needed somewhere to
+     route to), explicitly recorded here rather than silently landed.
+- **Re-verified after fixes**: `npx tsc -b --noEmit` (silent), `npm
+  test` (1017/1017 unchanged), `npm run build` (clean) — independently,
+  myself, not just trusted from the implementer's second report. Spot-
+  checked the two blocking fixes and the sound-diff fix directly by
+  reading the actual code rather than the diff summary alone.
+- **Landed**: `specs/41-skipbo-screens.md` + the 7 new screen/component
+  files, committed and pushed as a single commit with every finding's
+  disposition folded in before landing — none of the 9 items were left
+  for a "later" spec to maybe pick up.
+- **Continue?** Yes — moving directly to spec 42 (Skip-Bo wiring:
+  `App.tsx`, `Landing.tsx`, `README.md`) without pausing. This is the
+  charter's last milestone and its highest-risk piece (host-
+  authoritative PeerJS state, private-hand delivery) — will get a
+  personal review, not delegated, matching this session's established
+  risk-based routing.

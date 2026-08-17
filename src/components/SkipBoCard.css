@@ -1,0 +1,274 @@
+/* ===================================================================
+   SkipBoCard & SkipBoCardBack — Skip-Bo card-visual components
+   =================================================================== */
+
+/* ---- SkipBoCard — base ---- */
+
+.skipbo-card {
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  color: #fff;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-style: solid;
+  border-color: var(--ink);
+  /* Wipe browser <button> defaults */
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.skipbo-card:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   SkipBoCard — hand (70 × 100)
+   =================================================================== */
+
+.skipbo-card--hand {
+  width: 70px;
+  height: 100px;
+  border-radius: 14px;
+  border-width: 4px;
+  box-shadow: 0 6px 0 var(--grey-border);
+}
+
+.skipbo-card--hand:hover:not(:disabled) {
+  transform: translateY(-9px);
+}
+
+/* Selected: spec 41's pink ring (#be185d) with a darker shadow tone — same
+   select-then-confirm treatment as PlayingCard / Phase10Card / UnoCard, but
+   Skip-Bo's ring color is locked by the spec rather than the sibling yellow. */
+.skipbo-card--hand.skipbo-card--selected,
+.skipbo-card--hand.skipbo-card--selected:hover {
+  border-color: #be185d;
+  box-shadow: 0 6px 0 #8f0f47;
+  transform: translateY(-18px);
+}
+
+/* ===================================================================
+   SkipBoCard — tile (44 × 62) — building / discard / stockpile top
+   =================================================================== */
+
+/*
+   Judgment call — the handoff gives art but no table sizes, and spec 41
+   deliberately collapses all small faces into one `tile` size. Four shared
+   building piles plus four discard tops plus the shared draw pile all have to
+   fit in one centre band, so 44×62 is used: smaller than the 56×78 stock back
+   (keeping the draw pile visually primary) but larger than Phase10's 36×52
+   group cards so a top discard is still readable as a playable face.
+*/
+.skipbo-card--tile {
+  width: 44px;
+  height: 62px;
+  border-radius: 9px;
+  border-width: 3px;
+  box-shadow: 0 4px 0 var(--grey-border);
+}
+
+/* Selected tile (stockpile top / discard-pile top): same pink ring, shallower
+   lift than the hand so the small faces stay anchored inside their slots. */
+.skipbo-card--tile.skipbo-card--selected,
+.skipbo-card--tile.skipbo-card--selected:hover {
+  border-color: #be185d;
+  box-shadow: 0 4px 0 #8f0f47;
+  transform: translateY(-6px);
+}
+
+/* ===================================================================
+   SkipBoCard — wild (rainbow diagonal gradient + white SB badge)
+   =================================================================== */
+
+.skipbo-card--wild {
+  background: linear-gradient(
+    135deg,
+    #ff5d73 0%,
+    #ff9f1c 20%,
+    #ffd23f 40%,
+    #1aa06d 60%,
+    #2f6fed 80%,
+    #6c4cff 100%
+  );
+}
+
+.skipbo-card__wild-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 68%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skipbo-card__wild-label {
+  color: var(--ink);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ===================================================================
+   SkipBoCard — content
+   =================================================================== */
+
+.skipbo-card__corner {
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--sb-face-text, #fff);
+}
+
+/* A real 180°-rotated duplicate, like Uno's and physical Skip-Bo's two-corner
+   faces — the card reads correctly from either end. */
+.skipbo-card__corner--flipped {
+  top: auto;
+  right: 7px;
+  bottom: 6px;
+  left: auto;
+  transform: rotate(180deg);
+}
+
+.skipbo-card__number {
+  color: var(--sb-face-text, #fff);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.skipbo-card--hand .skipbo-card__number {
+  font-size: 34px;
+}
+
+/* Tile number scales from hand at the tile-size ratio (44/70):
+   34 × (44/70) ≈ 21. */
+.skipbo-card--tile .skipbo-card__number {
+  font-size: 21px;
+}
+
+.skipbo-card--hand .skipbo-card__wild-label {
+  font-size: 15px;
+}
+
+.skipbo-card--tile .skipbo-card__wild-label {
+  font-size: 10px;
+}
+
+/* ===================================================================
+   SkipBoCardBack — base
+   =================================================================== */
+
+.skipbo-card-back {
+  position: relative;
+  background: #17173a; /* handoff navy ink */
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  font-weight: 700;
+  color: #fff;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-style: solid;
+  border-color: var(--ink);
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.skipbo-card-back:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* ===================================================================
+   SkipBoCardBack — fan (30 × 44) — opponent's hidden hand / deal intro
+   =================================================================== */
+
+.skipbo-card-back--fan {
+  width: 30px;
+  height: 44px;
+  border-radius: 7px;
+  border-width: 2px;
+}
+
+/* ===================================================================
+   SkipBoCardBack — stock (56 × 78) — the shared draw pile
+   =================================================================== */
+
+.skipbo-card-back--stock {
+  width: 56px;
+  height: 78px;
+  border-radius: 11px;
+  border-width: 3px;
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+.skipbo-card-back--stock:hover:not(:disabled) {
+  transform: translateY(-6px);
+}
+
+/* Turn-highlight: border turns yellow — the same class-swap mechanic as
+   Phase10CardBack's canDraw ring. */
+.skipbo-card-back--stock.skipbo-card-back--can-draw {
+  border-color: var(--yellow);
+}
+
+/* ===================================================================
+   SkipBoCardBack — rotated pink square badge reading "SB"
+   =================================================================== */
+
+/* Handoff: navy back, rotated pink #be185d square badge reading "SB"; no
+   dashed inset ring, no gold. */
+.skipbo-card-back__badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  background: #be185d;
+  border: 2px solid var(--ink);
+  border-radius: 18%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.skipbo-card-back__mark {
+  transform: rotate(14deg);
+  color: #fff;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.skipbo-card-back--fan .skipbo-card-back__badge {
+  border-width: 1px;
+}
+
+.skipbo-card-back--fan .skipbo-card-back__mark {
+  font-size: 8px;
+}
+
+.skipbo-card-back--stock .skipbo-card-back__mark {
+  font-size: 15px;
+}

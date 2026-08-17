@@ -22,10 +22,23 @@ Charter: Skip-Bo — see `CHARTER.md`.
       shape), one rejected with reasoning (an unreachable-by-design
       branch in an otherwise-correct, independently-tested exported
       helper).
-- [ ] Screens (spec 41): SkipBoCard.tsx/.css, SkipBoRoom.tsx,
-      SkipBoTable.tsx/.css, SkipBoResults.tsx. Established seat-tile
-      grid + DealIntro conventions, NOT the design handoff's three-panel
-      layout or borrowed Dominoes/MT shuffle.
+- [x] Screens (spec 41): SkipBoCard.tsx/.css, SkipBoRoom.tsx,
+      SkipBoTable.tsx/.css, SkipBoResults.tsx (+ SkipBoRulesOverlay.tsx,
+      a reasonable sibling-pattern addition beyond the spec's file
+      list). Established seat-tile grid + DealIntro conventions, NOT
+      the design handoff's three-panel layout or borrowed Dominoes/MT
+      shuffle. 1017 tests (unchanged) / tsc / build green. Oscar review
+      (deepseek — no host-authoritative/privacy risk in this spec):
+      genuinely adversarial, found 2 blocking + 2 major + 5 minor real
+      issues (selection ring missing entirely for 2 of 3 selectable
+      sources; ring rendered in the wrong color; Play/Discard not
+      gated on whose turn it is; discard and the player's own draw-to-
+      5 both silently missing their sound cues; DealIntro's flight cap
+      silently truncating a 4-seat deal; dead status-line code; a dead
+      prop and a wrongly-voided one; three comment/narrowing nits).
+      Every item fixed per the new "nothing gets left behind" rule
+      (see DEVLOG Cycle 18 for the full 9-item disposition list) before
+      landing — nothing deferred, nothing silently dropped.
 - [ ] Wiring (spec 42): App.tsx, Landing.tsx, README.md.
 
 Design handoff (`Design Handoff/SKIPBO.md`) is authoritative for rules

@@ -1,0 +1,406 @@
+/* ===================================================================
+   SkipBoTable — single continuous white-card shell, same technique as
+   Rummy/Phase10 tables, scoped to .sb-* classes
+   =================================================================== */
+
+/* ---- Outer container ---- */
+
+.sb-table {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 48px) clamp(16px, 4vw, 44px) 72px;
+}
+
+/* ---- Subheader: code chip + cards-left pills ---- */
+
+.sb-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: clamp(16px, 2.4vw, 26px);
+}
+
+.sb-stock-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sb-stock-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  padding: 5px 14px;
+  box-shadow: 0 3px 0 #c9c9e0;
+}
+
+.sb-stock-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: block;
+  flex: none;
+}
+
+.sb-stock-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+
+/* ---- Error banner ---- */
+
+.sb-error-banner {
+  text-align: center;
+  background: var(--coral);
+  color: #fff;
+  font-weight: 700;
+  font-size: clamp(14px, 1.8vw, 17px);
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  margin-bottom: clamp(10px, 2vw, 18px);
+}
+
+/* ---- Main table card ---- */
+
+.sb-table-card {
+  background: var(--surface);
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  box-shadow: 0 10px 0 var(--ink);
+  padding: clamp(16px, 2.4vw, 26px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Opponent tile grid ---- */
+/* Container mechanics mirror Rummy's .rummy-opp-rail (flex-wrap, gap) and the
+   tile content shape matches Phase10's: readable hidden-hand fan + per-seat
+   stock/discard data. The max-width cap below is the fixed version — a lone
+   wrapping tile must never stretch across the row. */
+
+.sb-opp-rail {
+  --sb-opp-gap: clamp(10px, 1.6vw, 14px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sb-opp-gap);
+  padding-bottom: clamp(12px, 2vw, 20px);
+}
+
+.sb-opp-tile {
+  flex: 1 1 260px;
+  max-width: calc((100% - 3 * var(--sb-opp-gap)) / 4);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 3px solid var(--grey-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: #fff;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.sb-opp-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sb-seat-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  flex: none;
+}
+
+.sb-opp-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.sb-turn-tag {
+  flex: none;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Active (current player) tile is filled with the seat color — matching the
+   turn-chip treatment — and its labels/dots lighten to read on the fill. */
+.sb-opp-tile--turn .sb-opp-tile-count {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sb-opp-tile--turn .sb-seat-dot {
+  border-color: rgba(255, 255, 255, 0.85);
+}
+
+.sb-opp-tile-hand,
+.sb-opp-tile-stock,
+.sb-opp-tile-discards {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sb-opp-tile-fan {
+  display: flex;
+  flex: none;
+}
+
+.sb-opp-tile-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+/* ---- Empty tile outline (dashed) ---- */
+/* Matches PlayingCard.css's CardBack--empty dashed-outline treatment for an
+   empty stock: a dashed rectangle in place of a blank space, so a missing
+   card reads as "empty pile" not "bug". */
+.sb-empty-tile {
+  width: 44px;
+  height: 62px;
+  border-radius: 9px;
+  border: 3px dashed var(--slate-pip);
+  background: transparent;
+  flex: none;
+  display: block;
+  box-sizing: border-box;
+}
+
+/* ---- Building piles band ---- */
+
+.sb-build-band {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: clamp(16px, 2.4vw, 28px);
+  border-top: 3px solid var(--grey-fill);
+  border-bottom: 3px solid var(--grey-fill);
+  padding: clamp(14px, 2vw, 22px) 0;
+}
+
+.sb-build-piles {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(10px, 1.6vw, 16px);
+  flex-wrap: wrap;
+}
+
+.sb-build-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sb-build-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 2px;
+}
+
+.sb-build-slot {
+  min-height: 62px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+/* ---- Shared draw pile ---- */
+
+.sb-draw-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sb-draw-caption,
+.sb-used-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+
+/* Reserve hover-lift space above the draw card so it doesn't clip */
+.sb-draw-slot {
+  padding-top: 10px;
+  min-height: 78px;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* ---- Your side ---- */
+
+.sb-your-side {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 1.6vw, 16px);
+  padding-top: clamp(12px, 2vw, 20px);
+}
+
+.sb-your-band {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sb-source-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.sb-source-caption {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  margin-bottom: 2px;
+}
+
+.sb-source-slot {
+  min-height: 62px;
+  display: flex;
+  align-items: flex-start;
+}
+
+.sb-discard-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sb-your-right {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* ---- Turn chip ---- */
+
+.sb-turn-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+}
+
+/* ---- Status line ---- */
+
+.sb-status {
+  font-size: clamp(17px, 2.2vw, 24px);
+  font-weight: 700;
+  text-align: right;
+  line-height: 1.2;
+}
+
+/* ---- Hand section ---- */
+
+.sb-hand-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sb-hand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sb-hand-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sb-hand-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.sb-hand-stats {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted-text);
+  white-space: nowrap;
+}
+
+.sb-hand-fan {
+  display: flex;
+  min-height: 118px; /* room for selected lift (18px) + card height (100px) */
+  padding-top: 20px;
+  padding-bottom: 6px;
+}
+
+/* ---- Actions row ---- */
+
+.sb-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.sb-action-btn {
+  height: 56px;
+  padding-left: 32px;
+  padding-right: 32px;
+}
+
+.sb-action-hint {
+  font-size: 14px;
+  color: var(--muted-text);
+}
+
+/* ---- Footnote ---- */
+
+.sb-footnote {
+  margin-top: clamp(14px, 2.2vw, 22px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--faint-text);
+  text-align: center;
+}
