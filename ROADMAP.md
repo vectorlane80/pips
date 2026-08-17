@@ -1,6 +1,38 @@
 # Roadmap
 
-Charter: Rummy + Phase 10 N-player expansion — see `CHARTER.md`.
+Charter: Skip-Bo — see `CHARTER.md`.
+
+## Charter: Skip-Bo (2026-08-17) — in progress
+- [x] Card-engine module (spec 40): deck.ts (162-card deck), state.ts,
+      rules.ts, bot.ts + tests. 2-4 seats, no scores/match layer —
+      single-round instant win when a stockpile empties. Mirrors
+      Phase10/Rummy's exact engine conventions (Zone/Card primitives,
+      TurnState, HostSession) — the shared draw pile's full card
+      identity lives host-only outside HostSession, matching Rummy's
+      own `stock` precedent, with only its count public. Auto-targeting
+      (furthest-along build pile, ties -> lowest index) shared by all
+      three play sources; mid-turn win check fires the instant
+      PLAY_STOCK empties a stockpile, before any turn advance or
+      discard step. 1017 tests (963+54) / tsc / build green. Oscar
+      review (lead, personally — engine correctness, same tier as
+      Rummy/Phase10's own engine specs): approve, two nits, no
+      blockers — both given an explicit disposition per the new
+      "nothing gets left behind" rule (see DEVLOG Cycle 17b): one
+      fixed (validator closure-mutation refactored to a direct return
+      shape), one rejected with reasoning (an unreachable-by-design
+      branch in an otherwise-correct, independently-tested exported
+      helper).
+- [ ] Screens (spec 41): SkipBoCard.tsx/.css, SkipBoRoom.tsx,
+      SkipBoTable.tsx/.css, SkipBoResults.tsx. Established seat-tile
+      grid + DealIntro conventions, NOT the design handoff's three-panel
+      layout or borrowed Dominoes/MT shuffle.
+- [ ] Wiring (spec 42): App.tsx, Landing.tsx, README.md.
+
+Design handoff (`Design Handoff/SKIPBO.md`) is authoritative for rules
+and card art only — its layout and deal/shuffle animation are
+explicitly rejected per user instruction, see CHARTER.md for the full
+reasoning. Pre-approved at invocation ("adhere specifically to how
+we're handling other card games... /autonomous-dev-loop like always").
 
 ## Charter: house-bot ID collision fix (2026-08-16) — done
 - [x] Single slice (spec 39): fixed a real, pre-existing bug surfaced

@@ -2941,3 +2941,124 @@ shipping each verified charter promptly.
 - **Charter status:** complete — single-milestone charter, done in one
   cycle.
 - **Continue?** No further work in scope; nothing else was requested.
+
+## Cycle 17 — 2026-08-17 — Skip-Bo charter kickoff (spec 40: card-engine)
+- **User instruction:** add Skip-Bo, a new N-player card game, from a
+  design handoff at `Design Handoff/SKIPBO.md`. Explicit, important
+  caveat: the handoff's LAYOUT (a three-panel zoned layout with
+  horizontal opponent row-stacking) and its DEAL/SHUFFLE ANIMATION
+  (borrowed from Dominoes/Mexican Train) both invented new patterns
+  instead of matching this codebase's established card-game
+  conventions — take the card designs and game mechanics, reject the
+  layout/animation. Sounds: reuse existing assets (especially Uno's
+  for special cards), flag anything genuinely new. Run via
+  `/autonomous-dev-loop` per the user's now-standing routing
+  (deepseek implementing, Haiku fallback if unavailable, deepseek/lead
+  reviewing by risk).
+- **Investigation before writing the charter:** read the handoff in
+  full, confirmed the exact deviations to reject, then read
+  `card-engine/{cards,zones,deck}.ts`, `engine/{turn-engine,sync}.ts`,
+  Phase10's `deck.ts` (closest sibling for a custom numbered+wild deck
+  — Skip-Bo's 144 numbered + 18 wild card shape mirrors Phase10's own
+  96 numbered + 4 skip + 8 wild deck almost exactly), `DealIntro.tsx`'s
+  actual prop shape (confirmed it already supports "public count,
+  private identity, animate only the meaningful part" — exactly what
+  Skip-Bo's stockpile-instant/hand-animated split needs, no new
+  component required), and confirmed via Uno's `state.ts` that EVERY
+  existing card-games sibling (Rummy/Phase10/Uno) uses a scores/
+  target/multi-round match layer — Skip-Bo genuinely doesn't have one
+  per the real rules (first stockpile-empty wins the whole game
+  instantly), which is a correct difference in the underlying game,
+  not a layout inconsistency to paper over.
+- **Shipped:** `CHARTER.md` rewritten fresh for Skip-Bo, documenting
+  every locked decision (what to take from the handoff verbatim vs.
+  what to build instead, the sound-reuse mapping with one item
+  explicitly flagged rather than silently guessed — a building pile
+  completing has no obviously-correct existing sound cue). `ROADMAP.md`
+  prepended with the new charter's 3-item checklist (engine → screens →
+  wiring, mirroring Uno's original net-new multi-spec shape rather than
+  Rummy/Phase10's forced-combination retrofit shape, since there's
+  nothing existing to keep green mid-flight this time). `specs/40-
+  skipbo-card-engine.md` written and dispatched to deepseek — locks
+  every design decision the handoff left ambiguous: the exact
+  `SkipBoAction` shape (`PLAY_STOCK`/`PLAY_HAND`/`PLAY_DISCARD`/
+  `DISCARD`/`PASS`, no explicit draw action — draw-to-5 folds into
+  `DISCARD`/`PASS`'s turn-advance instead), building-pile auto-
+  targeting's furthest-along-then-lowest-index tie-break, the mid-turn
+  win check firing the instant `PLAY_STOCK` empties a stockpile (before
+  even running the discard step), the draw-pile-empty reshuffle path,
+  and a full 5-rung bot priority loop.
+- **Continue?** Yes — dispatching spec 40 now, will verify/review it,
+  then move directly to spec 41 (screens) without pausing, per this
+  session's established unattended rhythm.
+
+## Cycle 17b — 2026-08-17 — spec 40 verification, review, and a new
+   standing rule
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (1017/1017, 963 baseline + 54 new), `npm run build` (clean) myself.
+  Confirmed the diff touched only new files under
+  `src/card-games/skipbo/` with zero modification to any existing
+  file. Read `state.ts` and `rules.ts` directly — `createSkipBoGame`'s
+  deal math, `chooseBuildPile`'s auto-targeting, the 12→clear→1
+  wraparound, and the mid-turn win check all matched spec 40 exactly.
+- **Review**: personally, as Oscar (engine correctness — same risk
+  tier as Rummy/Phase10's own engine specs, not delegated). Traced all
+  6 items flagged for adversarial attention (post-win action lockout,
+  reshuffle non-duplication via `recyclePile`'s pure partition
+  mechanics, `PLAY_DISCARD`'s pile-index scoping against cross-player
+  access, 162-card conservation, `topCard()!` null-safety) and
+  confirmed the 54 tests target real scenarios (mid-turn win firing
+  after a preceding hand play, both-piles-empty not throwing,
+  post-`roundOver` rejection) rather than re-asserting the
+  implementation. Verdict: approve, two nits, no blockers.
+- **New standing rule, applied to this cycle as its first test case**:
+  the user set a hard rule — no review finding, at any severity, gets
+  silently dropped. Every finding needs an explicit disposition
+  (fixed / consciously deferred with a tracked follow-up / rejected
+  with reasoning) before a slice counts as landed. Baked directly into
+  the `autonomous-dev-loop` skill itself
+  (`references/review.md`'s new "Nothing gets left behind" section,
+  referenced from `SKILL.md` step 7) so it persists across future
+  projects, not just this one — committed locally in that skill's own
+  repo (`vectorlane80/autonomous-dev-loop`, not pushed pending the
+  user's own call on whether to push a skill-repo change).
+- **Nit dispositions** (both real findings, neither silently dropped):
+  1. **Fixed.** `makeValidator`'s `onDrawChange`/`onUsedChange`
+     closure-mutation pattern (writing into `let candidateDrawPile`/
+     `candidateUsedPile` via output-parameter callbacks) worked
+     correctly but was a less obviously-safe shape than a direct
+     return value. Dispatched a follow-up fix: `makeValidator` now
+     returns a rules.ts-local `SkipBoOutcome` type carrying
+     `drawPile`/`usedPile` directly in its own return value;
+     `applySkipBoAction`/`runSkipBoBotTurn` read them straight off the
+     validator's outcome (a narrow `as SkipBoOutcome` cast, justified
+     because `engine/sync.ts`'s `applyAction` returns the SAME object
+     reference the validator produced, not a reconstructed one — I
+     verified this by rereading `applyAction`'s source before accepting
+     the cast as safe, not by trusting the implementer's claim that it
+     was safe). Scoped entirely to `skipbo/rules.ts`; `engine/sync.ts`
+     and `engine/bot.ts` untouched, confirmed via diff. No new tests
+     needed (pure internal refactor, no behavior change) — re-verified
+     1017/1017 green, tsc/build clean, independently by me, not just
+     trusted from the report.
+  2. **Rejected**, with reasoning recorded here rather than left as
+     review-log trivia. `selectSkipBoDiscard`'s "never discard a wild
+     while a numbered card remains" branch is genuinely unreachable
+     from `skipBoBotStrategy` today (rung 4 always plays a held wild
+     before rung 5's discard step is ever reached, since a wild is
+     universally legal against Skip-Bo's fixed 4 build piles). This is
+     not a bug: the helper is exported, independently correct, and
+     already unit-tested at the helper level directly — its
+     unreachability is a property of ONE current caller's rung
+     ordering, not a defect in the helper itself, and it remains
+     available for a future caller (e.g. a human-player discard hint
+     in the spec 41 screens) that could exercise it directly. No code
+     change made.
+- **Landed**: `specs/40-skipbo-card-engine.md` + `src/card-games/
+  skipbo/*` committed and pushed as a single commit (spec + engine +
+  tests + both nit dispositions folded in before landing, per the new
+  rule — nothing about this cycle's review findings was left for a
+  "later" that might not come).
+- **Continue?** Yes — moving directly to spec 41 (Skip-Bo screens:
+  `SkipBoCard.tsx`/`.css`, `SkipBoRoom.tsx`, `SkipBoTable.tsx`/`.css`,
+  `SkipBoResults.tsx`) without pausing.
