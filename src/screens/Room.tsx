@@ -100,7 +100,7 @@ export function Room({
             {GAME_LABEL[room.game]}
           </div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>At the table</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
             {rows.map((seat, i) => (
               seat ? (
                 <div key={seat.id} style={{ display: 'flex', alignItems: 'center', gap: 14, border: '4px solid var(--ink)', borderRadius: 20, padding: '12px 16px' }}>

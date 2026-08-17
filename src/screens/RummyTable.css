@@ -127,8 +127,15 @@
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
+/* Tile grows to fill its row but is capped at exactly one quarter of the row
+   width (matches Uno's identical fix for its own opponent tile grid), so a
+   lone tile wrapping onto its own row doesn't stretch across the entire row.
+   Rummy's own max of 3 opponents always fits one row at this container width
+   today, so this is latent rather than currently visible — kept in step with
+   Phase 10's identical tile grid rather than letting the two drift apart. */
 .rummy-opp-tile {
   flex: 1 1 260px;
+  max-width: calc((100% - 3 * var(--rummy-opp-gap)) / 4);
   min-width: 0;
   display: flex;
   flex-direction: column;

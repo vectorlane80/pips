@@ -127,8 +127,15 @@
   padding-bottom: clamp(12px, 2vw, 20px);
 }
 
+/* Tile grows to fill its row but is capped at exactly one quarter of the row
+   width (matches Uno's identical fix for its own opponent tile grid): 4 tiles
+   fill a row cleanly at this container width, while a lone tile wrapping onto
+   its own row — e.g. the 5th of 5 opponents at Phase 10's max seat count —
+   stays the same size as its row-mates instead of stretching across the
+   entire row. */
 .p10-opp-tile {
   flex: 1 1 260px;
+  max-width: calc((100% - 3 * var(--p10-opp-gap)) / 4);
   min-width: 0;
   display: flex;
   flex-direction: column;
