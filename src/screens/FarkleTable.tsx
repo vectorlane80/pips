@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { RoomState } from '../types'
-import { scoreSelection, tookFinalTurn } from '../games/farkle'
+import { bestSubset, scoreSelection, tookFinalTurn } from '../games/farkle'
 import { Die } from '../components/Die'
 import { TableHeader } from '../components/TableHeader'
 import { useDiceAnimation } from '../hooks/useDiceAnimation'
@@ -25,12 +25,17 @@ export function FarkleTable({
   const isMyTurn = activeSeat?.id === localSeatId
   const humanCount = room.seats.filter((s) => !s.bot).length
   useTurnStartSound(isMyTurn, humanCount, playTurnStart)
-  const rollSig = `${f.kept.length}:${f.dice.length}`
+  const rollSig = `${f.kept.length}:${f.dice.map((d) => `${d.id}.${d.val}`).join(',')}`
   const displayVals = useDiceAnimation(f.dice, rollSig)
 
   const selected = f.dice.filter((d) => d.sel)
   const sel = selected.length > 0 ? scoreSelection(selected.map((d) => d.val)) : { valid: true, score: 0 }
   const onTable = f.turnScore + (sel.valid ? sel.score : 0)
+  const invalidIds = new Set<number>()
+  if (!sel.valid) {
+    const keep = new Set(bestSubset(selected.map((d) => d.val)).indices)
+    selected.forEach((d, i) => { if (!keep.has(i)) invalidIds.add(d.id) })
+  }
   const canAct = isMyTurn && !f.farkle && sel.valid
   const canRoll = canAct && (f.dice.length === 0 || selected.length > 0)
   const canBank = canAct && onTable > 0 && (activeSeat && activeSeat.score > 0 ? true : onTable >= f.openingScore)
@@ -91,7 +96,7 @@ export function FarkleTable({
   if (!isMyTurn) hint = f.farkle ? '' : `${activeSeat?.name} is thinking…`
   else if (f.farkle) hint = 'Hand the dice over.'
   else if (selected.length === 0) hint = f.dice.length > 0 ? 'Tap a die to set it aside.' : ''
-  else if (!sel.valid) hint = "One of those doesn't score."
+  else if (!sel.valid) hint = 'Deselect the dice outlined in red — they don’t score.'
   else if (activeSeat?.score === 0 && onTable < f.openingScore) hint = `${f.openingScore - onTable} more to get on the board.`
   else hint = `+${sel.score} selected`
 
@@ -165,6 +170,7 @@ export function FarkleTable({
                   key={d.id}
                   value={displayVals[i] ?? d.val}
                   selected={d.sel}
+                  invalid={invalidIds.has(d.id)}
                   rotation={d.rot}
                   onClick={isMyTurn && !f.farkle ? () => onToggle(d.id) : undefined}
                 />

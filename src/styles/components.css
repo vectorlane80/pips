@@ -199,6 +199,10 @@
   box-shadow: 0 7px 0 var(--slate-pip-border);
   cursor: default;
 }
+.die-invalid {
+  border-color: var(--coral);
+  box-shadow: 0 9px 0 var(--coral);
+}
 .die-muted .die-pip {
   background: var(--slate-pip);
 }

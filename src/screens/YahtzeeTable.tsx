@@ -74,8 +74,8 @@ export function YahtzeeTable({
         setTurnSoundEnabled={setTurnSoundEnabled}
       />
 
-      <div>
-        <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'clamp(18px,3vw,40px)', alignItems: 'flex-start' }}>
+        <div style={{ flex: '1 1 480px' }}>
           <div className="card card-resting">
             <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
               <div>
@@ -155,7 +155,7 @@ export function YahtzeeTable({
           </button>
         </div>
 
-        <div style={{ marginTop: 'clamp(18px,3vw,40px)' }}>
+        <div style={{ flex: room.seats.length <= 4 ? '1 1 360px' : '1 1 100%' }}>
           <div style={{ width: 'fit-content', maxWidth: '100%', background: '#fff', border: '4px solid var(--ink)', borderRadius: 24, boxShadow: '0 9px 0 var(--grey-border)', padding: '14px 16px', overflowX: 'auto' }}>
             <div style={{ display: 'grid', gridTemplateColumns: `minmax(160px, 260px) repeat(${room.seats.length}, 74px)`, gap: 6, alignItems: 'center' }}>
               <div style={{ fontWeight: 700, fontSize: 15 }}>Scorecard</div>

@@ -1,13 +1,8 @@
 # Requests for the human
 
-- [ ] 2026-08-09, Wahoo wrap-up — **commit the charter**: verified in
-      the tree (664 tests / tsc / build green, two reviews, live 4-seat
-      game). Say the word.
-- [ ] 2026-08-09, Wahoo wrap-up — **real audio**: wanted files for
-      `src/assets/sounds/`: `marble-move.mp3` (marble hop),
-      `marble-bump.mp3` (the send-'em-home moment). Currently reusing
-      piece-drop / farkle-bust; `dice-roll` is already real and right.
-      Optional: `marble-home.mp3` for lane entries.
+- [x] 2026-08-09, Wahoo wrap-up — commit the charter: done, pushed
+      (verified: full Wahoo commit sequence on `main`, HEAD == origin/main).
+- [x] 2026-08-09, Wahoo wrap-up — real audio: done, user confirmed fine.
 - [ ] 2026-08-09, non-blocking, cross-game — peer.ts systemic notes from
       the Wahoo review: `reject()` doesn't close the connection, and
       `onAction` keys purely on conn.peer (a reconnecting peer that
@@ -68,23 +63,5 @@
       which and "push".
 - [x] 2026-08-11 (done — single horn per update, in e5dccc4) MT double-horn
       on a blocked round.
-- [ ] 2026-08-15, Uno charter — **commit the charter**: full N-player
-      (2-10 seats, explicitly overriding the design handoff's 4-player
-      cap per your instruction) Uno is verified in the tree — module,
-      the single-window Uno-call race mechanism, config-driven house
-      rules, card components, table/room/results/rules screens, and
-      full App.tsx/route/landing/README wiring including a novel bot
-      Uno-call reflex system. 947 tests / tsc / build green throughout.
-      Five Oscar reviews (module approve w/ 2 nits both closed anyway,
-      call-mechanism approve, house-rules approve, table-screen
-      approve, wiring approve-with-caveats — one real-but-benign edge
-      case found and fixed same-cycle). Live-verified: 6-player match
-      (host + 5 bots) with skip/draw2/multi-draw all firing correctly,
-      zero console errors. Nothing has been committed or pushed this
-      entire charter. Suggested: one commit per milestone (module /
-      call-mechanism / house-rules / card-components / table-screen /
-      room-results-rules / wiring) or a single charter commit — say
-      which and "push".
-- [ ] 2026-08-10, non-blocking — one unexplained full page reload bounced
-      the app to the shelf during the first checkers live match; never
-      reproduced across hours of subsequent soak. Watch for it.
+- [x] 2026-08-15, Uno charter — commit the charter: done, pushed
+      (verified: full Uno commit sequence on `main`, HEAD == origin/main).

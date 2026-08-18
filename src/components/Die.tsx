@@ -8,16 +8,18 @@ const POS: Record<number, [number, number][]> = {
 }
 
 export function Die({
-  value, selected, setAside, muted, rotation = 0, onClick,
+  value, selected, setAside, muted, invalid, rotation = 0, onClick,
 }: {
   value: number
   selected?: boolean
   setAside?: boolean
   muted?: boolean
+  invalid?: boolean
   rotation?: number
   onClick?: () => void
 }) {
-  const cls = ['die', selected && 'die-selected', setAside && 'die-setaside', muted && 'die-muted'].filter(Boolean).join(' ')
+  const cls = ['die', selected && 'die-selected', setAside && 'die-setaside', muted && 'die-muted', invalid && 'die-invalid']
+    .filter(Boolean).join(' ')
   return (
     <button
       type="button"
