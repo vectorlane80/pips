@@ -247,7 +247,8 @@ export function UnoTable({
   const canDraw = canAct && publicState.pendingWild === null && (publicState.pendingStack !== null || (!publicState.hasDrawnThisTurn && !hasPlayable))
   const showColorPicker = canAct && publicState.pendingWild !== null
   // pendingStack check is redundant: hasDrawnThisTurn is false while a stack is pending (set together in rules.ts,
-  // see the PLAY_CARD/DRAW_CARD pendingStack branches in rules.ts), so it's already enforced above. Kept for defensive clarity that showPass must be false during a stack.
+  // see the PLAY_CARD draw2 branch and the CHOOSE_COLOR wild4 branch in rules.ts), so it's already enforced above.
+  // Kept for defensive clarity that showPass must be false during a stack.
   const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingStack === null
   const targetText = `first to ${UNO_TARGET}`
   const catchStaggered = useCatchStagger(publicState.unoWindow, localPlayerId)
