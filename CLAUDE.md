@@ -93,7 +93,23 @@ isolation as if no sibling game already answered the question.
   plain functions over classes, explicit types, no defensive code for
   conditions that can't occur, no abstractions beyond what the current spec
   needs, no drive-by refactors of unrelated files.
-- Never run `git commit`/`git push`. Never touch files outside the ones a given
-  task explicitly names as yours to write.
+- Never touch files outside the ones a given task explicitly names as yours
+  to write.
 - Tests live beside the code they test (`*.test.ts`) and use `vitest`. Run with
   `npm test`.
+
+## Git workflow
+
+- Every work request gets its own branch off `main`, created before making
+  changes. Never commit directly on `main` — parallel agent threads working
+  on `main` at once is exactly what causes collisions.
+- Committing to the local branch is always fine, any time, without asking —
+  commit early and often as work lands.
+- Merging into `main` and pushing to GitHub requires explicit permission.
+  The word "push" from the user *is* that permission — don't ask again once
+  given, just merge the branch into `main` and push. Never merge/push on
+  your own initiative, even if tests are green and the branch looks done:
+  a GitHub Pages build kicks off on push, and that must not happen while
+  the user is mid-test against the live/deployed code.
+- The moment a push succeeds, prune the branch immediately — delete it both
+  locally and on the remote. Don't leave merged branches lying around.
