@@ -246,6 +246,8 @@ export function UnoTable({
   const canAct = isMyTurn && publicState.stage === 'play'
   const canDraw = canAct && publicState.pendingWild === null && (publicState.pendingStack !== null || (!publicState.hasDrawnThisTurn && !hasPlayable))
   const showColorPicker = canAct && publicState.pendingWild !== null
+  // pendingStack check is redundant: hasDrawnThisTurn is false while a stack is pending (set together in rules.ts),
+  // so it's already enforced above. Kept for defensive clarity that showPass must be false during a stack.
   const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingStack === null
   const targetText = `first to ${UNO_TARGET}`
   const catchStaggered = useCatchStagger(publicState.unoWindow, localPlayerId)
@@ -277,18 +279,22 @@ export function UnoTable({
   }, [publicState.round])
 
   // Clear the selection whenever it stops being valid: the selected card
-  // leaves the hand, the turn changes, a wild color picker opens, the
-  // discard top/active color makes it illegal, or the stage leaves 'play'.
+  // leaves the hand, the turn changes, a wild color picker opens, a stack
+  // becomes pending (blocking non-matching cards), the discard top/active
+  // color makes it illegal, or the stage leaves 'play'. Keep this logic in
+  // sync with cardClickable to prevent divergence.
   useEffect(() => {
     setSelectedId((prev) => {
       if (prev === null) return null
       const card = hand.find((c) => c.id === prev)
       if (!card) return null
       if (!canAct || publicState.pendingWild !== null || top === undefined) return null
+      // While a stack is pending, only matching cards remain valid
+      if (publicState.pendingStack !== null && card.kind !== publicState.pendingStack.kind) return null
       if (!isUnoPlayable(card, top, publicState.activeColor)) return null
       return prev
     })
-  }, [hand, canAct, publicState.pendingWild, top, publicState.activeColor])
+  }, [hand, canAct, publicState.pendingWild, publicState.pendingStack, top, publicState.activeColor])
 
   // Forced-draw reveal gate (spec 34h §8) — purely client-side presentation.
   // The engine already put the drawn cards in the hand; we only delay SHOWING
