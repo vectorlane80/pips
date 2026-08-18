@@ -37,6 +37,7 @@ export interface UnoPublicState {
   handCounts: Record<string, number>
   hasDrawnThisTurn: boolean              // reset false whenever the turn advances to a new player
   pendingWild: { cardId: string; isDraw4: boolean } | null
+  pendingStack: { kind: 'draw2' | 'wild4'; total: number } | null   // while stackDraw house rule is active and a draw card has been played but not yet drawn
   unoWindow: { playerId: string } | null   // at most one ever active — opens when a turn-ending action leaves the acting player at exactly 1 card, destroyed by a call or by the next player's first action
   scores: Record<string, number>         // running total, HIGHER is better, first to UNO_TARGET wins
   roundResult: UnoRoundResult | null
@@ -68,7 +69,7 @@ export const UNO_MAX_SEATS = 6
 export const UNO_HAND_SIZE = 7
 export const UNO_TARGET = 500
 
-export type UnoHouseRuleKey = 'drawUntilPlayable'
+export type UnoHouseRuleKey = 'drawUntilPlayable' | 'stackDraw'
 
 export interface UnoHouseRuleDef {
   key: UnoHouseRuleKey
@@ -83,7 +84,13 @@ export const UNO_HOUSE_RULE_DEFS: UnoHouseRuleDef[] = [
   {
     key: 'drawUntilPlayable',
     label: 'Draw until you can play',
-    description: 'Keep drawing from the stock until you draw a card you can play, instead of drawing just one and passing if it isn’t playable.',
+    description: 'Keep drawing from the stock until you draw a card you can play, instead of drawing just one and passing if it isn\'t playable.',
+    default: false,
+  },
+  {
+    key: 'stackDraw',
+    label: 'Stack draw cards',
+    description: 'Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing - it keeps growing until someone can\'t or won\'t continue it.',
     default: false,
   },
 ]
@@ -184,6 +191,7 @@ export function createUnoGame(
     handCounts,
     hasDrawnThisTurn: false,
     pendingWild: null,
+    pendingStack: null,
     unoWindow: null,
     scores,
     roundResult: null,

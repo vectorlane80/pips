@@ -244,9 +244,9 @@ export function UnoTable({
   const top = topCard(publicState.discardPile)
   const hasPlayable = top !== undefined && handHasLegalPlay(hand, top, publicState.activeColor)
   const canAct = isMyTurn && publicState.stage === 'play'
-  const canDraw = canAct && publicState.pendingWild === null && !publicState.hasDrawnThisTurn && !hasPlayable
+  const canDraw = canAct && publicState.pendingWild === null && (publicState.pendingStack !== null || (!publicState.hasDrawnThisTurn && !hasPlayable))
   const showColorPicker = canAct && publicState.pendingWild !== null
-  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null
+  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingStack === null
   const targetText = `first to ${UNO_TARGET}`
   const catchStaggered = useCatchStagger(publicState.unoWindow, localPlayerId)
 
@@ -451,8 +451,15 @@ export function UnoTable({
   // and rejects an illegally-timed draw/play regardless. The card's onClick
   // is either wired or omitted entirely (per spec 34d, no opacity/ring
   // styling differs, only whether a click handler exists).
-  const cardClickable = (card: UnoCard): boolean =>
-    canAct && publicState.pendingWild === null && top !== undefined && isUnoPlayable(card, top, publicState.activeColor)
+  const cardClickable = (card: UnoCard): boolean => {
+    if (!canAct || publicState.pendingWild !== null || top === undefined) return false
+    // While a stack is pending, only matching cards are clickable
+    if (publicState.pendingStack !== null) {
+      return card.kind === publicState.pendingStack.kind
+    }
+    // Normal playability check
+    return isUnoPlayable(card, top, publicState.activeColor)
+  }
 
   // Per-seat Uno-call enable logic (client-side only; the host does not
   // enforce timing — see spec 34b). No window for this seat → always gray.
@@ -657,7 +664,7 @@ export function UnoTable({
             <div className="uno-centre-left">
               <div className="uno-stock-group">
                 <div className="uno-stock-caption">
-                  stock {publicState.stockCount} · {publicState.houseRules.drawUntilPlayable ? 'Draw until you can play' : 'Draw a card'}
+                  stock {publicState.stockCount} · {publicState.pendingStack !== null ? `Draw ${publicState.pendingStack.total}` : (publicState.houseRules.drawUntilPlayable ? 'Draw until you can play' : 'Draw a card')}
                 </div>
                 <div className="uno-stock-card-wrapper">
                   <UnoCardBack

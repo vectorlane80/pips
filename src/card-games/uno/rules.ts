@@ -168,6 +168,7 @@ function makeValidator(
           handCounts,
           hasDrawnThisTurn: false,
           pendingWild: null,
+          pendingStack: null,
           unoWindow: null,
           roundResult: null,
           lastAction: null,
@@ -223,8 +224,16 @@ function makeValidator(
       if (publicState.pendingWild !== null) return { ok: false, reason: 'choose a color first' }
       const card = myHand.cards.find((c) => c.id === action.cardId)
       if (!card) return { ok: false, reason: 'card not in hand' }
-      const top = topCard(publicState.discardPile)!
-      if (!isUnoPlayable(card, top, publicState.activeColor)) return { ok: false, reason: 'card is not playable' }
+      // While a stack is pending, only matching cards are legal
+      if (publicState.pendingStack !== null) {
+        if (card.kind !== publicState.pendingStack.kind) {
+          return { ok: false, reason: 'must stack a matching card or draw the pile' }
+        }
+      } else {
+        // Normal playability check only when no stack is pending
+        const top = topCard(publicState.discardPile)!
+        if (!isUnoPlayable(card, top, publicState.activeColor)) return { ok: false, reason: 'card is not playable' }
+      }
 
       const { from: newHand, to: newDiscard } = moveCards(myHand, publicState.discardPile, [action.cardId])
       const newPrivateStates = { ...privateStates, [playerId]: { hand: newHand } }
@@ -299,25 +308,60 @@ function makeValidator(
             privateStates: newPrivateStates,
           }
         case 'draw2': {
-          const drawerId = skippedPlayer(publicState.turn)
-          const draw = drawFromStock(currentStock, publicBase.discardPile, 2, rng)
-          if (!draw.ok) return blockedRound(publicBase, newPrivateStates)
-          onStockChange(draw.stock)
-          const drawerHand = addCards(privateStates[drawerId].hand, draw.drawn)
+          if (!publicState.houseRules.stackDraw) {
+            // Rule OFF: immediate draw-2 for the skipped player, skipNext
+            const drawerId = skippedPlayer(publicState.turn)
+            const draw = drawFromStock(currentStock, publicBase.discardPile, 2, rng)
+            if (!draw.ok) return blockedRound(publicBase, newPrivateStates)
+            onStockChange(draw.stock)
+            const drawerHand = addCards(privateStates[drawerId].hand, draw.drawn)
+            return {
+              ok: true,
+              publicState: {
+                ...publicBase,
+                discardPile: draw.discardPile,
+                stockCount: cardCount(draw.stock),
+                activeColor: card.color as UnoColor,
+                hasDrawnThisTurn: false,
+                turn: skipNext(publicState.turn, 'play'),
+                unoWindow: cardCount(newHand) === 1 ? { playerId } : null,
+                handCounts: { ...publicBase.handCounts, [drawerId]: cardCount(drawerHand) },
+                lastAction: { ...lastAction, drewCount: 2 },
+              },
+              privateStates: { ...newPrivateStates, [drawerId]: { hand: drawerHand } },
+            }
+          }
+          // Rule ON: stackDraw logic
+          if (publicState.pendingStack !== null) {
+            // Continue the stack: card kind must match
+            if (publicState.pendingStack.kind !== 'draw2') {
+              return { ok: false, reason: 'must stack a matching card or draw the pile' }
+            }
+            return {
+              ok: true,
+              publicState: {
+                ...publicBase,
+                activeColor: card.color as UnoColor,
+                hasDrawnThisTurn: false,
+                turn: advanceTurn(publicState.turn, 'play'),
+                pendingStack: { kind: 'draw2', total: publicState.pendingStack.total + 2 },
+                unoWindow: cardCount(newHand) === 1 ? { playerId } : null,
+              },
+              privateStates: newPrivateStates,
+            }
+          }
+          // Open a new stack
           return {
             ok: true,
             publicState: {
               ...publicBase,
-              discardPile: draw.discardPile,
-              stockCount: cardCount(draw.stock),
               activeColor: card.color as UnoColor,
               hasDrawnThisTurn: false,
-              turn: skipNext(publicState.turn, 'play'),
+              turn: advanceTurn(publicState.turn, 'play'),
+              pendingStack: { kind: 'draw2', total: 2 },
               unoWindow: cardCount(newHand) === 1 ? { playerId } : null,
-              handCounts: { ...publicBase.handCounts, [drawerId]: cardCount(drawerHand) },
-              lastAction: { ...lastAction, drewCount: 2 },
             },
-            privateStates: { ...newPrivateStates, [drawerId]: { hand: drawerHand } },
+            privateStates: newPrivateStates,
           }
         }
         case 'wild':
@@ -331,6 +375,10 @@ function makeValidator(
             privateStates: newPrivateStates,
           }
         case 'wild4':
+          // Check if a stack is pending and this card doesn't match
+          if (publicState.pendingStack !== null && publicState.pendingStack.kind !== 'wild4') {
+            return { ok: false, reason: 'must stack a matching card or draw the pile' }
+          }
           // Same as wild; the draw-4 + skip happens once the color is chosen.
           return {
             ok: true,
@@ -360,12 +408,50 @@ function makeValidator(
           privateStates,
         }
       }
-      // wild4: the player skipNext will land past draws 4, then gets skipped.
-      const drawerId = skippedPlayer(publicState.turn)
-      const draw = drawFromStock(currentStock, publicState.discardPile, 4, rng)
-      if (!draw.ok) return blockedRound({ ...publicState, pendingWild: null }, privateStates)
-      onStockChange(draw.stock)
-      const drawerHand = addCards(privateStates[drawerId].hand, draw.drawn)
+      // wild4 (isDraw4: true)
+      if (!publicState.houseRules.stackDraw) {
+        // Rule OFF: immediate draw-4, skipNext
+        const drawerId = skippedPlayer(publicState.turn)
+        const draw = drawFromStock(currentStock, publicState.discardPile, 4, rng)
+        if (!draw.ok) return blockedRound({ ...publicState, pendingWild: null }, privateStates)
+        onStockChange(draw.stock)
+        const drawerHand = addCards(privateStates[drawerId].hand, draw.drawn)
+        return {
+          ok: true,
+          publicState: {
+            ...publicState,
+            activeColor: action.color,
+            pendingWild: null,
+            hasDrawnThisTurn: false,
+            turn: skipNext(publicState.turn, 'play'),
+            unoWindow: cardCount(myHand) === 1 ? { playerId } : null,
+            discardPile: draw.discardPile,
+            stockCount: cardCount(draw.stock),
+            handCounts: { ...publicState.handCounts, [drawerId]: cardCount(drawerHand) },
+            // merge into the existing lastAction from the preceding PLAY_CARD — no second entry
+            lastAction: { ...publicState.lastAction!, drewCount: 4 },
+          },
+          privateStates: { ...privateStates, [drawerId]: { hand: drawerHand } },
+        }
+      }
+      // Rule ON: stackDraw logic
+      if (publicState.pendingStack !== null) {
+        // Continue the wild4 stack
+        return {
+          ok: true,
+          publicState: {
+            ...publicState,
+            activeColor: action.color,
+            pendingWild: null,
+            hasDrawnThisTurn: false,
+            turn: advanceTurn(publicState.turn, 'play'),
+            pendingStack: { kind: 'wild4', total: publicState.pendingStack.total + 4 },
+            unoWindow: cardCount(myHand) === 1 ? { playerId } : null,
+          },
+          privateStates,
+        }
+      }
+      // Open a new wild4 stack
       return {
         ok: true,
         publicState: {
@@ -373,20 +459,39 @@ function makeValidator(
           activeColor: action.color,
           pendingWild: null,
           hasDrawnThisTurn: false,
-          turn: skipNext(publicState.turn, 'play'),
+          turn: advanceTurn(publicState.turn, 'play'),
+          pendingStack: { kind: 'wild4', total: 4 },
           unoWindow: cardCount(myHand) === 1 ? { playerId } : null,
-          discardPile: draw.discardPile,
-          stockCount: cardCount(draw.stock),
-          handCounts: { ...publicState.handCounts, [drawerId]: cardCount(drawerHand) },
-          // merge into the existing lastAction from the preceding PLAY_CARD — no second entry
-          lastAction: { ...publicState.lastAction!, drewCount: 4 },
         },
-        privateStates: { ...privateStates, [drawerId]: { hand: drawerHand } },
+        privateStates,
       }
     }
 
     if (action.type === 'DRAW_CARD') {
       if (publicState.pendingWild !== null) return { ok: false, reason: 'choose a color first' }
+      // When a stack is pending, accept DRAW_CARD unconditionally
+      if (publicState.pendingStack !== null) {
+        const draw = drawFromStock(currentStock, publicState.discardPile, publicState.pendingStack.total, rng)
+        if (!draw.ok) return blockedRound(publicState, privateStates)
+        onStockChange(draw.stock)
+        const newHand = addCards(myHand, draw.drawn)
+        return {
+          ok: true,
+          publicState: {
+            ...publicState,
+            discardPile: draw.discardPile,
+            stockCount: cardCount(draw.stock),
+            handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
+            hasDrawnThisTurn: false,
+            turn: advanceTurn(publicState.turn, 'play'),
+            pendingStack: null,
+            lastAction: { by: playerId, kind: 'draw', card: null, drewCount: publicState.pendingStack.total },
+            unoWindow: cardCount(newHand) === 1 ? { playerId } : null,
+          },
+          privateStates: { ...privateStates, [playerId]: { hand: newHand } },
+        }
+      }
+      // Normal draw logic (when no stack is pending)
       if (publicState.hasDrawnThisTurn) return { ok: false, reason: 'you have already drawn this turn' }
       const top = topCard(publicState.discardPile)!
       if (handHasLegalPlay(myHand.cards, top, publicState.activeColor)) {
