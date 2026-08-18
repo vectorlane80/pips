@@ -99,7 +99,7 @@ export const UNO_HOUSE_RULE_DEFS: UnoHouseRuleDef[] = [
   {
     key: 'sevenZero',
     label: '7-0 rule',
-    description: "Play a 7 to swap hands with one opponent of your choice. Play a 0 and everyone passes their hand to the next player around the table.",
+    description: 'Play a 7 to swap hands with one opponent of your choice. Play a 0 and everyone passes their hand to the next player around the table.',
     default: false,
   },
 ]

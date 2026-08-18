@@ -230,6 +230,17 @@ describe('CHOOSE_SWAP_TARGET action', () => {
     expect(r.outcome.ok).toBe(false)
   })
 
+  it('rejects unknown/unseated targetPlayerId', () => {
+    const uno = buildGame({
+      houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: true },
+      hands: { p1: cards('uno-13', 'uno-1'), p2: [], p3: [], p4: [] },
+    })
+    let r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-13' })
+    expect(r.outcome.ok).toBe(true)
+    r = applyUnoAction(r.uno, 'p1', { type: 'CHOOSE_SWAP_TARGET', targetPlayerId: 'unknown' })
+    expect(r.outcome.ok).toBe(false)
+  })
+
   it('sets lastAction with swapTargetPlayerId', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: true },

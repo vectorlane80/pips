@@ -224,6 +224,7 @@ function makeValidator(
 
     if (action.type === 'PLAY_CARD') {
       if (publicState.pendingWild !== null) return { ok: false, reason: 'choose a color first' }
+      if (publicState.pendingSevenSwap !== null) return { ok: false, reason: 'choose a swap target first' }
       const card = myHand.cards.find((c) => c.id === action.cardId)
       if (!card) return { ok: false, reason: 'card not in hand' }
       // While a stack is pending, only matching cards are legal
@@ -465,7 +466,7 @@ function makeValidator(
           hasDrawnThisTurn: false,
           turn: advanceTurn(publicState.turn, 'play'),
           unoWindow: newUnoWindow,
-          lastAction: publicState.lastAction !== null ? { ...publicState.lastAction, swapTargetPlayerId: action.targetPlayerId } : null,
+          lastAction: { ...publicState.lastAction!, swapTargetPlayerId: action.targetPlayerId },
         },
         privateStates: newPrivateStates,
       }
@@ -548,6 +549,7 @@ function makeValidator(
 
     if (action.type === 'DRAW_CARD') {
       if (publicState.pendingWild !== null) return { ok: false, reason: 'choose a color first' }
+      if (publicState.pendingSevenSwap !== null) return { ok: false, reason: 'choose a swap target first' }
       // When a stack is pending, accept DRAW_CARD unconditionally
       if (publicState.pendingStack !== null) {
         const draw = drawFromStock(currentStock, publicState.discardPile, publicState.pendingStack.total, rng)
@@ -613,6 +615,7 @@ function makeValidator(
 
     if (action.type === 'PASS') {
       if (publicState.pendingWild !== null) return { ok: false, reason: 'choose a color first' }
+      if (publicState.pendingSevenSwap !== null) return { ok: false, reason: 'choose a swap target first' }
       if (!publicState.hasDrawnThisTurn) return { ok: false, reason: 'draw first' }
       return {
         ok: true,
