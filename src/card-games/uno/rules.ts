@@ -124,6 +124,7 @@ function finishRoundByGoingOut(
       stage,
       matchWinnerId: stage === 'over' ? outPlayerId : null,
       handCounts: { ...publicState.handCounts, [outPlayerId]: 0 },
+      pendingStack: null,   // clear any pending stack — going out ends the round, no draw happens
       unoWindow: null,   // the round is over — no window survives into roundOver/over, ever
     },
     privateStates,
@@ -333,10 +334,7 @@ function makeValidator(
           }
           // Rule ON: stackDraw logic
           if (publicState.pendingStack !== null) {
-            // Continue the stack: card kind must match
-            if (publicState.pendingStack.kind !== 'draw2') {
-              return { ok: false, reason: 'must stack a matching card or draw the pile' }
-            }
+            // Continue the stack — card kind match already verified at the top-level gate
             return {
               ok: true,
               publicState: {
@@ -375,11 +373,7 @@ function makeValidator(
             privateStates: newPrivateStates,
           }
         case 'wild4':
-          // Check if a stack is pending and this card doesn't match
-          if (publicState.pendingStack !== null && publicState.pendingStack.kind !== 'wild4') {
-            return { ok: false, reason: 'must stack a matching card or draw the pile' }
-          }
-          // Same as wild; the draw-4 + skip happens once the color is chosen.
+          // Same as wild; the draw-4 + skip happens once the color is chosen (card kind match already verified at the top gate).
           return {
             ok: true,
             publicState: {

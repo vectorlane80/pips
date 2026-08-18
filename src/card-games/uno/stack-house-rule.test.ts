@@ -81,7 +81,7 @@ describe('stackDraw house rule def', () => {
     expect(stackDrawDef).toEqual({
       key: 'stackDraw',
       label: 'Stack draw cards',
-      description: 'Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing - it keeps growing until someone can\'t or won\'t continue it.',
+      description: "Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing — it keeps growing until someone can't or won't continue it.",
       default: false,
     })
   })
@@ -118,7 +118,7 @@ describe('PLAY_CARD draw2 with stackDraw OFF (regression)', () => {
   it('behaves byte-identical to before: immediate draw-2, skipNext', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: false },
-      hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },   // p1 has red draw2
+      hands: { p1: cards('uno-23', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has red draw2 + yellow 3
       discard: cards('uno-9'),   // red 5
     })
     const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-23' })
@@ -135,7 +135,7 @@ describe('CHOOSE_COLOR wild4 with stackDraw OFF (regression)', () => {
   it('behaves byte-identical to before: immediate draw-4, skipNext', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: false },
-      hands: { p1: cards('uno-105'), p2: [], p3: [], p4: [] },   // p1 has wild4
+      hands: { p1: cards('uno-105', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has wild4 + yellow 3
       discard: cards('uno-9'),
     })
     let r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-105' })
@@ -158,7 +158,7 @@ describe('PLAY_CARD draw2 with stackDraw ON (opening)', () => {
   it('opens a stack instead of drawing: pendingStack set, turn advances normally', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: true },
-      hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },   // p1 has red draw2
+      hands: { p1: cards('uno-23', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has red draw2 + yellow 3
       discard: cards('uno-9'),   // red 5
     })
     const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-23' })
@@ -263,7 +263,7 @@ describe('wild4 stack end-to-end with stackDraw ON', () => {
   it('opens with PLAY_CARD wild4 then CHOOSE_COLOR', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: true },
-      hands: { p1: cards('uno-105'), p2: [], p3: [], p4: [] },
+      hands: { p1: cards('uno-105', 'uno-30'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
     })
     let r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-105' })
@@ -282,7 +282,7 @@ describe('wild4 stack end-to-end with stackDraw ON', () => {
   it('continues with another wild4', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: true },
-      hands: { p1: [], p2: cards('uno-105'), p3: [], p4: [] },
+      hands: { p1: [], p2: cards('uno-105', 'uno-30'), p3: [], p4: [] },
       discard: cards('uno-9'),
       currentIndex: 1,
       pendingStack: { kind: 'wild4', total: 4 },
@@ -330,6 +330,7 @@ describe('no mixing of stack families', () => {
     })
     const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-105' })
     expect(r.outcome.ok).toBe(false)
+    expect(r.outcome.reason).toBe('must stack a matching card or draw the pile')
   })
 
   it('wild4 stack rejects draw2', () => {
@@ -341,6 +342,7 @@ describe('no mixing of stack families', () => {
     })
     const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-23' })
     expect(r.outcome.ok).toBe(false)
+    expect(r.outcome.reason).toBe('must stack a matching card or draw the pile')
   })
 })
 
@@ -372,6 +374,7 @@ describe('going out mid-stack', () => {
     expect(r.outcome.ok).toBe(true)
     const pub = r.uno.session.publicState
     expect(pub.stage).toBe('roundOver')
+    expect(pub.pendingStack).toBe(null)
     expect(pub.roundResult?.outPlayerId).toBe('p1')
   })
 })
@@ -411,7 +414,7 @@ describe('Uno-call window with stacking', () => {
     expect(pub.unoWindow).toEqual({ playerId: 'p1' })
   })
 
-  it('opens when DRAW_CARD accepting a large stack leaves player at 1 card', () => {
+  it('does not open when DRAW_CARD accepting a large stack leaves player at > 1 card', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: true },
       hands: {
@@ -428,7 +431,7 @@ describe('Uno-call window with stacking', () => {
     expect(r.outcome.ok).toBe(true)
     const pub = r.uno.session.publicState
     expect(pub.handCounts.p1).toBe(7)   // 1 + 6 = 7
-    expect(pub.unoWindow).toBe(null)   // doesn't open since 7 != 1
+    expect(pub.unoWindow).toBe(null)   // window opened only if final hand === 1
   })
 })
 
