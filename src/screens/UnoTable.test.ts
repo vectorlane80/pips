@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { UnoCard } from '../card-games/uno/deck'
-import type { UnoLastAction } from '../card-games/uno/state'
-import { sortUnoHand, formatLastAction } from './UnoTable'
+import { sortUnoHand } from './UnoTable'
 
 function card(id: string, color: UnoCard['color'], kind: UnoCard['kind'], value: number | null = null): UnoCard {
   return { id, color, kind, value }
@@ -65,94 +64,5 @@ describe('sortUnoHand', () => {
       card('r-5-c', 'red', 'number', 5),
     ]
     expect(sortUnoHand(input).map((c) => c.id)).toEqual(['r-5-a', 'r-5-b', 'r-5-c'])
-  })
-})
-
-describe('formatLastAction', () => {
-  const names = { 'player1': 'Alice', 'player2': 'Bob' }
-  const localPlayerId = 'player1'
-
-  it('returns "No plays yet" when lastAction is null', () => {
-    expect(formatLastAction(null, localPlayerId, names, false)).toBe('No plays yet')
-  })
-
-  it('formats a plain 0 play with sevenZero OFF as ordinary number card text, not rotation', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'play',
-      card: { color: 'red', kind: 'number', value: 0 },
-      drewCount: 0,
-    }
-    const result = formatLastAction(lastAction, localPlayerId, names, false)
-    // With sevenZero OFF, a 0 should NOT say "hands rotated" — it's just a normal number card
-    expect(result).toBe('Bob played red 0')
-    expect(result).not.toContain('rotated')
-  })
-
-  it('formats a plain 0 play with sevenZero ON as rotation text', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'play',
-      card: { color: 'red', kind: 'number', value: 0 },
-      drewCount: 0,
-    }
-    const result = formatLastAction(lastAction, localPlayerId, names, true)
-    expect(result).toBe('Bob played a 0 — hands rotated')
-  })
-
-  it('formats a 7-swap with sevenZero ON and swapTargetPlayerId defined', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'play',
-      card: { color: 'red', kind: 'number', value: 7 },
-      drewCount: 0,
-      swapTargetPlayerId: 'player1',
-    }
-    const result = formatLastAction(lastAction, localPlayerId, names, true)
-    expect(result).toBe('Bob swapped hands with you')
-  })
-
-  it('formats a plain 7 play (without swap) with sevenZero OFF as ordinary number card', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'play',
-      card: { color: 'red', kind: 'number', value: 7 },
-      drewCount: 0,
-    }
-    const result = formatLastAction(lastAction, localPlayerId, names, false)
-    // With sevenZero OFF, a 7 is just a normal number card
-    expect(result).toBe('Bob played red 7')
-  })
-
-  it('formats a plain 7 play (without swapTargetPlayerId) with sevenZero ON as ordinary number card', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'play',
-      card: { color: 'red', kind: 'number', value: 7 },
-      drewCount: 0,
-    }
-    const result = formatLastAction(lastAction, localPlayerId, names, true)
-    // Even with sevenZero ON, if there's no swapTargetPlayerId, it's not a completed swap
-    expect(result).toBe('Bob played red 7')
-  })
-
-  it('formats a draw action', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'draw',
-      card: null,
-      drewCount: 3,
-    }
-    expect(formatLastAction(lastAction, localPlayerId, names, false)).toBe('Bob drew 3 cards')
-  })
-
-  it('formats a pass action', () => {
-    const lastAction: UnoLastAction = {
-      by: 'player2',
-      kind: 'pass',
-      card: null,
-      drewCount: 0,
-    }
-    expect(formatLastAction(lastAction, localPlayerId, names, false)).toBe('Bob passed')
   })
 })

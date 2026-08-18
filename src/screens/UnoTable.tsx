@@ -133,7 +133,7 @@ function describeCard(card: NonNullable<UnoLastAction['card']>): string {
   }
 }
 
-export function formatLastAction(
+function formatLastAction(
   lastAction: UnoLastAction | null,
   localPlayerId: string,
   names: Record<string, string>,

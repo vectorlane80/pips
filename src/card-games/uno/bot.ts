@@ -42,9 +42,9 @@ export const unoBotStrategy: BotStrategy<UnoPublicState, UnoPrivateState, UnoAct
     let minCards = Infinity
     for (const seatPlayerId of publicState.seatOrder) {
       if (seatPlayerId === playerId) continue
-      const cardCount = publicState.handCounts[seatPlayerId] ?? 0
-      if (cardCount < minCards) {
-        minCards = cardCount
+      const seatCardCount = publicState.handCounts[seatPlayerId] ?? 0
+      if (seatCardCount < minCards) {
+        minCards = seatCardCount
         targetPlayerId = seatPlayerId
       }
     }
