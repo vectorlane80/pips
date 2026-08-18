@@ -2628,7 +2628,7 @@ export default function App() {
   // loop re-evaluates after a draw that doesn't advance the turn.
   function unoActorKey(uno: UnoSession): string {
     const ps = uno.session.publicState
-    return `${ps.stage}:${ps.turn.turnNumber}:${ps.hasDrawnThisTurn}:${ps.pendingWild !== null}:${ps.stockCount}:${ps.discardPile.cards.length}`
+    return `${ps.stage}:${ps.turn.turnNumber}:${ps.hasDrawnThisTurn}:${ps.pendingWild !== null}:${ps.pendingSevenSwap !== null}:${ps.stockCount}:${ps.discardPile.cards.length}`
   }
 
   function unoStale(key: string) {

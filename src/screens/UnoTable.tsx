@@ -133,23 +133,24 @@ function describeCard(card: NonNullable<UnoLastAction['card']>): string {
   }
 }
 
-function formatLastAction(
+export function formatLastAction(
   lastAction: UnoLastAction | null,
   localPlayerId: string,
   names: Record<string, string>,
+  sevenZero: boolean,
 ): string {
   if (lastAction === null) return 'No plays yet'
   const who = lastAction.by === localPlayerId ? 'You' : (names[lastAction.by] ?? lastAction.by)
   switch (lastAction.kind) {
     case 'play': {
       if (lastAction.card === null) return `${who} played a card`
-      // Check for 7-swap
-      if (lastAction.card.value === 7 && lastAction.swapTargetPlayerId !== undefined) {
+      // Check for 7-swap (only when sevenZero rule is enabled and swap actually happened)
+      if (sevenZero && lastAction.card.value === 7 && lastAction.swapTargetPlayerId !== undefined) {
         const targetName = lastAction.swapTargetPlayerId === localPlayerId ? 'you' : (names[lastAction.swapTargetPlayerId] ?? lastAction.swapTargetPlayerId)
         return `${who} swapped hands with ${targetName}`
       }
-      // Check for 0-rotation
-      if (lastAction.card.value === 0) {
+      // Check for 0-rotation (only when sevenZero rule is enabled)
+      if (sevenZero && lastAction.card.value === 0) {
         return `${who} played a 0 — hands rotated`
       }
       const base = `${who} played ${describeCard(lastAction.card)}`
@@ -265,7 +266,7 @@ export function UnoTable({
   // pendingStack check is redundant: hasDrawnThisTurn is false while a stack is pending (set together in rules.ts,
   // see the PLAY_CARD draw2 branch and the CHOOSE_COLOR wild4 branch in rules.ts), so it's already enforced above.
   // Kept for defensive clarity that showPass must be false during a stack.
-  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingStack === null
+  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingSevenSwap === null && publicState.pendingStack === null
   const targetText = `first to ${UNO_TARGET}`
   const catchStaggered = useCatchStagger(publicState.unoWindow, localPlayerId)
 
@@ -449,8 +450,8 @@ export function UnoTable({
     [hand, knownCardIds],
   )
   const logLine = useMemo(
-    () => formatLastAction(publicState.lastAction, localPlayerId, names),
-    [publicState.lastAction, localPlayerId, names],
+    () => formatLastAction(publicState.lastAction, localPlayerId, names, publicState.houseRules.sevenZero),
+    [publicState.lastAction, localPlayerId, names, publicState.houseRules.sevenZero],
   )
   const status = useMemo(
     () => computeStatus(publicState, isMyTurn, localPlayerId, names, hasPlayable),

@@ -436,25 +436,25 @@ function makeValidator(
       if (publicState.pendingSevenSwap === null) return { ok: false, reason: 'no 7-swap pending' }
       if (action.targetPlayerId === playerId) return { ok: false, reason: 'cannot swap with yourself' }
       if (!publicState.seatOrder.includes(action.targetPlayerId)) return { ok: false, reason: 'target player not seated' }
-      // Swap hands
-      const myNewHand = privateStates[action.targetPlayerId].hand
-      const targetNewHand = privateStates[playerId].hand
+      // Swap hands: the acting player receives the target's hand, and vice versa
+      const actingPlayerReceives = privateStates[action.targetPlayerId].hand
+      const targetReceives = privateStates[playerId].hand
       const newPrivateStates = {
         ...privateStates,
-        [playerId]: { hand: myNewHand },
-        [action.targetPlayerId]: { hand: targetNewHand },
+        [playerId]: { hand: actingPlayerReceives },
+        [action.targetPlayerId]: { hand: targetReceives },
       }
       // Update handCounts
       const newHandCounts = {
         ...publicState.handCounts,
-        [playerId]: cardCount(myNewHand),
-        [action.targetPlayerId]: cardCount(targetNewHand),
+        [playerId]: cardCount(actingPlayerReceives),
+        [action.targetPlayerId]: cardCount(targetReceives),
       }
       // Determine Uno-call window priority: check acting player first, then target
       let newUnoWindow: { playerId: string } | null = null
-      if (cardCount(myNewHand) === 1) {
+      if (cardCount(actingPlayerReceives) === 1) {
         newUnoWindow = { playerId }
-      } else if (cardCount(targetNewHand) === 1) {
+      } else if (cardCount(targetReceives) === 1) {
         newUnoWindow = { playerId: action.targetPlayerId }
       }
       return {
