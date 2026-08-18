@@ -84,7 +84,7 @@ export const UNO_HOUSE_RULE_DEFS: UnoHouseRuleDef[] = [
   {
     key: 'drawUntilPlayable',
     label: 'Draw until you can play',
-    description: "Keep drawing from the stock until you draw a card you can play, instead of drawing just one and passing if it isn't playable.",
+    description: 'Keep drawing from the stock until you draw a card you can play, instead of drawing just one and passing if it isn’t playable.',
     default: false,
   },
   {

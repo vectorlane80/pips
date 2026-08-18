@@ -466,7 +466,7 @@ function makeValidator(
       // When a stack is pending, accept DRAW_CARD unconditionally
       if (publicState.pendingStack !== null) {
         const draw = drawFromStock(currentStock, publicState.discardPile, publicState.pendingStack.total, rng)
-        if (!draw.ok) return blockedRound(publicState, privateStates)
+        if (!draw.ok) return blockedRound({ ...publicState, pendingStack: null }, privateStates)
         onStockChange(draw.stock)
         const newHand = addCards(myHand, draw.drawn)
         return {

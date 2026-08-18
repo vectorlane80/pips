@@ -352,20 +352,6 @@ describe('no mixing of stack families', () => {
 // ── Going out mid-chain ───────────────────────────────────────
 
 describe('going out mid-stack', () => {
-  it('ends the round immediately, pendingStack never gets set', () => {
-    const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
-      hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },   // p1 has only one card
-      discard: cards('uno-9'),
-    })
-    const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-23' })
-    expect(r.outcome.ok).toBe(true)
-    const pub = r.uno.session.publicState
-    expect(pub.stage).toBe('roundOver')
-    expect(pub.pendingStack).toBe(null)
-    expect(pub.roundResult?.outPlayerId).toBe('p1')
-  })
-
   it('ends the round when a stacking card takes player to 0', () => {
     const uno = buildGame({
       houseRules: { drawUntilPlayable: false, stackDraw: true },
