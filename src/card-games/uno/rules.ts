@@ -285,23 +285,25 @@ function makeValidator(
               const destPlayerId = publicState.seatOrder[i]
               rotation[destPlayerId] = allPrivateStates[sourcePlayerId].hand
             }
-            const newPrivateStatesRotated: Record<string, UnoPrivateState> = {}
-            const newHandCountsRotated: Record<string, number> = {}
+            const rotatedPrivateStates: Record<string, UnoPrivateState> = {}
+            const rotatedHandCounts: Record<string, number> = {}
             for (const seatedPlayer of publicState.seatOrder) {
-              newPrivateStatesRotated[seatedPlayer] = { hand: rotation[seatedPlayer] }
-              newHandCountsRotated[seatedPlayer] = cardCount(rotation[seatedPlayer])
+              // Update Zone id/ownerId to match the new owner (follow createHand pattern)
+              const updatedHand = { ...rotation[seatedPlayer], id: `hand:${seatedPlayer}`, ownerId: seatedPlayer }
+              rotatedPrivateStates[seatedPlayer] = { hand: updatedHand }
+              rotatedHandCounts[seatedPlayer] = cardCount(updatedHand)
             }
             return {
               ok: true,
               publicState: {
                 ...publicBase,
                 activeColor: card.color as UnoColor,
-                handCounts: newHandCountsRotated,
+                handCounts: rotatedHandCounts,
                 hasDrawnThisTurn: false,
                 turn: advanceTurn(publicState.turn, 'play'),
                 unoWindow: null,
               },
-              privateStates: newPrivateStatesRotated,
+              privateStates: rotatedPrivateStates,
             }
           }
           return {
@@ -437,8 +439,11 @@ function makeValidator(
       if (action.targetPlayerId === playerId) return { ok: false, reason: 'cannot swap with yourself' }
       if (!publicState.seatOrder.includes(action.targetPlayerId)) return { ok: false, reason: 'target player not seated' }
       // Swap hands: the acting player receives the target's hand, and vice versa
-      const actingPlayerReceives = privateStates[action.targetPlayerId].hand
-      const targetReceives = privateStates[playerId].hand
+      let actingPlayerReceives = privateStates[action.targetPlayerId].hand
+      let targetReceives = privateStates[playerId].hand
+      // Update Zone id/ownerId to match their new owners (follow createHand pattern: id: `hand:${playerId}`, ownerId: playerId)
+      actingPlayerReceives = { ...actingPlayerReceives, id: `hand:${playerId}`, ownerId: playerId }
+      targetReceives = { ...targetReceives, id: `hand:${action.targetPlayerId}`, ownerId: action.targetPlayerId }
       const newPrivateStates = {
         ...privateStates,
         [playerId]: { hand: actingPlayerReceives },

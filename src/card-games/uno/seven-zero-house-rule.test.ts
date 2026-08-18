@@ -435,7 +435,7 @@ describe('seven-zero with 2 players', () => {
     expect(r.uno.session.privateStates.p2.hand.cards.map((c) => c.id)).toEqual(['uno-1'])
   })
 
-  it('0-rotation in 2-player acts as normal number card (no rotation of self)', () => {
+  it('0-rotation in 2-player: general rotation logic degenerates to a hand swap', () => {
     const uno = buildGame({
       players: ['p1', 'p2'],
       houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: true },

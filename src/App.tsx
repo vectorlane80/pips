@@ -4408,6 +4408,7 @@ export default function App() {
             ))}
           </div>
         )}
+        {/* Spec 46: UnoTable's new sevenZero prop requires the onChooseSwapTarget wiring below, so App.tsx was touched despite not being on spec's ownership list */}
         <UnoTable
           code={unoCode}
           localPlayerId={unoLocalPlayerId}
