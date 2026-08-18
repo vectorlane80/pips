@@ -739,15 +739,17 @@ export function UnoTable({
                   <span className="uno-color-picker-label">Choose a player to swap with</span>
                   <div className="uno-color-swatches">
                     {others.map(({ id, name, color }) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className="uno-color-swatch"
-                        style={{ background: color }}
-                        onClick={() => onChooseSwapTarget(id)}
-                        aria-label={`Swap with ${name}`}
-                        title={name}
-                      />
+                      <div key={id} className="uno-swap-target-button">
+                        <button
+                          type="button"
+                          className="uno-color-swatch"
+                          style={{ background: color }}
+                          onClick={() => onChooseSwapTarget(id)}
+                          aria-label={`Swap with ${name}`}
+                          title={name}
+                        />
+                        <span className="uno-swap-target-name">{name}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

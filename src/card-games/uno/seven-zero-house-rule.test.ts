@@ -26,6 +26,7 @@ function buildGame(config: {
   players?: string[]
   stage?: UnoPublicState['stage']
   currentIndex?: number
+  direction?: 1 | -1
   activeColor?: UnoColor
   discard?: UnoCard[]
   stock?: UnoCard[]
@@ -37,6 +38,9 @@ function buildGame(config: {
   const turn = createTurnState<'play'>(players, 'play')
   if (config.currentIndex != null) {
     (turn as { currentIndex: number }).currentIndex = config.currentIndex
+  }
+  if (config.direction != null) {
+    (turn as { direction: number }).direction = config.direction
   }
   const privateStates: Record<string, UnoPrivateState> = {}
   const handCounts: Record<string, number> = {}
@@ -340,6 +344,7 @@ describe('playing a 0 with sevenZero ON', () => {
     const uno = buildGame({
       players: ['p1', 'p2', 'p3'],
       currentIndex: 1,  // p2 is current
+      direction: -1,  // reverse direction
       houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: true },
       hands: {
         p1: cards('uno-1'),  // red 1
@@ -347,8 +352,6 @@ describe('playing a 0 with sevenZero ON', () => {
         p3: cards('uno-20', 'uno-21'),  // red skip + red reverse
       },
     })
-    // Manually set direction to -1 (reverse)
-    uno.session.publicState.turn.direction = -1
     // Play a 0 from p2 in reverse direction
     const r = applyUnoAction(uno, 'p2', { type: 'PLAY_CARD', cardId: 'uno-0' })
     expect(r.outcome.ok).toBe(true)
