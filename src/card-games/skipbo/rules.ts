@@ -225,17 +225,31 @@ function makeValidator(
       }
       const { zone: newHand } = removeCardsById(myState.hand, [action.cardId])
       const { buildPiles, usedPile: newUsed } = playCardOntoPile(card, target, publicState.buildPiles, currentUsedPile)
+      // Real Skip-Bo: if the hand empties mid-turn, immediately draw back up to 5 and KEEP
+      // playing — this is NOT a turn-ending event, so turn/turnNumber stay exactly as they
+      // are. drawToFive recycles the used pool if the draw pile alone runs short and leaves
+      // the hand at 0 in the double-empty edge case (then PASS is still legal, see tests).
+      let drawPile = currentDrawPile
+      let usedPile = newUsed
+      let hand = newHand
+      if (cardCount(newHand) === 0) {
+        const refilled = drawToFive(currentDrawPile, newUsed, newHand, rng)
+        drawPile = refilled.drawPile
+        usedPile = refilled.usedPile
+        hand = refilled.hand
+      }
       return {
         ok: true,
-        drawPile: currentDrawPile,
-        usedPile: newUsed,
+        drawPile,
+        usedPile,
         publicState: {
           ...publicState,
           buildPiles,
-          usedCount: cardCount(newUsed),
-          handCounts: { ...publicState.handCounts, [playerId]: cardCount(newHand) },
+          drawCount: cardCount(drawPile),
+          usedCount: cardCount(usedPile),
+          handCounts: { ...publicState.handCounts, [playerId]: cardCount(hand) },
         },
-        privateStates: { ...privateStates, [playerId]: { ...myState, hand: newHand } },
+        privateStates: { ...privateStates, [playerId]: { ...myState, hand } },
       }
     }
 

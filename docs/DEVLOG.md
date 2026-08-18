@@ -3318,3 +3318,52 @@ shipping each verified charter promptly.
 - **Continue?** No further Skip-Bo work requested. `REQUESTS.md`/
   `farkle.ts` reconciliation is the user's own next step with the
   other session, not mine.
+
+## Cycle 21 — 2026-08-17 — spec 44: mid-turn hand refill
+- **User instruction**: a third real bug, reported before spec 43
+  landed and correctly deferred until it did (spec 43 was actively
+  editing the exact same `PLAY_HAND` branch this fix needed) — playing
+  all 5 hand cards down to 0 mid-turn left the player stuck: no
+  `DISCARD` possible (hand empty), `PASS` only legal if the hand was
+  ALREADY empty at turn start. Real Skip-Bo's actual rule: if your
+  hand empties before your turn is over, immediately redraw to 5 and
+  keep playing — it's not a turn-ending event.
+- **Shipped**: `specs/44-skipbo-midturn-hand-refill.md`. In
+  `PLAY_HAND`'s success path, after computing the post-play hand: if
+  it's now empty, immediately call the EXISTING `drawToFive` helper
+  (zero changes to the helper itself, spec 40 already built it
+  correctly) for the SAME player, same turn — `turn`/`turnNumber`
+  untouched, no `advanceTurn` call anywhere in this path. `PLAY_STOCK`/
+  `PLAY_DISCARD` need no equivalent change since neither can ever
+  reduce a hand to 0 (only `PLAY_HAND` removes hand cards).
+- **Verification**: re-ran `npx tsc -b --noEmit` (silent), `npm test`
+  (1024/1024, 1021 baseline + 3 new), `npm run build` (clean) myself.
+  Read the actual `PLAY_HAND` branch directly — confirmed `turn` is
+  only ever spread unmodified from `publicState`, never touched by the
+  refill path.
+- **A real, correctly-diagnosed side effect**: two PRE-EXISTING tests
+  ("clears a pile into the used pool when a 12 completes it," "a wild
+  can complete a pile too") started failing after the fix — not a
+  regression, but the new spec-mandated behavior firing correctly:
+  both tests played a single hand card that both completed a pile AND
+  emptied the hand, so the new mid-turn refill now correctly recycles
+  the used pool that those tests' old assertions expected to stay
+  untouched. Implementer correctly diagnosed this as "old assertions
+  describing the pre-fix world" rather than a bug in the new code, and
+  fixed the actual defect (gave those tests a second unplayed hand
+  card so they stay focused on pile-completion mechanics, with the
+  refill's own coverage living in its dedicated test block) rather
+  than weakening the assertions to paper over it.
+- **Review**: personally — small, precise, pure-engine change (no new
+  privacy/wiring surface), verified directly by reading the actual
+  diff rather than a full delegated Oscar pass, proportionate to the
+  fix's size. Confirmed correct: reuses `drawToFive` with no
+  modification, never touches `turn`, and the 3 new tests target
+  exactly the right scenarios (normal refill-and-continue, used-pool
+  recycle mid-refill, the genuine double-empty edge case where `PASS`
+  remains the correct escape hatch).
+- **Landed**: `specs/44-skipbo-midturn-hand-refill.md` + the fix,
+  committed and pushed, scoped to exactly the two files spec 44
+  authorized — `REQUESTS.md`/`Die.tsx`/`FarkleTable.tsx`/
+  `components.css` (the other session's active work) left untouched.
+- **Continue?** No further Skip-Bo work requested.

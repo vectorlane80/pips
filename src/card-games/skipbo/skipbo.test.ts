@@ -353,7 +353,10 @@ describe('pile completion (12 → clear → 1)', () => {
 
   it('clears a pile into the used pool when a 12 completes it, then restarts at 1', () => {
     const game = buildSession({
-      hands: { p1: ['sb-132'] },   // rank 12
+      hands: { p1: ['sb-132', 'sb-24'] },   // rank 12 + an unplayed second card so the hand
+                                            // does NOT empty (the mid-turn refill that would
+                                            // otherwise recycle this used pool is covered in
+                                            // the dedicated 'mid-turn hand refill' block)
       buildPiles: [{ cards: eleven, nextNeeded: 12 }, { cards: [], nextNeeded: 1 }, { cards: [], nextNeeded: 1 }, { cards: [], nextNeeded: 1 }],
     })
     const result = applySkipBoAction(game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-132', buildPileIndex: 0 })
@@ -367,7 +370,8 @@ describe('pile completion (12 → clear → 1)', () => {
 
   it('a wild can complete a pile too', () => {
     const game = buildSession({
-      hands: { p1: ['sb-144'] },
+      hands: { p1: ['sb-144', 'sb-24'] },   // same as above — second card keeps the hand from
+                                            // emptying so this stays a pile-completion test
       buildPiles: [{ cards: eleven, nextNeeded: 12 }, { cards: [], nextNeeded: 1 }, { cards: [], nextNeeded: 1 }, { cards: [], nextNeeded: 1 }],
     })
     const result = applySkipBoAction(game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-144', buildPileIndex: 0 })
@@ -613,6 +617,86 @@ describe('draw pile and used pool', () => {
     const result = applySkipBoAction(game, 'p1', { type: 'DISCARD', cardId: 'sb-0', pileIndex: 0 })
     expect(result.outcome.ok).toBe(true)
     expect(result.game.session.publicState.handCounts['p2']).toBe(0)
+  })
+})
+
+// ── mid-turn hand refill (PLAY_HAND emptying the hand) ────────
+
+describe('mid-turn hand refill', () => {
+  it('refills the hand to 5 via PLAY_HAND without advancing the turn, and the player keeps playing', () => {
+    const game = buildSession({
+      hands: { p1: ['sb-0'] },   // rank 1 — the player's LAST hand card
+      drawCardIds: ['sb-24', 'sb-36', 'sb-48', 'sb-60', 'sb-12'],  // top is sb-12 (rank 2)
+    })
+    const result = applySkipBoAction(game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-0', buildPileIndex: 0 })
+    expect(result.outcome.ok).toBe(true)
+    const pub = result.game.session.publicState
+    // the emptied hand is immediately refilled to 5 from the draw pile
+    expect(pub.handCounts['p1']).toBe(5)
+    expect(pub.drawCount).toBe(0)
+    expect(result.game.session.privateStates['p1'].hand.cards.map((c) => c.id)).toEqual([
+      'sb-12', 'sb-60', 'sb-48', 'sb-36', 'sb-24',
+    ])   // topCard order — first drawn is the draw pile's top
+    // the turn is UNCHANGED — same player, same turn number
+    expect(currentPlayer(pub.turn)).toBe('p1')
+    expect(pub.turn.turnNumber).toBe(1)
+    expect(pub.turn.phase).toBe('play')
+    expect(pub.buildPiles[0].cards.map((c) => c.id)).toEqual(['sb-0'])
+    expect(pub.buildPiles[0].nextNeeded).toBe(2)
+    // p1 keeps their turn and can immediately act again with the fresh hand
+    const again = applySkipBoAction(result.game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-12', buildPileIndex: 0 })
+    expect(again.outcome.ok).toBe(true)
+    const againPub = again.game.session.publicState
+    expect(againPub.buildPiles[0].cards.map((c) => c.id)).toEqual(['sb-0', 'sb-12'])
+    expect(againPub.handCounts['p1']).toBe(4)   // played from the fresh 5, no refill needed
+    expect(currentPlayer(againPub.turn)).toBe('p1')
+    expect(againPub.turn.turnNumber).toBe(1)
+  })
+
+  it('recycles the used pool into the draw pile when a mid-turn refill exhausts it', () => {
+    const p1Hand = ['sb-0']
+    const p2Hand = ['sb-1']
+    const draw = ['sb-2', 'sb-3']
+    const used = ['sb-144', 'sb-145', 'sb-146', 'sb-147', 'sb-148', 'sb-149', 'sb-150', 'sb-151']
+    const rest = remainingDeckIds([...p1Hand, ...p2Hand, ...draw, ...used])
+    const game = buildSession({
+      hands: { p1: p1Hand, p2: p2Hand },
+      stocks: { p1: rest.slice(0, 40), p2: rest.slice(40) },
+      drawCardIds: draw,
+      usedCardIds: used,
+    })
+    expect(totalCards(game, ['p1', 'p2'])).toBe(162)
+
+    const result = applySkipBoAction(game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-0', buildPileIndex: 0 })
+    expect(result.outcome.ok).toBe(true)
+    const pub = result.game.session.publicState
+    // p1 needs 5: draws the 2 remaining draw cards, then 3 more from the 8 recycled cards
+    expect(pub.handCounts['p1']).toBe(5)
+    expect(pub.drawCount).toBe(5)
+    expect(pub.usedCount).toBe(0)
+    // still a mid-turn refill — no turn advance
+    expect(currentPlayer(pub.turn)).toBe('p1')
+    expect(pub.turn.turnNumber).toBe(1)
+    expect(totalCards(result.game, ['p1', 'p2'])).toBe(162)
+  })
+
+  it('double-empty edge case: hand stays 0 without throwing, and PASS remains legal', () => {
+    const game = buildSession({
+      hands: { p1: ['sb-0'], p2: ['sb-1'] },
+    })   // no draw pile, no used pool
+    const result = applySkipBoAction(game, 'p1', { type: 'PLAY_HAND', cardId: 'sb-0', buildPileIndex: 0 })
+    expect(result.outcome.ok).toBe(true)
+    const pub = result.game.session.publicState
+    expect(pub.handCounts['p1']).toBe(0)   // refill attempt found nothing
+    expect(pub.drawCount).toBe(0)
+    expect(pub.usedCount).toBe(0)
+    expect(currentPlayer(pub.turn)).toBe('p1')
+    expect(pub.turn.turnNumber).toBe(1)
+    // the hand genuinely IS 0 — PASS is the turn-ending escape hatch for this edge case
+    const pass = applySkipBoAction(result.game, 'p1', { type: 'PASS' })
+    expect(pass.outcome.ok).toBe(true)
+    expect(currentPlayer(pass.game.session.publicState.turn)).toBe('p2')
+    expect(pass.game.session.publicState.turn.turnNumber).toBe(2)
   })
 })
 
