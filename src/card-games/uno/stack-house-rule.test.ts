@@ -10,6 +10,7 @@ import {
   type UnoSession,
 } from './state.ts'
 import { applyUnoAction } from './rules.ts'
+import { unoBotStrategy } from './bot.ts'
 import { createHostSession } from '../../engine/sync.ts'
 import { createTurnState, currentPlayer } from '../../engine/turn-engine.ts'
 import { createRng } from '../../engine/rng.ts'
@@ -33,6 +34,7 @@ function buildGame(config: {
   scores?: Record<string, number>
   houseRules?: Record<UnoHouseRuleKey, boolean>
   pendingStack?: UnoPublicState['pendingStack']
+  unoWindow?: UnoPublicState['unoWindow']
 } = {}): UnoSession {
   const players = config.players ?? PLAYERS
   const turn = createTurnState<'play'>(players, 'play')
@@ -60,7 +62,7 @@ function buildGame(config: {
     hasDrawnThisTurn: false,
     pendingWild: null,
     pendingStack: config.pendingStack ?? null,
-    unoWindow: null,
+    unoWindow: config.unoWindow ?? null,
     scores: config.scores ?? Object.fromEntries(players.map((p) => [p, 0])),
     roundResult: null,
     matchWinnerId: null,
@@ -254,6 +256,7 @@ describe('PLAY_CARD with pendingStack active (non-matching rejection)', () => {
     })
     const r = applyUnoAction(uno, 'p1', { type: 'PLAY_CARD', cardId: 'uno-105' })
     expect(r.outcome.ok).toBe(false)
+    expect(r.outcome.reason).toBe('must stack a matching card or draw the pile')
   })
 })
 
@@ -433,6 +436,32 @@ describe('Uno-call window with stacking', () => {
     expect(pub.handCounts.p1).toBe(7)   // 1 + 6 = 7
     expect(pub.unoWindow).toBe(null)   // window opened only if final hand === 1
   })
+
+  it('clears stale window from a different player when DRAW_CARD accepts the stack', () => {
+    // Set up a state where there's a stale unoWindow from a previous player
+    // (e.g., p2 played a card leaving them at 1 card), then p3 accepts a pending
+    // stack draw. The stale window should be cleared (even though p3's draw will
+    // increase their hand, not leave them at 1).
+    const uno = buildGame({
+      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      hands: {
+        p1: [],
+        p2: cards('uno-30'),   // p2 at 1 card (has stale window)
+        p3: cards('uno-65'),   // p3 at 1 card; will draw 4 and end at 5
+        p4: [],
+      },
+      stock: cards('uno-38', 'uno-13', 'uno-63', 'uno-77'),
+      discard: cards('uno-9'),
+      currentIndex: 2,   // p3's turn
+      pendingStack: { kind: 'draw2', total: 4 },
+      unoWindow: { playerId: 'p2' },   // stale window from p2
+    })
+    const r = applyUnoAction(uno, 'p3', { type: 'DRAW_CARD' })
+    expect(r.outcome.ok).toBe(true)
+    const pub = r.uno.session.publicState
+    expect(pub.handCounts.p3).toBe(5)   // 1 + 4 = 5
+    expect(pub.unoWindow).toBe(null)   // stale window cleared, p3 doesn't get a new one since 5 != 1
+  })
 })
 
 // ── pendingStack field initialization and reset ────────────────
@@ -455,5 +484,93 @@ describe('pendingStack field lifecycle', () => {
     const pub = r.uno.session.publicState
     expect(pub.stage).toBe('play')
     expect(pub.pendingStack).toBe(null)
+  })
+})
+
+// ── Bot strategy with stacking (regression for pendingWild/pendingStack interplay) ────
+
+describe('unoBotStrategy with stacking', () => {
+  it('chooses color when continuing a wild4 stack (pendingWild + pendingStack both non-null)', () => {
+    // This is the critical case that broke in round 1: a bot plays a wild4 to continue
+    // a wild4 stack. At this point, pendingWild is set (color choice pending) but
+    // pendingStack is also still set (we're in the middle of a stack). The bot must
+    // return CHOOSE_COLOR to handle the color choice, not PLAY_CARD/DRAW_CARD.
+    // The fix is that pendingWild is checked BEFORE pendingStack in bot.ts.
+    const uno = buildGame({
+      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      hands: {
+        p1: [],
+        p2: cards('uno-105', 'uno-30'),   // p2 has wild4 + yellow 3
+        p3: [],
+        p4: [],
+      },
+      discard: cards('uno-9'),
+      currentIndex: 1,   // p2's turn
+      pendingStack: { kind: 'wild4', total: 4 },   // continuing an existing stack
+    })
+    // p2 plays wild4 to continue the stack
+    const playResult = applyUnoAction(uno, 'p2', { type: 'PLAY_CARD', cardId: 'uno-105' })
+    expect(playResult.outcome.ok).toBe(true)
+    expect(playResult.uno.session.publicState.pendingWild?.isDraw4).toBe(true)
+    expect(playResult.uno.session.publicState.pendingStack?.kind).toBe('wild4')
+
+    // Now the bot strategy is called while BOTH pendingWild and pendingStack are non-null
+    const action = unoBotStrategy(
+      playResult.uno.session.publicState,
+      playResult.uno.session.privateStates['p2'],
+      'p2',
+    )
+    // Must return CHOOSE_COLOR, not PLAY_CARD or DRAW_CARD
+    expect(action.type).toBe('CHOOSE_COLOR')
+    if (action.type === 'CHOOSE_COLOR') {
+      expect(action.color).toBeDefined()
+    }
+  })
+
+  it('plays a matching stack card when pendingStack is active (without pendingWild)', () => {
+    const uno = buildGame({
+      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      hands: {
+        p1: [],
+        p2: cards('uno-23', 'uno-30'),   // p2 has draw2 + yellow 3
+        p3: [],
+        p4: [],
+      },
+      discard: cards('uno-9'),
+      currentIndex: 1,   // p2's turn
+      pendingStack: { kind: 'draw2', total: 4 },
+    })
+    const action = unoBotStrategy(
+      uno.session.publicState,
+      uno.session.privateStates['p2'],
+      'p2',
+    )
+    // Bot should play the matching draw2
+    expect(action.type).toBe('PLAY_CARD')
+    if (action.type === 'PLAY_CARD') {
+      expect(action.cardId).toBe('uno-23')
+    }
+  })
+
+  it('draws the pile when no matching stack card available', () => {
+    const uno = buildGame({
+      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      hands: {
+        p1: [],
+        p2: cards('uno-30', 'uno-65'),   // p2 has yellow 3 and green 8 (no draw2)
+        p3: [],
+        p4: [],
+      },
+      discard: cards('uno-9'),
+      currentIndex: 1,   // p2's turn
+      pendingStack: { kind: 'draw2', total: 4 },
+    })
+    const action = unoBotStrategy(
+      uno.session.publicState,
+      uno.session.privateStates['p2'],
+      'p2',
+    )
+    // Bot should draw the pile
+    expect(action.type).toBe('DRAW_CARD')
   })
 })
