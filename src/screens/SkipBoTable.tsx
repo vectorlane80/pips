@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type { Card } from '../card-engine/cards'
 import type { SkipBoPublicState } from '../card-games/skipbo/state'
-import { chooseBuildPile } from '../card-games/skipbo/rules'
+import { isCardLegalOnPile } from '../card-games/skipbo/rules'
 import { currentPlayer } from '../engine/turn-engine'
 import { DealIntro } from '../components/DealIntro'
 import { SkipBoCard, SkipBoCardBack } from '../components/SkipBoCard'
@@ -23,11 +23,10 @@ export interface SkipBoTableProps {
   notice?: string | null
   publicState: SkipBoPublicState
   hand: Card[]                         // your private hand
-  stockTop: Card | null                // your own stockpile's face-up top card
-  onPlayStock: () => void
-  onPlayHand: (cardId: string) => void
-  onPlayDiscard: (pileIndex: number) => void
-  onDiscard: (cardId: string) => void
+  onPlayStock: (buildPileIndex: number) => void
+  onPlayHand: (cardId: string, buildPileIndex: number) => void
+  onPlayDiscard: (pileIndex: number, buildPileIndex: number) => void
+  onDiscard: (cardId: string, pileIndex: number) => void
   onPass: () => void
   onLeave: () => void
 }
@@ -116,10 +115,14 @@ function computeStatus(
   }
 
   if (!selection) {
-    return { pre: 'Select a card to play, then confirm — or discard a hand card to end your turn.', post: '' }
+    return { pre: 'Select a card, then tap a highlighted pile — or select a hand card and tap a discard pile to end your turn.', post: '' }
   }
 
-  return { pre: 'Selected: ', post: 'Play it, or pick something else.' }
+  if (selection.kind === 'hand') {
+    return { pre: 'Selected: ', post: 'tap a highlighted build pile to play it, or one of your discard piles to end your turn there.' }
+  }
+
+  return { pre: 'Selected: ', post: 'tap a highlighted pile to play it there, or pick something else.' }
 }
 
 // ---- Status display sub-component ----
@@ -145,7 +148,6 @@ export function SkipBoTable({
   notice,
   publicState,
   hand,
-  stockTop,
   onPlayStock,
   onPlayHand,
   onPlayDiscard,
@@ -161,6 +163,7 @@ export function SkipBoTable({
   const isMyTurn = currentId === localPlayerId
   const canAct = isMyTurn && !publicState.roundOver
   const myDiscardTops = publicState.discardTops[localPlayerId] ?? [null, null, null, null]
+  const stockTop = publicState.stockTops[localPlayerId] ?? null
   const humanCount = publicState.seatOrder.filter((id) => !id.startsWith('bot')).length
 
   // ---- Local state ----
@@ -238,8 +241,12 @@ export function SkipBoTable({
   // ---- Computed ----
   const sortedHand = useMemo(() => sortSkipBoHand(hand), [hand])
   const selectedCard = selectionCard(selection, hand, stockTop, myDiscardTops)
-  const playable = canAct && selectedCard !== null && chooseBuildPile(selectedCard, publicState.buildPiles) !== -1
-  const canDiscard = canAct && selection?.kind === 'hand' && selectedCard !== null
+  const legalPileIndices = canAct && selectedCard
+    ? publicState.buildPiles
+      .map((pile, i) => (isCardLegalOnPile(selectedCard, pile) ? i : -1))
+      .filter((i) => i !== -1)
+    : []
+  const isHandSelection = selection?.kind === 'hand'
 
   const status = useMemo(
     () => computeStatus(publicState, isMyTurn, names, localPlayerId, selection),
@@ -255,19 +262,25 @@ export function SkipBoTable({
     [canAct],
   )
 
-  const handlePlay = useCallback(() => {
-    if (!canAct || !selection || !playable) return
-    if (selection.kind === 'stock') onPlayStock()
-    else if (selection.kind === 'hand') onPlayHand(selection.cardId)
-    else onPlayDiscard(selection.pileIndex)
-    setSelection(null)
-  }, [canAct, selection, playable, onPlayStock, onPlayHand, onPlayDiscard])
+  const handlePlayOnto = useCallback(
+    (buildPileIndex: number) => {
+      if (!canAct || !selection || !legalPileIndices.includes(buildPileIndex)) return
+      if (selection.kind === 'stock') onPlayStock(buildPileIndex)
+      else if (selection.kind === 'hand') onPlayHand(selection.cardId, buildPileIndex)
+      else onPlayDiscard(selection.pileIndex, buildPileIndex)
+      setSelection(null)
+    },
+    [canAct, selection, legalPileIndices, onPlayStock, onPlayHand, onPlayDiscard],
+  )
 
-  const handleDiscard = useCallback(() => {
-    if (!canAct || selection?.kind !== 'hand') return
-    onDiscard(selection.cardId)
-    setSelection(null)
-  }, [canAct, selection, onDiscard])
+  const handleDiscardOnto = useCallback(
+    (pileIndex: number) => {
+      if (!canAct || selection?.kind !== 'hand') return
+      onDiscard(selection.cardId, pileIndex)
+      setSelection(null)
+    },
+    [canAct, selection, onDiscard],
+  )
 
   // ---- Render ----
   const others = opponentIds.map((seatId) => ({
@@ -330,6 +343,7 @@ export function SkipBoTable({
             const handCount = publicState.handCounts[seatId] ?? 0
             const fanCount = Math.min(handCount, 14)
             const discardTops = publicState.discardTops[seatId] ?? [null, null, null, null]
+            const seatStockTop = publicState.stockTops[seatId] ?? null
 
             return (
               <div
@@ -364,7 +378,11 @@ export function SkipBoTable({
                 </div>
 
                 <div className="sb-opp-tile-stock">
-                  <SkipBoCardBack size="stock" />
+                  {seatStockTop ? (
+                    <SkipBoCard card={seatStockTop} size="tile" />
+                  ) : (
+                    <span className="sb-empty-tile" />
+                  )}
                   <span className="sb-opp-tile-count">{publicState.stockCounts[seatId] ?? 0} left</span>
                 </div>
 
@@ -387,10 +405,24 @@ export function SkipBoTable({
           <div className="sb-build-piles">
             {publicState.buildPiles.map((pile, i) => {
               const top = pile.cards.length > 0 ? pile.cards[pile.cards.length - 1] : null
+              const playable = legalPileIndices.includes(i)
               return (
                 <div key={i} className="sb-build-pile">
                   <div className="sb-build-caption">needs {pile.nextNeeded}</div>
-                  <div className="sb-build-slot">
+                  <div
+                    className={`sb-build-slot${playable ? ' sb-build-slot--playable' : ''}`}
+                    role={playable ? 'button' : undefined}
+                    tabIndex={playable ? 0 : undefined}
+                    onClick={playable ? () => handlePlayOnto(i) : undefined}
+                    onKeyDown={playable
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handlePlayOnto(i)
+                          }
+                        }
+                      : undefined}
+                  >
                     {top ? (
                       <SkipBoCard card={top} size="tile" />
                     ) : (
@@ -435,20 +467,45 @@ export function SkipBoTable({
             <div className="sb-source-group">
               <div className="sb-source-caption">Your discards</div>
               <div className="sb-discard-row">
-                {myDiscardTops.map((card, i) => (
-                  <div key={i} className="sb-source-slot">
-                    {card ? (
-                      <SkipBoCard
-                        card={card}
-                        size="tile"
-                        selected={selection?.kind === 'discard' && selection.pileIndex === i}
-                        onClick={canAct ? () => handleSelect({ kind: 'discard', pileIndex: i }) : undefined}
-                      />
-                    ) : (
-                      <span className="sb-empty-tile" />
-                    )}
-                  </div>
-                ))}
+                {myDiscardTops.map((card, i) => {
+                  // Fix 3's disambiguation: with a hand card selected, every own
+                  // discard pile is a discard TARGET (empty or not); otherwise a
+                  // non-empty pile is clickable as a play SOURCE.
+                  const discardTarget = isHandSelection
+                  const sourceClickable = !discardTarget && card !== null
+                  const clickable = canAct && (discardTarget || sourceClickable)
+                  const selected = sourceClickable && selection?.kind === 'discard' && selection.pileIndex === i
+                  const handleClick = discardTarget
+                    ? () => handleDiscardOnto(i)
+                    : () => handleSelect({ kind: 'discard', pileIndex: i })
+                  return (
+                    <div
+                      key={i}
+                      className={`sb-source-slot${discardTarget ? ' sb-source-slot--playable' : ''}`}
+                      role={clickable ? 'button' : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      onClick={clickable ? handleClick : undefined}
+                      onKeyDown={clickable
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              handleClick()
+                            }
+                          }
+                        : undefined}
+                    >
+                      {card ? (
+                        <SkipBoCard
+                          card={card}
+                          size="tile"
+                          selected={selected}
+                        />
+                      ) : (
+                        <span className="sb-empty-tile" />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
 
@@ -486,41 +543,16 @@ export function SkipBoTable({
               ))}
             </div>
 
-            {/* Actions row */}
-            {!publicState.roundOver && (
+            {/* Actions row — only Pass remains; play/discard are pile-click actions now */}
+            {!publicState.roundOver && hand.length === 0 && canAct && (
               <div className="sb-actions">
                 <button
                   type="button"
-                  className="btn sb-action-btn"
-                  disabled={!playable}
-                  onClick={handlePlay}
+                  className="btn btn-ghost sb-action-btn"
+                  onClick={onPass}
                 >
-                  Play
+                  Pass
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-coral sb-action-btn"
-                  disabled={!canDiscard}
-                  onClick={handleDiscard}
-                >
-                  Discard
-                </button>
-                {hand.length === 0 && canAct && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost sb-action-btn"
-                    onClick={onPass}
-                  >
-                    Pass
-                  </button>
-                )}
-                <span className="sb-action-hint">
-                  {!selection
-                    ? 'Select a card to play, or discard a hand card to end your turn.'
-                    : playable
-                      ? 'Press Play to put this card on a building pile.'
-                      : 'That card is not playable right now.'}
-                </span>
               </div>
             )}
           </div>

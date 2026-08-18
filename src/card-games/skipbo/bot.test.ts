@@ -39,6 +39,7 @@ function buildSession(config: {
   const stocks: Record<string, Zone> = {}
   const discards: Record<string, Zone[]> = {}
   const stockCounts: Record<string, number> = {}
+  const stockTops: Record<string, Card | null> = {}
   const handCounts: Record<string, number> = {}
   const discardTops: Record<string, (Card | null)[]> = {}
   for (const playerId of seatOrder) {
@@ -52,6 +53,7 @@ function buildSession(config: {
     )
     handCounts[playerId] = handIds.length
     stockCounts[playerId] = stockIds.length
+    stockTops[playerId] = topCard(stocks[playerId]) ?? null
     discardTops[playerId] = discards[playerId].map((pile) => topCard(pile) ?? null)
   }
 
@@ -64,6 +66,7 @@ function buildSession(config: {
     turn,
     seatOrder,
     stockCounts,
+    stockTops,
     handCounts,
     discardTops,
     buildPiles: config.buildPiles
@@ -77,13 +80,14 @@ function buildSession(config: {
 
   const privateStates: Record<string, SkipBoPrivateState> = {}
   for (const playerId of seatOrder) {
-    privateStates[playerId] = { stock: stocks[playerId], hand: hands[playerId], discards: discards[playerId] }
+    privateStates[playerId] = { hand: hands[playerId], discards: discards[playerId] }
   }
 
   return {
     session: createHostSession(publicState, privateStates),
     drawPile: createPublicZone('draw', 'private'),
     usedPile: createPublicZone('used', 'public'),
+    stocks,
     rng: createRng(0),
   }
 }
@@ -100,7 +104,7 @@ describe('skipBoBotStrategy', () => {
       hands: { p1: [r1b] },          // rank 1, also legal
       stocks: { p1: [r1a] },         // rank 1 — legal on any fresh pile
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_STOCK' })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_STOCK', buildPileIndex: 0 })
   })
 
   it('rung 1: plays the stock top even when the hand is empty', () => {
@@ -108,14 +112,14 @@ describe('skipBoBotStrategy', () => {
       hands: { p1: [] },
       stocks: { p1: [r1a] },
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_STOCK' })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_STOCK', buildPileIndex: 0 })
   })
 
   it('rung 1 does not fire when the stock top is legal nowhere', () => {
     const game = buildSession({
       stocks: { p1: [r12a] },        // rank 12, all piles need 1
     })
-    expect(strategyAction(game, 'p1')).not.toEqual({ type: 'PLAY_STOCK' })
+    expect(strategyAction(game, 'p1').type).not.toBe('PLAY_STOCK')
   })
 
   it('rung 2: plays the lowest-index discard pile whose top is legal', () => {
@@ -130,7 +134,7 @@ describe('skipBoBotStrategy', () => {
         ],
       },
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_DISCARD', pileIndex: 1 })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_DISCARD', pileIndex: 1, buildPileIndex: 0 })
   })
 
   it('rung 3: plays the first legal numbered hand card (hand order)', () => {
@@ -145,7 +149,7 @@ describe('skipBoBotStrategy', () => {
         { cards: [], nextNeeded: 1 },
       ],
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: r3 })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: r3, buildPileIndex: 0 })
   })
 
   it('rung 3 fires before rung 4: numbered cards are tried before wilds', () => {
@@ -159,7 +163,7 @@ describe('skipBoBotStrategy', () => {
         { cards: [], nextNeeded: 1 },
       ],
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: r1a })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: r1a, buildPileIndex: 1 })
   })
 
   it('rung 4: plays a wild only when no numbered card is legal', () => {
@@ -173,7 +177,7 @@ describe('skipBoBotStrategy', () => {
         { cards: [], nextNeeded: 7 },
       ],
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: w1 })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: w1, buildPileIndex: 0 })
   })
 
   it('rung 4 always fires for a wild in hand — the bot never discards while a wild can be played', () => {
@@ -190,7 +194,7 @@ describe('skipBoBotStrategy', () => {
         { cards: [], nextNeeded: 7 },
       ],
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: w1 })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'PLAY_HAND', cardId: w1, buildPileIndex: 0 })
   })
 
   it('rung 5: discards the highest-numbered non-wild card when nothing is playable', () => {
@@ -204,7 +208,7 @@ describe('skipBoBotStrategy', () => {
         { cards: [], nextNeeded: 7 },
       ],
     })
-    expect(strategyAction(game, 'p1')).toEqual({ type: 'DISCARD', cardId: r12a })
+    expect(strategyAction(game, 'p1')).toEqual({ type: 'DISCARD', cardId: r12a, pileIndex: 0 })
   })
 
   it('rung 5: passes when the hand is empty and nothing is playable', () => {
@@ -254,7 +258,7 @@ function totalCardCount(game: SkipBoSession, playerIds: string[]): number {
   let total = cardCount(game.drawPile) + cardCount(game.usedPile)
   for (const playerId of playerIds) {
     const priv = game.session.privateStates[playerId]
-    total += cardCount(priv.stock) + cardCount(priv.hand)
+    total += cardCount(game.stocks[playerId]) + cardCount(priv.hand)
     for (const pile of priv.discards) total += cardCount(pile)
   }
   for (const pile of game.session.publicState.buildPiles) total += pile.cards.length

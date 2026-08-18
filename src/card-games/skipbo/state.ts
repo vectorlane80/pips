@@ -25,6 +25,8 @@ export interface SkipBoPublicState {
   turn: TurnState<SkipBoTurnPhase>
   seatOrder: string[]                      // fixed for the whole game, never reordered
   stockCounts: Record<string, number>      // public — every seat's remaining stockpile size
+  stockTops: Record<string, Card | null>   // public — every seat's current stockpile TOP card, face-up
+                                           // to the whole table (null if the stockpile is empty)
   handCounts: Record<string, number>       // public — every seat's current hand size (starts 5)
   discardTops: Record<string, (Card | null)[]>  // public — top card of each of a seat's 4 discard piles (null if empty), length always 4
   buildPiles: SkipBoBuildPile[]            // length 4, shared
@@ -35,22 +37,18 @@ export interface SkipBoPublicState {
 }
 
 export interface SkipBoPrivateState {
-  stock: Zone   // this seat's own stockpile — only its OWN top card identity matters to the owner;
-                // the whole zone goes privately like Rummy's hand (a player can see their own
-                // stock's top card, drawn only when played — they only ever act on
-                // cards.length-1 anyway)
-  hand: Zone
-  discards: Zone[]  // length 4, each a private-owned-but-effectively-public-per-top zone —
-                    // kept in PRIVATE state too (mirrors stock); PublicState.discardTops carries
-                    // only what other seats are allowed to see
+  hand: Zone   // this seat's own hand — genuinely private, only the owner sees it
+  discards: Zone[]  // length 4, each a private-owned-but-effectively-public-per-top zone — the
+                    // full pile identities stay private (like the hand); PublicState.discardTops
+                    // carries only what other seats are allowed to see
 }
 
 export type SkipBoAction =
-  | { type: 'PLAY_STOCK' }
-  | { type: 'PLAY_HAND'; cardId: string }
-  | { type: 'PLAY_DISCARD'; pileIndex: number }   // 0-3, one of the acting player's OWN 4 discard piles
-  | { type: 'DISCARD'; cardId: string }           // ends the turn; engine auto-picks the emptiest of the player's 4 discard piles (ties -> lowest index)
-  | { type: 'PASS' }                              // only legal when hand.cards.length === 0
+  | { type: 'PLAY_STOCK'; buildPileIndex: number }              // 0-3, the DESTINATION build pile the player chose
+  | { type: 'PLAY_HAND'; cardId: string; buildPileIndex: number }
+  | { type: 'PLAY_DISCARD'; pileIndex: number; buildPileIndex: number }  // pileIndex: which of the player's OWN 4 discard piles to play FROM
+  | { type: 'DISCARD'; cardId: string; pileIndex: number }       // 0-3, which of the player's OWN 4 discard piles to land the card on; ends the turn
+  | { type: 'PASS' }                                             // only legal when hand.cards.length === 0
 
 export interface SkipBoSession {
   session: HostSession<SkipBoPublicState, SkipBoPrivateState>
@@ -60,6 +58,10 @@ export interface SkipBoSession {
                    // full zone does
   usedPile: Zone   // host-only — the reshuffle pool of cards cleared off completed building
                    // piles; only usedCount is public, same reasoning as drawPile
+  stocks: Record<string, Zone>  // host-only, never part of HostSession — each seat's full
+                                // stockpile zone. Only the TOP card is ever public
+                                // (PublicState.stockTops), so the full zones live outside the
+                                // generic model exactly like drawPile/usedPile do
   rng: () => number  // host-only, the SAME stateful generator used for the initial shuffle and
                      // every later used-pool recycle shuffle — one seed drives the whole game
 }
@@ -104,20 +106,23 @@ export function createSkipBoGame(playerIds: string[], seed: number): SkipBoSessi
   const turn = createTurnState<SkipBoTurnPhase>(playerIds, 'play')
 
   const stockCounts: Record<string, number> = {}
+  const stockTops: Record<string, Card | null> = {}
   const handCounts: Record<string, number> = {}
   const discardTops: Record<string, (Card | null)[]> = {}
   const privateStates: Record<string, SkipBoPrivateState> = {}
   for (const playerId of playerIds) {
     stockCounts[playerId] = cardCount(stocks[playerId])
+    stockTops[playerId] = topCard(stocks[playerId]) ?? null
     handCounts[playerId] = cardCount(hands[playerId])
     discardTops[playerId] = discards[playerId].map((pile) => topCard(pile) ?? null)
-    privateStates[playerId] = { stock: stocks[playerId], hand: hands[playerId], discards: discards[playerId] }
+    privateStates[playerId] = { hand: hands[playerId], discards: discards[playerId] }
   }
 
   const publicState: SkipBoPublicState = {
     turn,
     seatOrder: playerIds,
     stockCounts,
+    stockTops,
     handCounts,
     discardTops,
     buildPiles: Array.from({ length: 4 }, () => ({ cards: [], nextNeeded: 1 })),
@@ -127,5 +132,5 @@ export function createSkipBoGame(playerIds: string[], seed: number): SkipBoSessi
     winnerId: null,
   }
 
-  return { session: createHostSession(publicState, privateStates), drawPile, usedPile, rng }
+  return { session: createHostSession(publicState, privateStates), drawPile, usedPile, stocks, rng }
 }

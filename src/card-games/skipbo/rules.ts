@@ -8,11 +8,12 @@ import { shuffleDeck } from '../../card-engine/deck.ts'
 import type { SkipBoSession, SkipBoPublicState, SkipBoPrivateState, SkipBoAction, SkipBoBuildPile } from './state.ts'
 
 // The engine's shared ActionOutcome can't carry game-specific host-only zones. Skip-Bo's
-// validator still needs to report how drawPile/usedPile changed, so rules.ts extends the outcome
-// locally and returns the two zones directly — no output-parameter callbacks.
+// validator still needs to report how drawPile/usedPile/stocks changed, so rules.ts extends
+// the outcome locally and returns the zones directly — no output-parameter callbacks.
 type SkipBoOutcome = ActionOutcome<SkipBoPublicState, SkipBoPrivateState> & {
   drawPile?: Zone
   usedPile?: Zone
+  stocks?: Record<string, Zone>
 }
 
 type SkipBoValidator = (
@@ -23,15 +24,20 @@ type SkipBoValidator = (
 
 // ── Building-pile legality and auto-targeting (shared by PLAY_STOCK / PLAY_HAND / PLAY_DISCARD) ──
 
-// The single auto-target: among all piles where the card is legal, pick the one with the most
+// A card's legality on a single pile: a wild satisfies any pile, otherwise the rank must equal
+// the pile's nextNeeded exactly.
+export function isCardLegalOnPile(card: Card, pile: SkipBoBuildPile): boolean {
+  return card.meta?.kind === 'wild' || Number(card.rank) === pile.nextNeeded
+}
+
+// The bots' auto-target: among all piles where the card is legal, pick the one with the most
 // cards already stacked (furthest along); ties go to the lowest index. -1 if legal on no pile.
 export function chooseBuildPile(card: Card, buildPiles: SkipBoBuildPile[]): number {
   let best = -1
   let bestLength = -1
   for (let i = 0; i < buildPiles.length; i++) {
     const pile = buildPiles[i]
-    const legal = card.meta?.kind === 'wild' || Number(card.rank) === pile.nextNeeded
-    if (legal && pile.cards.length > bestLength) {
+    if (isCardLegalOnPile(card, pile) && pile.cards.length > bestLength) {
       bestLength = pile.cards.length
       best = i
     }
@@ -124,9 +130,23 @@ function endTurnAndDrawToFive(
   }
 }
 
+// The bots' discard target: the emptiest of the player's 4 discard piles, ties -> lowest index
+// (loop starts at 0 and only replaces on a strictly-smaller pile, so the lowest index wins
+// ties). Humans choose their own pile client-side; only bots use this auto-pick.
+export function selectEmptiestDiscardPile(discards: Zone[]): number {
+  let emptiestIndex = 0
+  for (let i = 1; i < discards.length; i++) {
+    if (cardCount(discards[i]) < cardCount(discards[emptiestIndex])) {
+      emptiestIndex = i
+    }
+  }
+  return emptiestIndex
+}
+
 function makeValidator(
   currentDrawPile: Zone,
   currentUsedPile: Zone,
+  currentStocks: Record<string, Zone>,
   rng: () => number,
 ): SkipBoValidator {
   return (session, playerId, action) => {
@@ -142,14 +162,21 @@ function makeValidator(
     }
 
     if (action.type === 'PLAY_STOCK') {
-      if (cardCount(myState.stock) === 0) return { ok: false, reason: 'stock is empty' }
-      const card = topCard(myState.stock)!
-      const target = chooseBuildPile(card, publicState.buildPiles)
-      if (target === -1) return { ok: false, reason: 'not a legal play right now' }
-      const { zone: newStock } = removeCardsById(myState.stock, [card.id])
+      if (!Number.isInteger(action.buildPileIndex) || action.buildPileIndex < 0 || action.buildPileIndex > 3) {
+        return { ok: false, reason: 'invalid build pile index' }
+      }
+      const myStock = currentStocks[playerId]
+      if (!myStock || cardCount(myStock) === 0) return { ok: false, reason: 'stock is empty' }
+      const card = topCard(myStock)!
+      const target = action.buildPileIndex
+      if (!isCardLegalOnPile(card, publicState.buildPiles[target])) {
+        return { ok: false, reason: 'not a legal play on that pile' }
+      }
+      const { zone: newStock } = removeCardsById(myStock, [card.id])
       const { buildPiles, usedPile: newUsed } = playCardOntoPile(card, target, publicState.buildPiles, currentUsedPile)
       const newStockCounts = { ...publicState.stockCounts, [playerId]: cardCount(newStock) }
-      const newPrivateStates = { ...privateStates, [playerId]: { ...myState, stock: newStock } }
+      const newStocks = { ...currentStocks, [playerId]: newStock }
+      const newStockTops = { ...publicState.stockTops, [playerId]: topCard(newStock) ?? null }
       // Win check — the only source that can empty a stockpile: the instant it hits 0 the game
       // is over, even mid-turn. Return immediately: no turn advance, no discard step.
       if (cardCount(newStock) === 0) {
@@ -157,31 +184,45 @@ function makeValidator(
           ok: true,
           drawPile: currentDrawPile,
           usedPile: newUsed,
+          stocks: newStocks,
           publicState: {
             ...publicState,
             buildPiles,
             usedCount: cardCount(newUsed),
             stockCounts: newStockCounts,
+            stockTops: newStockTops,
             roundOver: true,
             winnerId: playerId,
           },
-          privateStates: newPrivateStates,
+          privateStates,
         }
       }
       return {
         ok: true,
         drawPile: currentDrawPile,
         usedPile: newUsed,
-        publicState: { ...publicState, buildPiles, usedCount: cardCount(newUsed), stockCounts: newStockCounts },
-        privateStates: newPrivateStates,
+        stocks: newStocks,
+        publicState: {
+          ...publicState,
+          buildPiles,
+          usedCount: cardCount(newUsed),
+          stockCounts: newStockCounts,
+          stockTops: newStockTops,
+        },
+        privateStates,
       }
     }
 
     if (action.type === 'PLAY_HAND') {
+      if (!Number.isInteger(action.buildPileIndex) || action.buildPileIndex < 0 || action.buildPileIndex > 3) {
+        return { ok: false, reason: 'invalid build pile index' }
+      }
       const card = myState.hand.cards.find((c) => c.id === action.cardId)
       if (!card) return { ok: false, reason: 'card not in hand' }
-      const target = chooseBuildPile(card, publicState.buildPiles)
-      if (target === -1) return { ok: false, reason: 'not a legal play right now' }
+      const target = action.buildPileIndex
+      if (!isCardLegalOnPile(card, publicState.buildPiles[target])) {
+        return { ok: false, reason: 'not a legal play on that pile' }
+      }
       const { zone: newHand } = removeCardsById(myState.hand, [action.cardId])
       const { buildPiles, usedPile: newUsed } = playCardOntoPile(card, target, publicState.buildPiles, currentUsedPile)
       return {
@@ -202,11 +243,16 @@ function makeValidator(
       if (!Number.isInteger(action.pileIndex) || action.pileIndex < 0 || action.pileIndex > 3) {
         return { ok: false, reason: 'invalid pile index' }
       }
+      if (!Number.isInteger(action.buildPileIndex) || action.buildPileIndex < 0 || action.buildPileIndex > 3) {
+        return { ok: false, reason: 'invalid build pile index' }
+      }
       const pile = myState.discards[action.pileIndex]
       if (cardCount(pile) === 0) return { ok: false, reason: 'that discard pile is empty' }
       const card = topCard(pile)!
-      const target = chooseBuildPile(card, publicState.buildPiles)
-      if (target === -1) return { ok: false, reason: 'not a legal play right now' }
+      const target = action.buildPileIndex
+      if (!isCardLegalOnPile(card, publicState.buildPiles[target])) {
+        return { ok: false, reason: 'not a legal play on that pile' }
+      }
       const { zone: newPile } = removeCardsById(pile, [card.id])
       const newDiscards = myState.discards.map((p, i) => (i === action.pileIndex ? newPile : p))
       const { buildPiles, usedPile: newUsed } = playCardOntoPile(card, target, publicState.buildPiles, currentUsedPile)
@@ -227,16 +273,11 @@ function makeValidator(
     if (action.type === 'DISCARD') {
       const card = myState.hand.cards.find((c) => c.id === action.cardId)
       if (!card) return { ok: false, reason: 'card not in hand' }
-      // Emptiest of the player's 4 discard piles, ties -> lowest index (loop starts at 0 and
-      // only replaces on a strictly-smaller pile, so the lowest index wins ties).
-      let emptiestIndex = 0
-      for (let i = 1; i < myState.discards.length; i++) {
-        if (cardCount(myState.discards[i]) < cardCount(myState.discards[emptiestIndex])) {
-          emptiestIndex = i
-        }
+      if (!Number.isInteger(action.pileIndex) || action.pileIndex < 0 || action.pileIndex > 3) {
+        return { ok: false, reason: 'invalid discard pile index' }
       }
-      const { from: newHand, to: newDiscardPile } = moveCards(myState.hand, myState.discards[emptiestIndex], [action.cardId])
-      const newDiscards = myState.discards.map((pile, i) => (i === emptiestIndex ? newDiscardPile : pile))
+      const { from: newHand, to: newDiscardPile } = moveCards(myState.hand, myState.discards[action.pileIndex], [action.cardId])
+      const newDiscards = myState.discards.map((pile, i) => (i === action.pileIndex ? newDiscardPile : pile))
       const ended = endTurnAndDrawToFive(publicState, privateStates, currentDrawPile, currentUsedPile, rng)
       return {
         ok: true,
@@ -275,7 +316,7 @@ export function applySkipBoAction(
   playerId: string,
   action: SkipBoAction,
 ): { game: SkipBoSession; outcome: ActionOutcome<SkipBoPublicState, SkipBoPrivateState> } {
-  const validate = makeValidator(game.drawPile, game.usedPile, game.rng)
+  const validate = makeValidator(game.drawPile, game.usedPile, game.stocks, game.rng)
   const { session, outcome } = applyAction(game.session, playerId, action, validate)
   // applyAction types its result as the engine's shared ActionOutcome, but the validator above
   // returned a SkipBoOutcome carrying the updated host-only zones. Read them straight off the
@@ -283,7 +324,8 @@ export function applySkipBoAction(
   const rich = outcome as SkipBoOutcome
   const drawPile = outcome.ok && rich.drawPile !== undefined ? rich.drawPile : game.drawPile
   const usedPile = outcome.ok && rich.usedPile !== undefined ? rich.usedPile : game.usedPile
-  return { game: { session, drawPile, usedPile, rng: game.rng }, outcome }
+  const stocks = outcome.ok && rich.stocks !== undefined ? rich.stocks : game.stocks
+  return { game: { session, drawPile, usedPile, stocks, rng: game.rng }, outcome }
 }
 
 export function runSkipBoBotTurn(
@@ -291,12 +333,13 @@ export function runSkipBoBotTurn(
   playerId: string,
   strategy: BotStrategy<SkipBoPublicState, SkipBoPrivateState, SkipBoAction>,
 ): { game: SkipBoSession; outcome: ActionOutcome<SkipBoPublicState, SkipBoPrivateState> } {
-  const validate = makeValidator(game.drawPile, game.usedPile, game.rng)
+  const validate = makeValidator(game.drawPile, game.usedPile, game.stocks, game.rng)
   const { session, outcome } = runBotTurn(game.session, playerId, strategy, validate)
   // Same as applySkipBoAction: the validator's outcome carries the host-only zones, so read them
   // directly instead of threading them through mutable closures.
   const rich = outcome as SkipBoOutcome
   const drawPile = outcome.ok && rich.drawPile !== undefined ? rich.drawPile : game.drawPile
   const usedPile = outcome.ok && rich.usedPile !== undefined ? rich.usedPile : game.usedPile
-  return { game: { session, drawPile, usedPile, rng: game.rng }, outcome }
+  const stocks = outcome.ok && rich.stocks !== undefined ? rich.stocks : game.stocks
+  return { game: { session, drawPile, usedPile, stocks, rng: game.rng }, outcome }
 }

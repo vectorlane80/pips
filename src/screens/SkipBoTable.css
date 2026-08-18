@@ -235,6 +235,16 @@
   justify-content: center;
 }
 
+/* A pile the selected card can validly be played onto — mirrors Phase10's
+   .p10-group--hittable treatment exactly: yellow "you may act here" outline,
+   rounded hit area, pointer cursor. */
+.sb-build-slot--playable {
+  cursor: pointer;
+  border-radius: 12px;
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
+}
+
 /* ---- Shared draw pile ---- */
 
 .sb-draw-group {
@@ -294,6 +304,15 @@
   min-height: 62px;
   display: flex;
   align-items: flex-start;
+}
+
+/* Own discard-pile tile acting as a DISCARD target while a hand card is
+   selected — same yellow "you may act here" language as build-pile targets. */
+.sb-source-slot--playable {
+  cursor: pointer;
+  border-radius: 12px;
+  outline: 3px solid var(--yellow);
+  outline-offset: 4px;
 }
 
 .sb-discard-row {

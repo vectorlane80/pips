@@ -101,7 +101,6 @@ import { UnoRoom } from './screens/UnoRoom'
 import { createSkipBoGame, SKIPBO_MAX_SEATS, SKIPBO_MIN_SEATS, type SkipBoAction, type SkipBoPublicState, type SkipBoSession } from './card-games/skipbo/state'
 import { applySkipBoAction, runSkipBoBotTurn } from './card-games/skipbo/rules'
 import { skipBoBotStrategy } from './card-games/skipbo/bot'
-import { topCard } from './card-engine/zones'
 import { SkipBoTable } from './screens/SkipBoTable'
 import { SkipBoResults } from './screens/SkipBoResults'
 import { SkipBoRoom } from './screens/SkipBoRoom'
@@ -129,7 +128,7 @@ type UnoView =
   | { kind: 'game'; revision: number; publicState: UnoPublicState; hand: UnoCard[]; names: Record<string, string> }
 type SkipBoView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
-  | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; stockTop: Card | null; names: Record<string, string> }
+  | { kind: 'game'; revision: number; publicState: SkipBoPublicState; hand: Card[]; names: Record<string, string> }
 
 const BASE_MS = 900
 const ROUND_PAUSE_MS = 4000
@@ -3057,7 +3056,6 @@ export default function App() {
       revision: hostSnap.revision,
       publicState: hostSnap.publicState,
       hand: hostSnap.privateState!.hand.cards,
-      stockTop: topCard(hostSnap.privateState!.stock) ?? null,
       names: { ...skipBoNamesRef.current },
     })
     const names = { ...skipBoNamesRef.current }
@@ -3070,7 +3068,6 @@ export default function App() {
         revision: guestSnap.revision,
         publicState: guestSnap.publicState,
         hand: guestSnap.privateState!.hand.cards,
-        stockTop: topCard(guestSnap.privateState!.stock) ?? null,
         names,
       })
     }
@@ -4487,11 +4484,10 @@ export default function App() {
         notice={skipBoNotice ?? error}
         publicState={skipBoView.publicState}
         hand={skipBoView.hand}
-        stockTop={skipBoView.stockTop}
-        onPlayStock={() => skipBoDispatch({ type: 'PLAY_STOCK' })}
-        onPlayHand={(cardId) => skipBoDispatch({ type: 'PLAY_HAND', cardId })}
-        onPlayDiscard={(pileIndex) => skipBoDispatch({ type: 'PLAY_DISCARD', pileIndex })}
-        onDiscard={(cardId) => skipBoDispatch({ type: 'DISCARD', cardId })}
+        onPlayStock={(buildPileIndex) => skipBoDispatch({ type: 'PLAY_STOCK', buildPileIndex })}
+        onPlayHand={(cardId, buildPileIndex) => skipBoDispatch({ type: 'PLAY_HAND', cardId, buildPileIndex })}
+        onPlayDiscard={(pileIndex, buildPileIndex) => skipBoDispatch({ type: 'PLAY_DISCARD', pileIndex, buildPileIndex })}
+        onDiscard={(cardId, pileIndex) => skipBoDispatch({ type: 'DISCARD', cardId, pileIndex })}
         onPass={() => skipBoDispatch({ type: 'PASS' })}
         onLeave={resetToEntry}
       />
