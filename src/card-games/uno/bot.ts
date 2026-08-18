@@ -30,10 +30,26 @@ function pickBest(playable: UnoCard[]): string {
 export const unoBotStrategy: BotStrategy<UnoPublicState, UnoPrivateState, UnoAction> = (
   publicState,
   privateState,
-  _playerId,
+  playerId,
 ) => {
   const hand = privateState.hand.cards
   const top = topCard(publicState.discardPile)!
+
+  if (publicState.pendingSevenSwap !== null) {
+    // The bot just played a 7, so it owes a swap-target choice. Find the opponent with the fewest cards,
+    // tie-broken by seat order.
+    let targetPlayerId = ''
+    let minCards = Infinity
+    for (const seatPlayerId of publicState.seatOrder) {
+      if (seatPlayerId === playerId) continue
+      const cardCount = publicState.handCounts[seatPlayerId] ?? 0
+      if (cardCount < minCards) {
+        minCards = cardCount
+        targetPlayerId = seatPlayerId
+      }
+    }
+    return { type: 'CHOOSE_SWAP_TARGET', targetPlayerId }
+  }
 
   if (publicState.pendingWild !== null) {
     // The bot just played a wild/wild4, so it owes a color choice. An empty hand is

@@ -58,12 +58,13 @@ function buildGame(config: {
     hasDrawnThisTurn: config.hasDrawnThisTurn ?? false,
     pendingWild: null,
     pendingStack: null,
+    pendingSevenSwap: null,
     unoWindow: config.unoWindow ?? null,
     scores: config.scores ?? Object.fromEntries(players.map((p) => [p, 0])),
     roundResult: null,
     matchWinnerId: null,
     lastAction: null,
-    houseRules: { drawUntilPlayable: false, stackDraw: false },
+    houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: false },
   }
   return { session: createHostSession(publicState, privateStates), stock, rng: createRng(0) }
 }

@@ -170,6 +170,7 @@ function makeValidator(
           hasDrawnThisTurn: false,
           pendingWild: null,
           pendingStack: null,
+          pendingSevenSwap: null,
           unoWindow: null,
           roundResult: null,
           lastAction: null,
@@ -258,7 +259,50 @@ function makeValidator(
       }
 
       switch (card.kind) {
-        case 'number':
+        case 'number': {
+          // Check for 7-swap or 0-rotation under sevenZero rule
+          if (publicState.houseRules.sevenZero && card.value === 7) {
+            return {
+              ok: true,
+              publicState: {
+                ...publicBase,
+                activeColor: card.color as UnoColor,
+                pendingSevenSwap: { cardId: card.id },
+                hasDrawnThisTurn: false,
+              },
+              privateStates: newPrivateStates,
+            }
+          }
+          if (publicState.houseRules.sevenZero && card.value === 0) {
+            // Rotate every seated player's hand one seat in the current direction
+            const len = publicState.seatOrder.length
+            const allPrivateStates = { ...privateStates, ...newPrivateStates }
+            const rotation: Record<string, Zone<UnoCard>> = {}
+            for (let i = 0; i < len; i++) {
+              const sourceIndex = ((i - publicState.turn.direction) % len + len) % len
+              const sourcePlayerId = publicState.seatOrder[sourceIndex]
+              const destPlayerId = publicState.seatOrder[i]
+              rotation[destPlayerId] = allPrivateStates[sourcePlayerId].hand
+            }
+            const newPrivateStatesRotated: Record<string, UnoPrivateState> = {}
+            const newHandCountsRotated: Record<string, number> = {}
+            for (const seatedPlayer of publicState.seatOrder) {
+              newPrivateStatesRotated[seatedPlayer] = { hand: rotation[seatedPlayer] }
+              newHandCountsRotated[seatedPlayer] = cardCount(rotation[seatedPlayer])
+            }
+            return {
+              ok: true,
+              publicState: {
+                ...publicBase,
+                activeColor: card.color as UnoColor,
+                handCounts: newHandCountsRotated,
+                hasDrawnThisTurn: false,
+                turn: advanceTurn(publicState.turn, 'play'),
+                unoWindow: null,
+              },
+              privateStates: newPrivateStatesRotated,
+            }
+          }
           return {
             ok: true,
             publicState: {
@@ -270,6 +314,7 @@ function makeValidator(
             },
             privateStates: newPrivateStates,
           }
+        }
         case 'skip':
           return {
             ok: true,
@@ -384,6 +429,46 @@ function makeValidator(
           }
       }
       return { ok: false, reason: 'unknown action' }
+    }
+
+    if (action.type === 'CHOOSE_SWAP_TARGET') {
+      if (publicState.pendingSevenSwap === null) return { ok: false, reason: 'no 7-swap pending' }
+      if (action.targetPlayerId === playerId) return { ok: false, reason: 'cannot swap with yourself' }
+      if (!publicState.seatOrder.includes(action.targetPlayerId)) return { ok: false, reason: 'target player not seated' }
+      // Swap hands
+      const myNewHand = privateStates[action.targetPlayerId].hand
+      const targetNewHand = privateStates[playerId].hand
+      const newPrivateStates = {
+        ...privateStates,
+        [playerId]: { hand: myNewHand },
+        [action.targetPlayerId]: { hand: targetNewHand },
+      }
+      // Update handCounts
+      const newHandCounts = {
+        ...publicState.handCounts,
+        [playerId]: cardCount(myNewHand),
+        [action.targetPlayerId]: cardCount(targetNewHand),
+      }
+      // Determine Uno-call window priority: check acting player first, then target
+      let newUnoWindow: { playerId: string } | null = null
+      if (cardCount(myNewHand) === 1) {
+        newUnoWindow = { playerId }
+      } else if (cardCount(targetNewHand) === 1) {
+        newUnoWindow = { playerId: action.targetPlayerId }
+      }
+      return {
+        ok: true,
+        publicState: {
+          ...publicState,
+          handCounts: newHandCounts,
+          pendingSevenSwap: null,
+          hasDrawnThisTurn: false,
+          turn: advanceTurn(publicState.turn, 'play'),
+          unoWindow: newUnoWindow,
+          lastAction: publicState.lastAction !== null ? { ...publicState.lastAction, swapTargetPlayerId: action.targetPlayerId } : null,
+        },
+        privateStates: newPrivateStates,
+      }
     }
 
     if (action.type === 'CHOOSE_COLOR') {

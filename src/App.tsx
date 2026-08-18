@@ -4419,6 +4419,7 @@ export default function App() {
           hand={unoView.hand}
           onPlayCard={(cardId) => unoDispatch({ type: 'PLAY_CARD', cardId })}
           onChooseColor={(color) => unoDispatch({ type: 'CHOOSE_COLOR', color })}
+          onChooseSwapTarget={(targetPlayerId) => unoDispatch({ type: 'CHOOSE_SWAP_TARGET', targetPlayerId })}
           onDraw={() => unoDispatch({ type: 'DRAW_CARD' })}
           onPass={() => unoDispatch({ type: 'PASS' })}
           onCallUno={(targetPlayerId) => unoDispatch({ type: 'CALL_UNO', targetPlayerId })}

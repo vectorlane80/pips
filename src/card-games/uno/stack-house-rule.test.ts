@@ -62,12 +62,13 @@ function buildGame(config: {
     hasDrawnThisTurn: false,
     pendingWild: null,
     pendingStack: config.pendingStack ?? null,
+    pendingSevenSwap: null,
     unoWindow: config.unoWindow ?? null,
     scores: config.scores ?? Object.fromEntries(players.map((p) => [p, 0])),
     roundResult: null,
     matchWinnerId: null,
     lastAction: null,
-    houseRules: config.houseRules ?? { drawUntilPlayable: false, stackDraw: false },
+    houseRules: config.houseRules ?? { drawUntilPlayable: false, stackDraw: false, sevenZero: false },
   }
   return { session: createHostSession(publicState, privateStates), stock, rng: createRng(0) }
 }
@@ -119,7 +120,7 @@ describe('createUnoGame with stackDraw', () => {
 describe('PLAY_CARD draw2 with stackDraw OFF (regression)', () => {
   it('behaves byte-identical to before: immediate draw-2, skipNext', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: false },
+      houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: false },
       hands: { p1: cards('uno-23', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has red draw2 + yellow 3
       discard: cards('uno-9'),   // red 5
     })
@@ -136,7 +137,7 @@ describe('PLAY_CARD draw2 with stackDraw OFF (regression)', () => {
 describe('CHOOSE_COLOR wild4 with stackDraw OFF (regression)', () => {
   it('behaves byte-identical to before: immediate draw-4, skipNext', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: false },
+      houseRules: { drawUntilPlayable: false, stackDraw: false, sevenZero: false },
       hands: { p1: cards('uno-105', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has wild4 + yellow 3
       discard: cards('uno-9'),
     })
@@ -159,7 +160,7 @@ describe('CHOOSE_COLOR wild4 with stackDraw OFF (regression)', () => {
 describe('PLAY_CARD draw2 with stackDraw ON (opening)', () => {
   it('opens a stack instead of drawing: pendingStack set, turn advances normally', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-23', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has red draw2 + yellow 3
       discard: cards('uno-9'),   // red 5
     })
@@ -179,7 +180,7 @@ describe('PLAY_CARD draw2 with stackDraw ON (opening)', () => {
 describe('PLAY_CARD draw2 while pendingStack active (continuing)', () => {
   it('increments the total and advances normally', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: [], p2: cards('uno-23', 'uno-30'), p3: [], p4: [] },   // p2 has red draw2 + yellow 3
       discard: cards('uno-9'),
       currentIndex: 1,   // p2's turn
@@ -201,7 +202,7 @@ describe('PLAY_CARD draw2 while pendingStack active (continuing)', () => {
 describe('DRAW_CARD while pendingStack: draw2 chain (breaking)', () => {
   it('draws exactly the pending total, clears stack, advances turn', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: [], p2: [], p3: cards(...NO_LEGAL), p4: [] },   // p3 has no legal play
       stock: cards('uno-38', 'uno-13', 'uno-63', 'uno-77'),
       discard: cards('uno-9'),
@@ -225,7 +226,7 @@ describe('DRAW_CARD while pendingStack: draw2 chain (breaking)', () => {
 describe('PLAY_CARD with pendingStack active (non-matching rejection)', () => {
   it('rejects a draw2 when wild4 stack is pending', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },   // p1 has red draw2
       discard: cards('uno-9'),
       pendingStack: { kind: 'wild4', total: 4 },
@@ -237,7 +238,7 @@ describe('PLAY_CARD with pendingStack active (non-matching rejection)', () => {
 
   it('rejects a color-matching number card when draw2 stack is pending', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-10'), p2: [], p3: [], p4: [] },   // p1 has red 5
       discard: cards('uno-9'),   // red 5
       pendingStack: { kind: 'draw2', total: 2 },
@@ -249,7 +250,7 @@ describe('PLAY_CARD with pendingStack active (non-matching rejection)', () => {
 
   it('rejects a wild4 when draw2 stack is pending', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-105'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
       pendingStack: { kind: 'draw2', total: 2 },
@@ -265,7 +266,7 @@ describe('PLAY_CARD with pendingStack active (non-matching rejection)', () => {
 describe('wild4 stack end-to-end with stackDraw ON', () => {
   it('opens with PLAY_CARD wild4 then CHOOSE_COLOR', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-105', 'uno-30'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
     })
@@ -284,7 +285,7 @@ describe('wild4 stack end-to-end with stackDraw ON', () => {
 
   it('continues with another wild4', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: [], p2: cards('uno-105', 'uno-30'), p3: [], p4: [] },
       discard: cards('uno-9'),
       currentIndex: 1,
@@ -304,7 +305,7 @@ describe('wild4 stack end-to-end with stackDraw ON', () => {
 
   it('breaks with DRAW_CARD drawing exactly 8', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: [], p2: [], p3: cards(...NO_LEGAL), p4: [] },
       stock: cards('uno-38', 'uno-13', 'uno-63', 'uno-77', 'uno-100', 'uno-11', 'uno-39', 'uno-64', 'uno-79'),
       discard: cards('uno-9'),
@@ -326,7 +327,7 @@ describe('wild4 stack end-to-end with stackDraw ON', () => {
 describe('no mixing of stack families', () => {
   it('draw2 stack rejects wild4', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-105'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
       pendingStack: { kind: 'draw2', total: 2 },
@@ -338,7 +339,7 @@ describe('no mixing of stack families', () => {
 
   it('wild4 stack rejects draw2', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
       pendingStack: { kind: 'wild4', total: 4 },
@@ -354,7 +355,7 @@ describe('no mixing of stack families', () => {
 describe('going out mid-stack', () => {
   it('ends the round when a stacking card takes player to 0', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-23'), p2: [], p3: [], p4: [] },
       discard: cards('uno-9'),
       pendingStack: { kind: 'draw2', total: 4 },
@@ -373,7 +374,7 @@ describe('going out mid-stack', () => {
 describe('blocked round with pending stack', () => {
   it('triggers blockedRound when stock can\'t satisfy large pending total', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       stock: cards('uno-38'),   // only 1 card, but need 6
       discard: cards('uno-9'),
@@ -392,7 +393,7 @@ describe('blocked round with pending stack', () => {
 describe('Uno-call window with stacking', () => {
   it('opens when a stacking play leaves player at 1 card', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: cards('uno-23', 'uno-30'), p2: [], p3: [], p4: [] },   // p1 has draw2 + yellow 3; plays draw2, ends with 1
       discard: cards('uno-9'),
     })
@@ -405,7 +406,7 @@ describe('Uno-call window with stacking', () => {
 
   it('does not open when DRAW_CARD accepting a large stack leaves player at > 1 card', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: {
         p1: cards('uno-30'),   // 1 card initially; will draw 6 and end at 7 cards
         p2: [],
@@ -429,7 +430,7 @@ describe('Uno-call window with stacking', () => {
     // stack draw. The stale window should be cleared (even though p3's draw will
     // increase their hand, not leave them at 1).
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: {
         p1: [],
         p2: cards('uno-30'),   // p2 at 1 card (has stale window)
@@ -460,7 +461,7 @@ describe('pendingStack field lifecycle', () => {
 
   it('is reset to null on START_NEXT_ROUND', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: { p1: [], p2: [], p3: [], p4: [] },
       stage: 'roundOver',
       pendingStack: null,   // should already be null, but assert it survives reset
@@ -483,7 +484,7 @@ describe('unoBotStrategy with stacking', () => {
     // return CHOOSE_COLOR to handle the color choice, not PLAY_CARD/DRAW_CARD.
     // The fix is that pendingWild is checked BEFORE pendingStack in bot.ts.
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: {
         p1: [],
         p2: cards('uno-105', 'uno-30'),   // p2 has wild4 + yellow 3
@@ -515,7 +516,7 @@ describe('unoBotStrategy with stacking', () => {
 
   it('plays a matching stack card when pendingStack is active (without pendingWild)', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: {
         p1: [],
         p2: cards('uno-23', 'uno-30'),   // p2 has draw2 + yellow 3
@@ -540,7 +541,7 @@ describe('unoBotStrategy with stacking', () => {
 
   it('draws the pile when no matching stack card available', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: false, stackDraw: true },
+      houseRules: { drawUntilPlayable: false, stackDraw: true, sevenZero: false },
       hands: {
         p1: [],
         p2: cards('uno-30', 'uno-65'),   // p2 has yellow 3 and green 8 (no draw2)
