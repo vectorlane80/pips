@@ -438,12 +438,10 @@ function makeValidator(
       if (publicState.pendingSevenSwap === null) return { ok: false, reason: 'no 7-swap pending' }
       if (action.targetPlayerId === playerId) return { ok: false, reason: 'cannot swap with yourself' }
       if (!publicState.seatOrder.includes(action.targetPlayerId)) return { ok: false, reason: 'target player not seated' }
-      // Swap hands: the acting player receives the target's hand, and vice versa
-      let actingPlayerReceives = privateStates[action.targetPlayerId].hand
-      let targetReceives = privateStates[playerId].hand
-      // Update Zone id/ownerId to match their new owners (follow createHand pattern: id: `hand:${playerId}`, ownerId: playerId)
-      actingPlayerReceives = { ...actingPlayerReceives, id: `hand:${playerId}`, ownerId: playerId }
-      targetReceives = { ...targetReceives, id: `hand:${action.targetPlayerId}`, ownerId: action.targetPlayerId }
+      // Swap hands: the acting player receives the target's hand, and vice versa. Zone id/ownerId
+      // are restamped to match their new owners (follow createHand pattern: id: `hand:${playerId}`, ownerId: playerId)
+      const actingPlayerReceives = { ...privateStates[action.targetPlayerId].hand, id: `hand:${playerId}`, ownerId: playerId }
+      const targetReceives = { ...privateStates[playerId].hand, id: `hand:${action.targetPlayerId}`, ownerId: action.targetPlayerId }
       const newPrivateStates = {
         ...privateStates,
         [playerId]: { hand: actingPlayerReceives },
