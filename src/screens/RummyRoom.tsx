@@ -91,23 +91,23 @@ export function RummyRoom({
               {!isHost && <span style={{ fontWeight: 500, color: 'var(--muted-text)' }}> · {hostName} picks</span>}
             </div>
             <div className="rummy-card-back-picker">
-              {CARD_BACKS.map((def) => {
-                const selected = def.id === cardBack
-                return (
-                  <div
-                    key={def.id}
-                    className={`rummy-card-back-option${selected ? ' rummy-card-back-option--selected' : ''}`}
-                    title={def.name}
-                  >
-                    <CardBack
-                      size="stock"
-                      design={def.id}
-                      onClick={isHost ? () => onSelectCardBack(def.id) : undefined}
-                    />
-                    <span className="rummy-card-back-name">{def.name}</span>
-                  </div>
-                )
-              })}
+              <CardBack size="stock" design={cardBack} />
+              {isHost ? (
+                <select
+                  className="input rummy-card-back-select"
+                  aria-label="Card back"
+                  value={cardBack}
+                  onChange={(e) => onSelectCardBack(e.target.value)}
+                >
+                  {CARD_BACKS.map((def) => (
+                    <option key={def.id} value={def.id}>{def.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontSize: 17, fontWeight: 600 }}>
+                  {CARD_BACKS.find((d) => d.id === cardBack)?.name ?? 'Classic'}
+                </span>
+              )}
             </div>
           </div>
 

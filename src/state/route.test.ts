@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import {
   decideBoot, GAME_SEGMENTS, gameFromPath, gamePath, readNameCookie, writeNameCookie,
+  readCardBackCookie, writeCardBackCookie,
   type CookieAccessor, type RoutedGame,
 } from './route'
+
+describe('card back cookie', () => {
+  it('round-trips an id alongside the name cookie', () => {
+    const accessor: CookieAccessor = { cookie: '' }
+    writeNameCookie('Boba', accessor)
+    writeCardBackCookie('chevron-stripe', accessor)
+    expect(accessor.cookie).toBe('pips-card-back=chevron-stripe; path=/; max-age=31536000; samesite=lax')
+    expect(readCardBackCookie(accessor)).toBe('chevron-stripe')
+    expect(readCardBackCookie({ cookie: 'pips-name=Boba; pips-card-back=dice-five' })).toBe('dice-five')
+  })
+
+  it('returns null when unset or empty', () => {
+    expect(readCardBackCookie({ cookie: '' })).toBeNull()
+    expect(readCardBackCookie({ cookie: 'pips-name=Boba' })).toBeNull()
+    expect(readCardBackCookie({ cookie: 'pips-card-back=' })).toBeNull()
+  })
+})
 
 describe('gameFromPath', () => {
   it('accepts /pips/<segment>', () => {

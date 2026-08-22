@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Action, BotDifficulty, Game, RoomState } from './types'
 import { GAME_CODE_PREFIX } from './types'
 import { addSeat, applyAction, generateCode, makeRoom, removeSeat } from './state/room'
-import { decideBoot, gameFromPath, gamePath, readNameCookie, writeNameCookie, type RoutedGame } from './state/route'
+import { decideBoot, gameFromPath, gamePath, readNameCookie, writeNameCookie, readCardBackCookie, writeCardBackCookie, type RoutedGame } from './state/route'
 import { randomBotName } from './data/botNames'
 import { createHost, joinHost, peerIdForCode, type GuestHandle, type HostHandle } from './net/peer'
 import { Landing } from './screens/Landing'
@@ -30,7 +30,14 @@ import type { Card } from './card-engine/cards'
 import { RummyTable } from './screens/RummyTable'
 import { RummyResults } from './screens/RummyResults'
 import { RummyRoom } from './screens/RummyRoom'
-import { DEFAULT_CARD_BACK } from './components/cardBacks'
+import { CARD_BACKS, DEFAULT_CARD_BACK } from './components/cardBacks'
+
+// The saved card back, or the default if the cookie is unset or names a design
+// that no longer exists.
+function savedCardBack(): string {
+  const id = readCardBackCookie()
+  return id && CARD_BACKS.some((d) => d.id === id) ? id : DEFAULT_CARD_BACK
+}
 
 // ---- Phase 10 (separate parallel session, per CHARTER.md resolution #7) ----
 import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
@@ -195,7 +202,7 @@ export default function App() {
   const [rummyNotice, setRummyNotice] = useState<string | null>(null)
   const [rummyStarted, setRummyStarted] = useState(false)
   const [rummySeats, setRummySeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
-  const [rummyCardBack, setRummyCardBack] = useState(DEFAULT_CARD_BACK)
+  const [rummyCardBack, setRummyCardBack] = useState(savedCardBack)
 
   // ---- Phase 10 ----
   const [phase10Role, setPhase10Role] = useState<'host' | 'guest' | null>(null)
@@ -306,7 +313,7 @@ export default function App() {
   const rummyStartedRef = useRef(false)
   const rummyNamesRef = useRef<Record<string, string>>({})
   const rummyBotSeatsRef = useRef<Set<string>>(new Set())
-  const rummyCardBackRef = useRef(DEFAULT_CARD_BACK)
+  const rummyCardBackRef = useRef(savedCardBack())
   const rummyBotCounterRef = useRef(0)
   const phase10SessionRef = useRef<Phase10Session | null>(null)
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
@@ -655,8 +662,7 @@ export default function App() {
     rummyBotSeatsRef.current.clear()
     rummyBotCounterRef.current = 0
     rummyNamesRef.current = {}
-    setRummyCardBack(DEFAULT_CARD_BACK)
-    rummyCardBackRef.current = DEFAULT_CARD_BACK
+    // Card back deliberately survives a reset — it's the host's saved preference.
     // Phase 10
     phase10HostRef.current?.destroy()
     phase10HostRef.current = null
@@ -1123,6 +1129,7 @@ export default function App() {
     // Ref-first: rummyBroadcast() runs synchronously and must send the new pick.
     rummyCardBackRef.current = id
     setRummyCardBack(id)
+    writeCardBackCookie(id)
     rummyBroadcast()
   }
 
