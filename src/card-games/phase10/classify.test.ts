@@ -222,6 +222,26 @@ describe('display ordering', () => {
     expect(ordered.map((c) => c.id)).toEqual(['wild-one', 'wild-two', 'wild-three'])
   })
 
+  // Regression: a caller may pass an incomplete subset of a run's true accumulated cards
+  // (e.g. Phase10Table's GroupCluster only combines a group's own zone plus SAME-player hits,
+  // excluding a different player's cross-hit that also targets the group and fills one of its
+  // gaps with a Wild — see the comment on orderRunForDisplay). That subset can have more gaps
+  // than it has Wilds to cover, even though the true full group (validated server-side) is a
+  // real run. This must never index wilds[] out of bounds and return `undefined` in the array —
+  // that previously reached a `.map(card => card.id)` render call and crashed the whole screen.
+  it('skips a gap with no natural or Wild in the given subset, without producing undefined', () => {
+    const ordered = orderRunForDisplay([
+      numberCard('two', 'green', '2'),
+      numberCard('five', 'green', '5'),
+      wildCard('wild-one'),
+      // Only one Wild here even though ranks 3 AND 4 are both missing — as if another player's
+      // Wild filling one of those gaps was a cross-hit not included in this subset.
+    ])
+
+    expect(ordered.every((c) => c !== undefined)).toBe(true)
+    expect(ordered.map((c) => c.id)).toEqual(['two', 'wild-one', 'five'])
+  })
+
   it('orders color-group naturals by rank and appends Wilds', () => {
     const ordered = orderColorGroupForDisplay([
       numberCard('nine', 'green', '9'),
