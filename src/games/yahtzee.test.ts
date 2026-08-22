@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal } from './yahtzee'
+import { decideYahtzeeCategory, grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal } from './yahtzee'
 
 describe('isFiveKind', () => {
   it('five equal values → true', () => {
@@ -183,6 +183,24 @@ describe('grandTotal', () => {
     // so grandTotal must not change for the same card.
     const card = { ones: 3, fours: 12, sixes: 18, yahtzee: 50 }
     expect(grandTotal(card)).toBe(33 + 50)
+  })
+})
+
+describe('decideYahtzeeCategory — tie-break between equal-scoring categories', () => {
+  it('four of a kind ties threeKind/chance on raw score → picks the rarer fourKind box', () => {
+    // [4,4,4,4,2]: threeKind, fourKind, and chance all score 18 — fourKind is the
+    // hardest of the three to satisfy again, so it should win the tie.
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'medium')).toBe('fourKind')
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'hard')).toBe('fourKind')
+  })
+
+  it('fourKind already filled → falls back to threeKind over chance', () => {
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], { fourKind: 18 }, 'medium')).toBe('threeKind')
+  })
+
+  it('yahtzee still outranks fourKind on a five-of-a-kind tie', () => {
+    // [5,5,5,5,5]: yahtzee(50), fourKind(25), threeKind(25), chance(25) all open.
+    expect(decideYahtzeeCategory([5, 5, 5, 5, 5], {}, 'medium')).toBe('yahtzee')
   })
 })
 

@@ -155,6 +155,16 @@ export function decideYahtzeeHold(
 // bigger-looking but easy-to-reach upper box.
 const HARD_TO_FILL: YCategory[] = ['yahtzee', 'largeStraight', 'smallStraight', 'fullHouse']
 
+// threeKind/fourKind/chance all score "sum of all five dice", so a roll that satisfies more
+// than one of them ties on raw score. Rarest-to-fill first: on a tie, prefer locking in the
+// category that's hardest to satisfy again (fourKind) over the one that's easy to satisfy with
+// a future, weaker roll (threeKind/chance) — otherwise a plain > comparison just keeps whichever
+// tied category happens to appear first in Y_CATEGORIES, which is backwards.
+const TIE_BREAK_PRIORITY: YCategory[] = [
+  'yahtzee', 'largeStraight', 'smallStraight', 'fullHouse', 'fourKind', 'threeKind',
+  'sixes', 'fives', 'fours', 'threes', 'twos', 'ones', 'chance',
+]
+
 export function decideYahtzeeCategory(
   vals: number[],
   card: Partial<Record<YCategory, number>>,
@@ -166,7 +176,9 @@ export function decideYahtzeeCategory(
   for (const c of open) {
     const s = scoreCategory(vals, c, card)
     const weight = difficulty === 'hard' && s > 0 && HARD_TO_FILL.includes(c) ? s + 20 : s
-    if (weight > bestWeight) {
+    const tieWins = weight === bestWeight && best !== null
+      && TIE_BREAK_PRIORITY.indexOf(c) < TIE_BREAK_PRIORITY.indexOf(best)
+    if (weight > bestWeight || tieWins) {
       bestWeight = weight
       best = c
     }
