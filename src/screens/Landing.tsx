@@ -98,11 +98,7 @@ export function Landing({
         <div style={{ flex: '1 1 340px', maxWidth: 560 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span style={{ fontWeight: 600, fontSize: 15 }}>On the shelf</span>
-            {ready ? (
-              <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--faint-text)' }}>
-                {SHELF.length} games
-              </span>
-            ) : (
+            {!ready && (
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--faint-text)' }}>
                 type a name to start one
               </span>
