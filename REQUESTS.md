@@ -65,3 +65,8 @@
       on a blocked round.
 - [x] 2026-08-15, Uno charter — commit the charter: done, pushed
       (verified: full Uno commit sequence on `main`, HEAD == origin/main).
+
+- [ ] 2026-08-21, Solitaire charter — non-blocking — the work lands on
+      branch `solitaire` (never on `main`). When you're happy with the
+      live check, say "push" and it gets merged, pushed, and the branch
+      pruned. Nothing here needs an answer to keep the loop moving.

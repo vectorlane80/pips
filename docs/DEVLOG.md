@@ -3367,3 +3367,17 @@ shipping each verified charter promptly.
   authorized — `REQUESTS.md`/`Die.tsx`/`FarkleTable.tsx`/
   `components.css` (the other session's active work) left untouched.
 - **Continue?** No further Skip-Bo work requested.
+
+## Cycle 22 — 2026-08-21 — Solitaire charter: setup
+- **Charter**: `CHARTER.md` rewritten for Solitaire (Klondike + FreeCell,
+  1-player, card back + mode options). Pre-approved at invocation.
+  Branch `solitaire` created off `main`; hourly safety-net cron set.
+- **Siblings read in full** (per project CLAUDE.md): `RummyTable.tsx`,
+  `RummyRoom.tsx`, `RummyRulesOverlay.tsx`, `RummyTable.css`,
+  `PlayingCard.tsx/.css`, `TableHeader.tsx`, `DealIntro.tsx` props,
+  `useSound.ts` registry, `Landing.tsx` shelf, `route.ts`, and the
+  card-engine API (`cards.ts`, `deck.ts`, `zones.ts`, `engine/rng.ts`).
+- **Routing**: Haiku implementing (persistent background agent), Oscar
+  (lead's model) reviewing every code slice, lead doing specs/
+  verification/git/live visual check.
+- **Next**: spec 47 (engine) dispatched.

@@ -1,6 +1,18 @@
 # Roadmap
 
-Charter: Skip-Bo — see `CHARTER.md`.
+Charter: Solitaire — see `CHARTER.md`.
+
+## Charter: Solitaire (2026-08-21) — in progress
+- [ ] Spec 47 — rules engine: `src/card-games/solitaire/` (state.ts,
+      shared.ts, klondike.ts, freecell.ts + tests). Both modes' deal,
+      move validation, auto-flip, stock/waste recycle, supermove cap,
+      win detection. Pure, serializable.
+- [ ] Spec 48 — screens: SolitaireRoom (1-player, card back, mode),
+      SolitaireTable (+css), SolitaireRulesOverlay, win banner.
+- [ ] Spec 49 — wiring: shelf tile, `/pips/solitaire` route, App state,
+      DealIntro, sounds, undo.
+- [ ] Spec 50 — polish from live play / review (only if needed).
+- [ ] Push: merge `solitaire` → `main` on the user's "push".
 
 ## Charter: Skip-Bo (2026-08-17) — done
 - [x] Card-engine module (spec 40): deck.ts (162-card deck), state.ts,
