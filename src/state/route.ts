@@ -81,3 +81,18 @@ export function writeNameCookie(name: string, accessor: CookieAccessor = default
   // breaking the cookie header or the split in readNameCookie.
   accessor.cookie = `${NAME_COOKIE}=${encodeURIComponent(trimmed)}; path=/; max-age=31536000; samesite=lax`
 }
+
+// The host's last-picked card back (a components/cardBacks.ts id). Same seam and
+// lifetime as the name cookie; the caller validates the id against the registry.
+const CARD_BACK_COOKIE = 'pips-card-back'
+
+export function readCardBackCookie(accessor: CookieAccessor = defaultCookieAccessor()): string | null {
+  const row = accessor.cookie.split('; ').find((entry) => entry.startsWith(`${CARD_BACK_COOKIE}=`))
+  if (!row) return null
+  const value = row.slice(CARD_BACK_COOKIE.length + 1).trim()
+  return value === '' ? null : decodeURIComponent(value)
+}
+
+export function writeCardBackCookie(id: string, accessor: CookieAccessor = defaultCookieAccessor()): void {
+  accessor.cookie = `${CARD_BACK_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`
+}

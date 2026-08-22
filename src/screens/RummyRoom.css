@@ -1,40 +1,26 @@
-/* Card-back picker in the Rummy lobby. Each option is a real stock-size CardBack
-   (so the preview IS the thing you'll see on the table) with a name under it. */
+/* Card-back picker in the Rummy lobby: a live stock-size preview of the current
+   pick next to a dropdown of every design (guests just see the name). */
 
 .rummy-card-back-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-  gap: 10px 6px;
-}
-
-.rummy-card-back-option {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px 4px 6px;
-  border-radius: 16px;
-  border: 3px solid transparent;
+  gap: 16px;
+  padding: 4px 0 8px; /* room for the stock card's 5px drop shadow */
 }
 
-.rummy-card-back-option--selected {
-  border-color: var(--ink);
-  background: var(--yellow);
+.rummy-card-back-picker .card-back--stock {
+  flex: none;
 }
 
-/* The picker is a gallery, not the draw pile — no hover lift here. */
-.rummy-card-back-option .card-back--stock:hover:not(:disabled) {
-  transform: none;
-}
-
-.rummy-card-back-name {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-align: center;
-  color: var(--muted-text);
-}
-
-.rummy-card-back-option--selected .rummy-card-back-name {
-  color: var(--ink);
+.rummy-card-back-select {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%2317173a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
 }
