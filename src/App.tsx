@@ -2628,7 +2628,7 @@ export default function App() {
   // loop re-evaluates after a draw that doesn't advance the turn.
   function unoActorKey(uno: UnoSession): string {
     const ps = uno.session.publicState
-    return `${ps.stage}:${ps.turn.turnNumber}:${ps.hasDrawnThisTurn}:${ps.pendingWild !== null}:${ps.stockCount}:${ps.discardPile.cards.length}`
+    return `${ps.stage}:${ps.turn.turnNumber}:${ps.hasDrawnThisTurn}:${ps.pendingWild !== null}:${ps.pendingSevenSwap !== null}:${ps.stockCount}:${ps.discardPile.cards.length}`
   }
 
   function unoStale(key: string) {
@@ -4408,6 +4408,7 @@ export default function App() {
             ))}
           </div>
         )}
+        {/* Spec 46: UnoTable's new sevenZero prop requires the onChooseSwapTarget wiring below, so App.tsx was touched despite not being on spec's ownership list */}
         <UnoTable
           code={unoCode}
           localPlayerId={unoLocalPlayerId}
@@ -4419,6 +4420,7 @@ export default function App() {
           hand={unoView.hand}
           onPlayCard={(cardId) => unoDispatch({ type: 'PLAY_CARD', cardId })}
           onChooseColor={(color) => unoDispatch({ type: 'CHOOSE_COLOR', color })}
+          onChooseSwapTarget={(targetPlayerId) => unoDispatch({ type: 'CHOOSE_SWAP_TARGET', targetPlayerId })}
           onDraw={() => unoDispatch({ type: 'DRAW_CARD' })}
           onPass={() => unoDispatch({ type: 'PASS' })}
           onCallUno={(targetPlayerId) => unoDispatch({ type: 'CALL_UNO', targetPlayerId })}

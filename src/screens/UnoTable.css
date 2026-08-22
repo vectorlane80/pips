@@ -512,6 +512,23 @@
   box-shadow: 0 1px 0 var(--ink);
 }
 
+.uno-swap-target-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.uno-swap-target-name {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--ink);
+  max-width: 50px;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
 /* ---- Your hand ---- */
 
 .uno-hand-section {

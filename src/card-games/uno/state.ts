@@ -15,6 +15,7 @@ export interface UnoLastAction {
   kind: 'play' | 'draw' | 'pass'
   card: { color: UnoColor | 'wild'; kind: UnoCardKind; value: number | null } | null  // set for 'play' only
   drewCount: number   // for 'draw': how many were drawn (1 normally, N under the drawUntilPlayable house rule). Nonzero here also on a 'play' of draw2/draw4/wild4-that-drew, recording how many the NEXT player drew (0 if none) — lets the UI say "Riley drew 2"
+  swapTargetPlayerId?: string   // set for 'play' of a 7 under sevenZero, records who was swapped with
 }
 
 export interface UnoRoundResult {
@@ -37,6 +38,8 @@ export interface UnoPublicState {
   handCounts: Record<string, number>
   hasDrawnThisTurn: boolean              // reset false whenever the turn advances to a new player
   pendingWild: { cardId: string; isDraw4: boolean } | null
+  pendingStack: { kind: 'draw2' | 'wild4'; total: number } | null   // while stackDraw house rule is active and a draw card has been played but not yet drawn
+  pendingSevenSwap: { cardId: string } | null   // set when a 7 is played under sevenZero, cleared once the swap target is chosen
   unoWindow: { playerId: string } | null   // at most one ever active — opens when a turn-ending action leaves the acting player at exactly 1 card, destroyed by a call or by the next player's first action
   scores: Record<string, number>         // running total, HIGHER is better, first to UNO_TARGET wins
   roundResult: UnoRoundResult | null
@@ -52,6 +55,7 @@ export interface UnoPrivateState {
 export type UnoAction =
   | { type: 'PLAY_CARD'; cardId: string }
   | { type: 'CHOOSE_COLOR'; color: UnoColor }
+  | { type: 'CHOOSE_SWAP_TARGET'; targetPlayerId: string }
   | { type: 'DRAW_CARD' }
   | { type: 'PASS' }
   | { type: 'CALL_UNO'; targetPlayerId: string }
@@ -68,7 +72,7 @@ export const UNO_MAX_SEATS = 6
 export const UNO_HAND_SIZE = 7
 export const UNO_TARGET = 500
 
-export type UnoHouseRuleKey = 'drawUntilPlayable'
+export type UnoHouseRuleKey = 'drawUntilPlayable' | 'stackDraw' | 'sevenZero'
 
 export interface UnoHouseRuleDef {
   key: UnoHouseRuleKey
@@ -84,6 +88,18 @@ export const UNO_HOUSE_RULE_DEFS: UnoHouseRuleDef[] = [
     key: 'drawUntilPlayable',
     label: 'Draw until you can play',
     description: 'Keep drawing from the stock until you draw a card you can play, instead of drawing just one and passing if it isn’t playable.',
+    default: false,
+  },
+  {
+    key: 'stackDraw',
+    label: 'Stack draw cards',
+    description: "Play a Draw Two on a Draw Two (or a Wild Draw Four on a Wild Draw Four) to pass the penalty along instead of drawing — it keeps growing until someone can’t or won’t continue it.",
+    default: false,
+  },
+  {
+    key: 'sevenZero',
+    label: '7-0 rule',
+    description: 'Play a 7 to swap hands with one opponent of your choice. Play a 0 and everyone passes their hand to the next player around the table.',
     default: false,
   },
 ]
@@ -184,6 +200,8 @@ export function createUnoGame(
     handCounts,
     hasDrawnThisTurn: false,
     pendingWild: null,
+    pendingStack: null,
+    pendingSevenSwap: null,
     unoWindow: null,
     scores,
     roundResult: null,

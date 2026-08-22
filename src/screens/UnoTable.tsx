@@ -26,6 +26,7 @@ export interface UnoTableProps {
   hand: UnoCard[]                      // your private hand
   onPlayCard: (cardId: string) => void
   onChooseColor: (color: UnoColor) => void
+  onChooseSwapTarget: (targetPlayerId: string) => void
   onDraw: () => void
   onPass: () => void
   onCallUno: (targetPlayerId: string) => void
@@ -136,12 +137,22 @@ function formatLastAction(
   lastAction: UnoLastAction | null,
   localPlayerId: string,
   names: Record<string, string>,
+  sevenZero: boolean,
 ): string {
   if (lastAction === null) return 'No plays yet'
   const who = lastAction.by === localPlayerId ? 'You' : (names[lastAction.by] ?? lastAction.by)
   switch (lastAction.kind) {
     case 'play': {
       if (lastAction.card === null) return `${who} played a card`
+      // Check for 7-swap (only when sevenZero rule is enabled and swap actually happened)
+      if (sevenZero && lastAction.card.value === 7 && lastAction.swapTargetPlayerId !== undefined) {
+        const targetName = lastAction.swapTargetPlayerId === localPlayerId ? 'you' : (names[lastAction.swapTargetPlayerId] ?? lastAction.swapTargetPlayerId)
+        return `${who} swapped hands with ${targetName}`
+      }
+      // Check for 0-rotation (only when sevenZero rule is enabled)
+      if (sevenZero && lastAction.card.value === 0) {
+        return `${who} played a 0 — hands rotated`
+      }
       const base = `${who} played ${describeCard(lastAction.card)}`
       // drewCount records how many the NEXT player drew after a draw2/wild4.
       return lastAction.drewCount > 0 ? `${base} — ${lastAction.drewCount} cards drawn` : base
@@ -157,11 +168,12 @@ function formatLastAction(
 
 // A stable fingerprint for "is this the same action as last render".
 // Ignores drewCount so a wild4's CHOOSE_COLOR (which merges drewCount: 4 into
-// the same play) doesn't read as a second, new play.
+// the same play) doesn't read as a second, new play. Includes swapTargetPlayerId
+// to distinguish different 7-swap targets.
 function lastActionSignature(lastAction: UnoLastAction | null): string {
   if (lastAction === null) return 'none'
   const c = lastAction.card
-  return `${lastAction.by}|${lastAction.kind}|${c?.kind ?? 'none'}|${c?.color ?? 'none'}|${c?.value ?? 'none'}`
+  return `${lastAction.by}|${lastAction.kind}|${c?.kind ?? 'none'}|${c?.color ?? 'none'}|${c?.value ?? 'none'}|${lastAction.swapTargetPlayerId ?? 'none'}`
 }
 
 function computeStatus(
@@ -189,6 +201,9 @@ function computeStatus(
       : `${names[vulnId] ?? vulnId} has UNO!`
   }
   const currentId = currentPlayer(publicState.turn)
+  if (publicState.pendingSevenSwap !== null) {
+    return isMyTurn ? 'Choose a player to swap hands with.' : `${names[currentId] ?? currentId} is choosing a swap target…`
+  }
   if (publicState.pendingWild !== null) {
     return isMyTurn ? 'Choose a color to finish your play.' : `${names[currentId] ?? currentId} is choosing a color…`
   }
@@ -230,6 +245,7 @@ export function UnoTable({
   hand,
   onPlayCard,
   onChooseColor,
+  onChooseSwapTarget,
   onDraw,
   onPass,
   onCallUno,
@@ -244,9 +260,13 @@ export function UnoTable({
   const top = topCard(publicState.discardPile)
   const hasPlayable = top !== undefined && handHasLegalPlay(hand, top, publicState.activeColor)
   const canAct = isMyTurn && publicState.stage === 'play'
-  const canDraw = canAct && publicState.pendingWild === null && !publicState.hasDrawnThisTurn && !hasPlayable
+  const canDraw = canAct && publicState.pendingWild === null && publicState.pendingSevenSwap === null && (publicState.pendingStack !== null || (!publicState.hasDrawnThisTurn && !hasPlayable))
   const showColorPicker = canAct && publicState.pendingWild !== null
-  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null
+  const showSwapTargetPicker = canAct && publicState.pendingSevenSwap !== null
+  // pendingStack check is redundant: hasDrawnThisTurn is false while a stack is pending (set together in rules.ts,
+  // see the PLAY_CARD draw2 branch and the CHOOSE_COLOR wild4 branch in rules.ts), so it's already enforced above.
+  // Kept for defensive clarity that showPass must be false during a stack.
+  const showPass = canAct && publicState.hasDrawnThisTurn && publicState.pendingWild === null && publicState.pendingSevenSwap === null && publicState.pendingStack === null
   const targetText = `first to ${UNO_TARGET}`
   const catchStaggered = useCatchStagger(publicState.unoWindow, localPlayerId)
 
@@ -277,18 +297,22 @@ export function UnoTable({
   }, [publicState.round])
 
   // Clear the selection whenever it stops being valid: the selected card
-  // leaves the hand, the turn changes, a wild color picker opens, the
-  // discard top/active color makes it illegal, or the stage leaves 'play'.
+  // leaves the hand, the turn changes, a wild color picker opens, a stack
+  // becomes pending (blocking non-matching cards), the discard top/active
+  // color makes it illegal, or the stage leaves 'play'. Keep this logic in
+  // sync with cardClickable to prevent divergence.
   useEffect(() => {
     setSelectedId((prev) => {
       if (prev === null) return null
       const card = hand.find((c) => c.id === prev)
       if (!card) return null
       if (!canAct || publicState.pendingWild !== null || top === undefined) return null
+      // While a stack is pending, only matching cards remain valid
+      if (publicState.pendingStack !== null && card.kind !== publicState.pendingStack.kind) return null
       if (!isUnoPlayable(card, top, publicState.activeColor)) return null
       return prev
     })
-  }, [hand, canAct, publicState.pendingWild, top, publicState.activeColor])
+  }, [hand, canAct, publicState.pendingWild, publicState.pendingStack, top, publicState.activeColor])
 
   // Forced-draw reveal gate (spec 34h §8) — purely client-side presentation.
   // The engine already put the drawn cards in the hand; we only delay SHOWING
@@ -426,8 +450,8 @@ export function UnoTable({
     [hand, knownCardIds],
   )
   const logLine = useMemo(
-    () => formatLastAction(publicState.lastAction, localPlayerId, names),
-    [publicState.lastAction, localPlayerId, names],
+    () => formatLastAction(publicState.lastAction, localPlayerId, names, publicState.houseRules.sevenZero),
+    [publicState.lastAction, localPlayerId, names, publicState.houseRules.sevenZero],
   )
   const status = useMemo(
     () => computeStatus(publicState, isMyTurn, localPlayerId, names, hasPlayable),
@@ -441,6 +465,7 @@ export function UnoTable({
   )
   const handHint = (() => {
     if (publicState.stage !== 'play' || !isMyTurn) return null
+    if (publicState.pendingSevenSwap !== null) return 'Choose a player to swap hands with.'
     if (publicState.pendingWild !== null) return 'Choose a color to finish your play.'
     if (publicState.hasDrawnThisTurn) return 'Play the card you drew, or pass.'
     if (unrevealedIds.length > 0) return 'Reveal the drawn cards first.'
@@ -451,8 +476,15 @@ export function UnoTable({
   // and rejects an illegally-timed draw/play regardless. The card's onClick
   // is either wired or omitted entirely (per spec 34d, no opacity/ring
   // styling differs, only whether a click handler exists).
-  const cardClickable = (card: UnoCard): boolean =>
-    canAct && publicState.pendingWild === null && top !== undefined && isUnoPlayable(card, top, publicState.activeColor)
+  const cardClickable = (card: UnoCard): boolean => {
+    if (!canAct || publicState.pendingWild !== null || publicState.pendingSevenSwap !== null || top === undefined) return false
+    // While a stack is pending, only matching cards are clickable
+    if (publicState.pendingStack !== null) {
+      return card.kind === publicState.pendingStack.kind
+    }
+    // Normal playability check
+    return isUnoPlayable(card, top, publicState.activeColor)
+  }
 
   // Per-seat Uno-call enable logic (client-side only; the host does not
   // enforce timing — see spec 34b). No window for this seat → always gray.
@@ -657,7 +689,7 @@ export function UnoTable({
             <div className="uno-centre-left">
               <div className="uno-stock-group">
                 <div className="uno-stock-caption">
-                  stock {publicState.stockCount} · {publicState.houseRules.drawUntilPlayable ? 'Draw until you can play' : 'Draw a card'}
+                  stock {publicState.stockCount} · {publicState.pendingStack !== null ? `Draw ${publicState.pendingStack.total}` : (publicState.houseRules.drawUntilPlayable ? 'Draw until you can play' : 'Draw a card')}
                 </div>
                 <div className="uno-stock-card-wrapper">
                   <UnoCardBack
@@ -696,6 +728,29 @@ export function UnoTable({
                         onClick={() => onChooseColor(color)}
                         aria-label={`Choose ${color}`}
                       />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showSwapTargetPicker && (
+              <div className="uno-centre-right">
+                <div className="uno-color-picker">
+                  <span className="uno-color-picker-label">Choose a player to swap with</span>
+                  <div className="uno-color-swatches">
+                    {others.map(({ id, name, color }) => (
+                      <div key={id} className="uno-swap-target-button">
+                        <button
+                          type="button"
+                          className="uno-color-swatch"
+                          style={{ background: color }}
+                          onClick={() => onChooseSwapTarget(id)}
+                          aria-label={`Swap with ${name}`}
+                          title={name}
+                        />
+                        <span className="uno-swap-target-name">{name}</span>
+                      </div>
                     ))}
                   </div>
                 </div>

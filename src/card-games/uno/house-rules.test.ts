@@ -61,12 +61,14 @@ function buildGame(config: {
     handCounts,
     hasDrawnThisTurn: false,
     pendingWild: null,
+    pendingStack: null,
+    pendingSevenSwap: null,
     unoWindow: null,
     scores: config.scores ?? Object.fromEntries(players.map((p) => [p, 0])),
     roundResult: null,
     matchWinnerId: null,
     lastAction: null,
-    houseRules: config.houseRules ?? { drawUntilPlayable: false },
+    houseRules: config.houseRules ?? { drawUntilPlayable: false, stackDraw: false, sevenZero: false },
   }
   return { session: createHostSession(publicState, privateStates), stock, rng: createRng(0) }
 }
@@ -77,8 +79,8 @@ const NO_LEGAL = ['uno-30', 'uno-65', 'uno-78', 'uno-44']   // yellow 3, green 8
 // ── defs and resolution ─────────────────────────────────────────
 
 describe('house rule defs and resolution', () => {
-  it('UNO_HOUSE_RULE_DEFS has exactly one entry for now, with the locked shape', () => {
-    expect(UNO_HOUSE_RULE_DEFS).toHaveLength(1)
+  it('UNO_HOUSE_RULE_DEFS has the expected entries', () => {
+    expect(UNO_HOUSE_RULE_DEFS).toHaveLength(3)
     expect(UNO_HOUSE_RULE_DEFS[0]).toEqual({
       key: 'drawUntilPlayable',
       label: 'Draw until you can play',
@@ -90,15 +92,15 @@ describe('house rule defs and resolution', () => {
   it('resolveHouseRules() returns every defined key at its default', () => {
     const resolved = resolveHouseRules()
     for (const def of UNO_HOUSE_RULE_DEFS) expect(resolved[def.key]).toBe(def.default)
-    expect(resolved).toEqual({ drawUntilPlayable: false })
+    expect(resolved).toEqual({ drawUntilPlayable: false, stackDraw: false, sevenZero: false })
   })
 
   it('resolveHouseRules({}) also returns every defined key at its default', () => {
-    expect(resolveHouseRules({})).toEqual({ drawUntilPlayable: false })
+    expect(resolveHouseRules({})).toEqual({ drawUntilPlayable: false, stackDraw: false, sevenZero: false })
   })
 
-  it('resolveHouseRules({ drawUntilPlayable: true }) overlays the one key and nothing else', () => {
-    expect(resolveHouseRules({ drawUntilPlayable: true })).toEqual({ drawUntilPlayable: true })
+  it('resolveHouseRules({ drawUntilPlayable: true }) overlays one key and keeps others at default', () => {
+    expect(resolveHouseRules({ drawUntilPlayable: true })).toEqual({ drawUntilPlayable: true, stackDraw: false, sevenZero: false })
   })
 })
 
@@ -107,12 +109,12 @@ describe('house rule defs and resolution', () => {
 describe('createUnoGame houseRules', () => {
   it('defaults every rule off when no third argument is given', () => {
     const uno = createUnoGame(['p1', 'p2'], 42)
-    expect(uno.session.publicState.houseRules).toEqual({ drawUntilPlayable: false })
+    expect(uno.session.publicState.houseRules).toEqual({ drawUntilPlayable: false, stackDraw: false, sevenZero: false })
   })
 
   it('accepts a partial houseRules overlay as the third argument', () => {
     const uno = createUnoGame(['p1', 'p2'], 42, { drawUntilPlayable: true })
-    expect(uno.session.publicState.houseRules).toEqual({ drawUntilPlayable: true })
+    expect(uno.session.publicState.houseRules).toEqual({ drawUntilPlayable: true, stackDraw: false, sevenZero: false })
   })
 })
 
@@ -155,7 +157,7 @@ describe('DRAW_CARD with the rule off', () => {
 describe('DRAW_CARD with drawUntilPlayable on', () => {
   it('draws every unplayable card plus the first playable one, keeping the turn', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       stock: cards('uno-10', 'uno-38', 'uno-63'),
       // stock array: [red 5, yellow 7, green 7] — top is uno-63 (green 7), drawn first.
@@ -178,7 +180,7 @@ describe('DRAW_CARD with drawUntilPlayable on', () => {
 
   it('after the multi-draw the player may pass, ending the turn', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       stock: cards('uno-10', 'uno-38', 'uno-63'),
     })
@@ -193,7 +195,7 @@ describe('DRAW_CARD with drawUntilPlayable on', () => {
 
   it('draws exactly one card when the very first card drawn is already playable', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       stock: cards('uno-38', 'uno-13'),   // top = red 7, playable
     })
@@ -208,7 +210,7 @@ describe('DRAW_CARD with drawUntilPlayable on', () => {
 
   it('a wild is always playable, so it stops the loop after one draw', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       stock: cards('uno-10', 'uno-100'),   // top = wild — always playable
     })
@@ -222,7 +224,7 @@ describe('DRAW_CARD with drawUntilPlayable on', () => {
 
   it('exhausts stock and recycling and blocks the round when nothing playable remains', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       hands: { p1: cards(...NO_LEGAL), p2: [], p3: [], p4: [] },
       discard: cards('uno-30', 'uno-63', 'uno-9'),   // top = red 5; below it yellow 3, green 7 — all unplayable
       stock: cards('uno-38', 'uno-65'),              // top = green 8, then yellow 7 — all unplayable
@@ -244,7 +246,7 @@ describe('DRAW_CARD with drawUntilPlayable on', () => {
 describe('houseRules across rounds', () => {
   it('survives START_NEXT_ROUND unchanged', () => {
     const uno = buildGame({
-      houseRules: { drawUntilPlayable: true },
+      houseRules: { drawUntilPlayable: true, stackDraw: false, sevenZero: false },
       stage: 'roundOver',
       scores: { p1: 100, p2: 50, p3: 0, p4: 0 },
     })
@@ -253,7 +255,7 @@ describe('houseRules across rounds', () => {
     const pub = r.uno.session.publicState
     expect(pub.round).toBe(1)
     expect(pub.stage).toBe('play')
-    expect(pub.houseRules).toEqual({ drawUntilPlayable: true })
+    expect(pub.houseRules).toEqual({ drawUntilPlayable: true, stackDraw: false, sevenZero: false })
     expect(pub.scores).toEqual({ p1: 100, p2: 50, p3: 0, p4: 0 })
   })
 })
