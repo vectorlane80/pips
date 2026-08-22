@@ -95,11 +95,8 @@ const BURN_ORDER: YCategory[] = [
   'twos', 'threes', 'fours', 'fives', 'sixes', 'threeKind', 'chance',
 ]
 
-export function decideYahtzeeHold(
-  dice: Die[],
-  card: Partial<Record<YCategory, number>> = {},
-  difficulty: BotDifficulty = 'medium',
-): Set<number> {
+/** Easy-mode hold: pattern-matches on the current dice only, no lookahead — kept beatable on purpose. */
+function decideYahtzeeHoldHeuristic(dice: Die[], card: Partial<Record<YCategory, number>>, difficulty: BotDifficulty): Set<number> {
   const vals = dice.map((d) => d.val)
   const counts = countByFace(vals)
   const entries = Object.entries(counts).map(([face, count]) => ({ face: Number(face), count }))
@@ -151,9 +148,134 @@ export function decideYahtzeeHold(
   return hold
 }
 
-// Categories that are hard to fill later on — hard mode locks these in over dumping into a
-// bigger-looking but easy-to-reach upper box.
-const HARD_TO_FILL: YCategory[] = ['yahtzee', 'largeStraight', 'smallStraight', 'fullHouse']
+// ---- Exact expected-value dice search (medium & hard) ----
+//
+// Rather than pattern-matching the current dice, medium/hard evaluate every possible hold —
+// which dice to keep vs. reroll — by computing the EXACT expected value of the best open
+// category after one more reroll, and taking the argmax. "Exact" because we enumerate every
+// distinct reroll outcome (weighted by how many raw dice sequences produce it) instead of
+// simulating; there are only 252 distinct 5-die outcomes, so this is cheap to run live.
+
+type WeightedMultiset = { vals: number[]; weight: number }
+const multisetCache = new Map<number, WeightedMultiset[]>()
+
+function factorial(n: number): number {
+  let f = 1
+  for (let i = 2; i <= n; i++) f *= i
+  return f
+}
+
+/** Every sorted face-combination of length n, weighted by how many raw dice rolls produce it. */
+function weightedMultisets(n: number): WeightedMultiset[] {
+  const cached = multisetCache.get(n)
+  if (cached) return cached
+  const results: WeightedMultiset[] = []
+  const build = (start: number, vals: number[]) => {
+    if (vals.length === n) {
+      const counts = countByFace(vals)
+      let denom = 1
+      for (const c of Object.values(counts)) denom *= factorial(c)
+      results.push({ vals: [...vals], weight: factorial(n) / denom })
+      return
+    }
+    for (let face = start; face <= 6; face++) {
+      vals.push(face)
+      build(face, vals)
+      vals.pop()
+    }
+  }
+  build(1, [])
+  multisetCache.set(n, results)
+  return results
+}
+
+/** Best achievable score across `open` for a settled hand — the terminal value with no rolls left. */
+function bestScore(vals: number[], open: YCategory[], card: Partial<Record<YCategory, number>>): number {
+  let best = 0
+  for (const c of open) {
+    const s = scoreCategory(vals, c, card)
+    if (s > best) best = s
+  }
+  return best
+}
+
+/** Exact expected value of the best open category if every die NOT in `mask` is rerolled once. */
+function holdValue(
+  vals: number[], mask: number, open: YCategory[], card: Partial<Record<YCategory, number>>,
+): number {
+  const held: number[] = []
+  for (let i = 0; i < vals.length; i++) if (mask & (1 << i)) held.push(vals[i])
+  const rerollCount = vals.length - held.length
+  if (rerollCount === 0) return bestScore(held, open, card)
+  let total = 0
+  let weightSum = 0
+  for (const { vals: reroll, weight } of weightedMultisets(rerollCount)) {
+    total += bestScore([...held, ...reroll], open, card) * weight
+    weightSum += weight
+  }
+  return total / weightSum
+}
+
+/** Best hold (bitmask over dice positions) and its expected value, one reroll from scoring. */
+function bestHold(
+  vals: number[], open: YCategory[], card: Partial<Record<YCategory, number>>,
+): { mask: number; value: number } {
+  let bestMask = 0
+  let bestValue = -1
+  for (let mask = 0; mask < 1 << vals.length; mask++) {
+    const value = holdValue(vals, mask, open, card)
+    if (value > bestValue) {
+      bestValue = value
+      bestMask = mask
+    }
+  }
+  return { mask: bestMask, value: bestValue }
+}
+
+export function decideYahtzeeHold(
+  dice: Die[],
+  card: Partial<Record<YCategory, number>> = {},
+  difficulty: BotDifficulty = 'medium',
+): Set<number> {
+  if (difficulty === 'easy') return decideYahtzeeHoldHeuristic(dice, card, difficulty)
+
+  const open = Y_CATEGORIES.filter((c) => !(c in card))
+  const vals = dice.map((d) => d.val)
+  const { mask } = bestHold(vals, open, card)
+  const hold = new Set<number>()
+  dice.forEach((d, i) => {
+    if (mask & (1 << i)) hold.add(d.id)
+  })
+  return hold
+}
+
+// threeKind/fourKind/chance all score "sum of all five dice", so a roll that satisfies more
+// than one of them ties on raw score. Used only as medium's tie-break (hard resolves the same
+// situation naturally via opportunityCost below, since it compares continuous EV, not raw ties).
+const TIE_BREAK_PRIORITY: YCategory[] = [
+  'yahtzee', 'largeStraight', 'smallStraight', 'fullHouse', 'fourKind', 'threeKind',
+  'sixes', 'fives', 'fours', 'threes', 'twos', 'ones', 'chance',
+]
+
+// Expected value of a category from a fresh roll with ONLY that category open — i.e. what it's
+// really worth if left for a future turn instead of taken now. Reuses the same exact-expectation
+// search as decideYahtzeeHold (card={} — Joker off, a standalone-category simplification), and
+// is cached forever per category since it never depends on live game state.
+const opportunityCostTable = new Map<YCategory, number>()
+
+function opportunityCost(cat: YCategory): number {
+  const cached = opportunityCostTable.get(cat)
+  if (cached !== undefined) return cached
+  let total = 0
+  let weightSum = 0
+  for (const { vals, weight } of weightedMultisets(5)) {
+    total += bestHold(vals, [cat], {}).value * weight
+    weightSum += weight
+  }
+  const value = total / weightSum
+  opportunityCostTable.set(cat, value)
+  return value
+}
 
 export function decideYahtzeeCategory(
   vals: number[],
@@ -162,16 +284,22 @@ export function decideYahtzeeCategory(
 ): YCategory {
   const open = Y_CATEGORIES.filter((c) => !(c in card))
   let best: YCategory | null = null
-  let bestWeight = -1
+  let bestWeight = -Infinity
+  let anyPositive = false
   for (const c of open) {
     const s = scoreCategory(vals, c, card)
-    const weight = difficulty === 'hard' && s > 0 && HARD_TO_FILL.includes(c) ? s + 20 : s
-    if (weight > bestWeight) {
+    if (s > 0) anyPositive = true
+    // Hard: prefer the category where taking it now beats what it's typically worth if saved —
+    // a principled version of "lock in the rare box," not just an arbitrary bonus.
+    const weight = difficulty === 'hard' ? s - opportunityCost(c) : s
+    const tieWins = weight === bestWeight && best !== null
+      && TIE_BREAK_PRIORITY.indexOf(c) < TIE_BREAK_PRIORITY.indexOf(best)
+    if (weight > bestWeight || tieWins) {
       bestWeight = weight
       best = c
     }
   }
-  if (best && bestWeight > 0) return best
+  if (best && anyPositive) return best
   for (const c of BURN_ORDER) {
     if (open.includes(c)) return c
   }

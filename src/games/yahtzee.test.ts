@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal } from './yahtzee'
+import {
+  decideYahtzeeCategory, decideYahtzeeHold, grandTotal, isFiveKind, partitionDiceOrder, scoreCategory, upperTotal,
+} from './yahtzee'
+import type { Die } from '../types'
+
+const dieAt = (id: number, val: number): Die => ({ id, val, sel: false, rot: 0 })
+const heldIds = (dice: Die[], hold: Set<number>) => dice.filter((d) => hold.has(d.id)).map((d) => d.val).sort()
 
 describe('isFiveKind', () => {
   it('five equal values → true', () => {
@@ -183,6 +189,52 @@ describe('grandTotal', () => {
     // so grandTotal must not change for the same card.
     const card = { ones: 3, fours: 12, sixes: 18, yahtzee: 50 }
     expect(grandTotal(card)).toBe(33 + 50)
+  })
+})
+
+describe('decideYahtzeeHold — expected-value search (medium/hard)', () => {
+  it('four of a kind + an odd die → holds the four, rerolls the odd one out', () => {
+    const dice = [dieAt(0, 4), dieAt(1, 4), dieAt(2, 4), dieAt(3, 4), dieAt(4, 2)]
+    const hold = decideYahtzeeHold(dice, {}, 'medium')
+    expect(heldIds(dice, hold)).toEqual([4, 4, 4, 4])
+  })
+
+  it('small straight already made, one die free → holds the run, rerolls the spare for a shot at large straight', () => {
+    const dice = [dieAt(0, 1), dieAt(1, 2), dieAt(2, 3), dieAt(3, 4), dieAt(4, 6)]
+    const hold = decideYahtzeeHold(dice, {}, 'medium')
+    expect(heldIds(dice, hold)).toEqual([1, 2, 3, 4])
+  })
+
+  it('five of a kind already rolled → holds all five (nothing to gain from rerolling)', () => {
+    const dice = [dieAt(0, 5), dieAt(1, 5), dieAt(2, 5), dieAt(3, 5), dieAt(4, 5)]
+    const hold = decideYahtzeeHold(dice, {}, 'hard')
+    expect(hold.size).toBe(5)
+  })
+
+  it('easy mode keeps the old pattern-match heuristic, not the EV search', () => {
+    // Four distinct faces (1,2,3,4 + a duplicate 4): the heuristic holds one of each distinct
+    // face and discards the duplicate, even though the EV search would keep all four 4s instead.
+    const dice = [dieAt(0, 1), dieAt(1, 2), dieAt(2, 3), dieAt(3, 4), dieAt(4, 4)]
+    const hold = decideYahtzeeHold(dice, {}, 'easy')
+    expect(heldIds(dice, hold)).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe('decideYahtzeeCategory — tie-break between equal-scoring categories', () => {
+  it('four of a kind ties threeKind/chance on raw score → picks the rarer fourKind box', () => {
+    // [4,4,4,4,2]: threeKind, fourKind, and chance all score 18 — fourKind is the
+    // hardest of the three to satisfy again, so it should win the tie.
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'medium')).toBe('fourKind')
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], {}, 'hard')).toBe('fourKind')
+  })
+
+  it('fourKind already filled → falls back to threeKind over chance', () => {
+    expect(decideYahtzeeCategory([4, 4, 4, 4, 2], { fourKind: 18 }, 'medium')).toBe('threeKind')
+  })
+
+  it('yahtzee still outranks fourKind on a five-of-a-kind tie', () => {
+    // [5,5,5,5,5]: yahtzee(50), fourKind(25), threeKind(25), chance(25) all open.
+    expect(decideYahtzeeCategory([5, 5, 5, 5, 5], {}, 'medium')).toBe('yahtzee')
   })
 })
 
