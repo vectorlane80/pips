@@ -3381,3 +3381,41 @@ shipping each verified charter promptly.
   (lead's model) reviewing every code slice, lead doing specs/
   verification/git/live visual check.
 - **Next**: spec 47 (engine) dispatched.
+
+## Cycle 23 — 2026-08-21 — spec 47: Solitaire rules engine
+- **Shipped**: `src/card-games/solitaire/` — state.ts (types +
+  `createSolitaireGame`), shared.ts (`applyMove`, `findFoundationMove`,
+  `legalDestinations`, helpers), klondike.ts / freecell.ts (deals,
+  `maxMovableCards`), 49 tests. Haiku implementer, two passes.
+- **Verification** (lead, reproduced): `npx tsc -b --noEmit` silent,
+  `npm test` 1136/1136, `npm run build` clean, `git diff --check`
+  clean. Read shared.ts/state.ts/klondike.ts/freecell.ts in full.
+- **Review** (Oscar persona, lead's model; live probes via a scratch
+  vitest file, deleted after):
+  1. **minor, fixed** — `applyMove` THREW on non-integer location
+     indexes (`{cell, 1.5}` → "reading 'rank'", `{tableau, 1.5}` as
+     source or dest → "reading 'length'"). Repro'd before, rejects
+     after; regression tests added in both test files.
+  2. **major (maintenance), fixed** — ~15 `(loc as any).index` casts
+     defeating the discriminated union → replaced by narrowing + a
+     `locKey` helper; `grep "as any"` now empty.
+  3. **minor, fixed** — supermove cap checked twice (non-empty branch
+     + an "empty destination special case") → single check.
+  4. **minor, fixed** — unreachable `if (!sourceCard)` "internal
+     error" branch (CLAUDE.md forbids impossible-condition code).
+  5. **minor (test gap), fixed** — `legalDestinations` test asserted
+     `length > 0` where the spec required the exact ordered list; now
+     asserts `[{tableau,1}]` and a second position proving tableau-
+     before-foundation ordering.
+  6. **nit, fixed** — `Math.pow` → `**`; impossible `> 0` guard in
+     `maxMovableCards` dropped; narrating comments stripped.
+  Probes that came back clean (receipts): input never mutated across
+  DRAW + `legalDestinations` over every column (JSON snapshot equal);
+  recycle order (first-drawn card becomes the new stock top, 25 moves
+  after a full pass); out-of-range/negative indexes, count 0, count >
+  faceUp, from === to, to: waste — all reject.
+- **Lesson**: the implementer's report opened "Perfect! All tests are
+  passing" both times — the numbers were real both times, but the
+  triumphant tone still correlated with the slop that review had to
+  strip. Keep treating it as a smell, not as evidence either way.
+- **Continue?** Yes — spec 48 (screens) dispatched.

@@ -3,10 +3,13 @@
 Charter: Solitaire — see `CHARTER.md`.
 
 ## Charter: Solitaire (2026-08-21) — in progress
-- [ ] Spec 47 — rules engine: `src/card-games/solitaire/` (state.ts,
+- [x] Spec 47 — rules engine: `src/card-games/solitaire/` (state.ts,
       shared.ts, klondike.ts, freecell.ts + tests). Both modes' deal,
       move validation, auto-flip, stock/waste recycle, supermove cap,
-      win detection. Pure, serializable.
+      win detection. Pure, serializable. 1136 tests (1087 + 49) /
+      tsc / build green. Oscar review (lead): 1 minor defect with a
+      live repro (validator threw on non-integer indexes) + 4 slop
+      items, all fixed — see DEVLOG Cycle 23.
 - [ ] Spec 48 — screens: SolitaireRoom (1-player, card back, mode),
       SolitaireTable (+css), SolitaireRulesOverlay, win banner.
 - [ ] Spec 49 — wiring: shelf tile, `/pips/solitaire` route, App state,
