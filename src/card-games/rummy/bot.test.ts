@@ -81,6 +81,7 @@ function buildSession(config: {
     roundOver: config.roundOver ?? false,
     roundWinnerId: config.roundWinnerId ?? null,
     matchWinnerId: config.matchWinnerId ?? null,
+    cardBack: 'classic',
     handCounts: config.handCounts ?? { p1: config.p1HandCardIds.length, p2: config.p2HandCardIds.length },
   }
 

@@ -30,6 +30,7 @@ import type { Card } from './card-engine/cards'
 import { RummyTable } from './screens/RummyTable'
 import { RummyResults } from './screens/RummyResults'
 import { RummyRoom } from './screens/RummyRoom'
+import { DEFAULT_CARD_BACK } from './components/cardBacks'
 
 // ---- Phase 10 (separate parallel session, per CHARTER.md resolution #7) ----
 import { createPhase10Game, PHASE10_MAX_SEATS, PHASE10_MIN_SEATS, type Phase10Session, type Phase10PublicState, type Phase10PrivateState, type Phase10Action } from './card-games/phase10/state'
@@ -106,7 +107,7 @@ import { SkipBoResults } from './screens/SkipBoResults'
 import { SkipBoRoom } from './screens/SkipBoRoom'
 
 type RummyView =
-  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
+  | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
 type Phase10View =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[] }
@@ -194,6 +195,7 @@ export default function App() {
   const [rummyNotice, setRummyNotice] = useState<string | null>(null)
   const [rummyStarted, setRummyStarted] = useState(false)
   const [rummySeats, setRummySeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+  const [rummyCardBack, setRummyCardBack] = useState(DEFAULT_CARD_BACK)
 
   // ---- Phase 10 ----
   const [phase10Role, setPhase10Role] = useState<'host' | 'guest' | null>(null)
@@ -304,6 +306,7 @@ export default function App() {
   const rummyStartedRef = useRef(false)
   const rummyNamesRef = useRef<Record<string, string>>({})
   const rummyBotSeatsRef = useRef<Set<string>>(new Set())
+  const rummyCardBackRef = useRef(DEFAULT_CARD_BACK)
   const rummyBotCounterRef = useRef(0)
   const phase10SessionRef = useRef<Phase10Session | null>(null)
   const phase10HostRef = useRef<HostHandle<Phase10View> | null>(null)
@@ -652,6 +655,8 @@ export default function App() {
     rummyBotSeatsRef.current.clear()
     rummyBotCounterRef.current = 0
     rummyNamesRef.current = {}
+    setRummyCardBack(DEFAULT_CARD_BACK)
+    rummyCardBackRef.current = DEFAULT_CARD_BACK
     // Phase 10
     phase10HostRef.current?.destroy()
     phase10HostRef.current = null
@@ -900,6 +905,7 @@ export default function App() {
       const view: RummyView = {
         kind: 'lobby',
         roster: rummySeatsRef.current.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === rummyLocalPlayerIdRef.current })),
+        cardBack: rummyCardBackRef.current,
       }
       setRummyView(view)
       rummyHostRef.current?.broadcast(view)
@@ -1006,7 +1012,7 @@ export default function App() {
     if (seats.length < RUMMY_MIN_SEATS || seats.length > RUMMY_MAX_SEATS) return
     const playerIds = seats.map((s) => s.playerId)
     const seed = Math.floor(Math.random() * 2147483647)
-    rummySessionRef.current = createRummyGame(playerIds, seed)
+    rummySessionRef.current = createRummyGame(playerIds, seed, rummyCardBackRef.current)
     rummyNamesRef.current = Object.fromEntries(seats.map((s) => [s.playerId, s.name]))
     rummyStartedRef.current = true
     setRummyStarted(true)
@@ -1106,9 +1112,17 @@ export default function App() {
     const prevRevision = rummySessionRef.current.session.revision
     const playerIds = [...ps.seatOrder]
     const seed = Math.floor(Math.random() * 2147483647)
-    const next = createRummyGame(playerIds, seed)
+    const next = createRummyGame(playerIds, seed, ps.cardBack)
     next.session = { ...next.session, revision: prevRevision + 1 }
     rummySessionRef.current = next
+    rummyBroadcast()
+  }
+
+  function rummySetCardBack(id: string) {
+    if (rummyRole !== 'host' || rummyStartedRef.current) return
+    // Ref-first: rummyBroadcast() runs synchronously and must send the new pick.
+    rummyCardBackRef.current = id
+    setRummyCardBack(id)
     rummyBroadcast()
   }
 
@@ -3777,6 +3791,9 @@ export default function App() {
     const roster = rummyRole === 'host'
       ? rummySeats.map((s) => ({ name: s.name, isBot: s.isBot, isHost: s.playerId === rummyLocalPlayerId }))
       : (rummyView?.kind === 'lobby' ? rummyView.roster : [])
+    const viewCardBack = rummyRole === 'host'
+      ? rummyCardBack
+      : (rummyView?.kind === 'lobby' ? rummyView.cardBack : DEFAULT_CARD_BACK)
     return (
       <RummyRoom
         code={rummyCode}
@@ -3784,6 +3801,8 @@ export default function App() {
         isHost={rummyRole === 'host'}
         seats={roster}
         notice={rummyNotice ?? error}
+        cardBack={viewCardBack}
+        onSelectCardBack={rummySetCardBack}
         onAddHouseBot={addRummyHouseBot}
         onStartGame={rummyStart}
         onLeave={resetToEntry}

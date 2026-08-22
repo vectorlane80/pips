@@ -626,7 +626,7 @@ export function RummyTable({
           <DealIntro
             others={others}
             yourHandSize={hand.length}
-            renderCardBack={(p) => <CardBack {...p} />}
+            renderCardBack={(p) => <CardBack {...p} design={publicState.cardBack} />}
             onComplete={() => setShowIntro(false)}
           />
         ) : (
@@ -665,6 +665,7 @@ export function RummyTable({
                         <CardBack
                           key={i}
                           size="fan"
+                          design={publicState.cardBack}
                           style={{ marginLeft: i === 0 ? 0 : -15 }}
                         />
                       ))}
@@ -731,6 +732,7 @@ export function RummyTable({
               <div className="rummy-stock-card-wrapper">
                 <CardBack
                   size="stock"
+                  design={publicState.cardBack}
                   canDraw={canDrawStock}
                   empty={publicState.stockCount === 0}
                   onClick={canDrawStock ? onDrawStock : undefined}
