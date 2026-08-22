@@ -2,7 +2,7 @@
 
 Charter: Solitaire — see `CHARTER.md`.
 
-## Charter: Solitaire (2026-08-21) — in progress
+## Charter: Solitaire (2026-08-21) — done (awaiting "push")
 - [x] Spec 47 — rules engine: `src/card-games/solitaire/` (state.ts,
       shared.ts, klondike.ts, freecell.ts + tests). Both modes' deal,
       move validation, auto-flip, stock/waste recycle, supermove cap,
@@ -17,9 +17,17 @@ Charter: Solitaire — see `CHARTER.md`.
       build green. Oscar review (lead): 2 blocking + 6 major + nits,
       all fixed over two implementer passes — see DEVLOG Cycle 24.
       First implementer retired (committed despite the git ban).
-- [ ] Spec 49 — wiring: shelf tile, `/pips/solitaire` route, App state,
-      DealIntro, sounds, undo.
-- [ ] Spec 50 — polish from live play / review (only if needed).
+- [x] Spec 49 — wiring: shelf tile (last on the shelf, "1 player",
+      olive), `/pips/solitaire` route + test, App state (history-of-
+      states undo, shared `setCardBackPreference`), lobby/table/results
+      render blocks. 1137 tests / tsc / build green. Lead review of the
+      full diff (small, decision-locked wiring): clean. Live check of
+      BOTH modes in the browser — see DEVLOG Cycle 25.
+- [x] Spec 50 — polish: NOT needed. Live play surfaced nothing that
+      contradicts a sibling convention; two accepted deviations are
+      recorded in DEVLOG Cycle 25 (DealIntro's "You · 7/8" pile label,
+      results screen not reachable in a live session without winning a
+      deal).
 - [ ] Push: merge `solitaire` → `main` on the user's "push".
 
 ## Charter: Skip-Bo (2026-08-17) — done

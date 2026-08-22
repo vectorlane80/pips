@@ -3495,3 +3495,67 @@ shipping each verified charter promptly.
   diff the tree before reading any report.
 - **Continue?** Yes — spec 49 (wiring) dispatched; the live visual
   check (both modes) happens the moment it lands.
+
+## Cycle 25 — 2026-08-21 — spec 49: wiring + live check; charter complete
+- **Shipped**: `route.ts` gains `solitaire` (+ test), `Landing` gets
+  the last shelf tile ("Solitaire · 1 player", olive), `App.tsx` gets
+  a local-only Solitaire session: `solitaireOpen` / `solitaireMode` /
+  `solitaireHistory` (undo = pop) / `solitaireDealId`, `startSolitaire`
+  / `solitaireDeal` / `solitaireApply` / `solitaireUndo`, a shared
+  `setCardBackPreference` that Rummy's host picker now also calls, the
+  reset block, `hostGameFromBoot`, `liveGameNow` + effect deps, and the
+  lobby → table → results render blocks. Fresh Haiku implementer; one
+  pass, diff exactly as spec 49 locked it.
+- **Verification** (lead, reproduced): tsc silent, 1137/1137, build
+  clean, `git diff --check` clean; read the whole App/Landing/route
+  diff.
+- **Review**: lead read of the full diff (proportionate: 4 files of
+  decision-locked wiring, no new logic beyond a 4-line history
+  reducer). Receipts: `solitaireApply` rejects illegal moves by
+  returning the same array (no state churn); undo never pops the deal
+  itself (`h.length > 1`); mode and card back survive `resetToEntry`
+  as preferences; `liveGameNow` returns null once `won` so the
+  popstate guard doesn't nag on the results screen.
+- **Live check (both modes, dev server, browser)**:
+  - Shelf tile → `/pips/solitaire` lobby: "1 player" panel, card-back
+    picker seeded from the cookie (Orbit Rings), mode dropdown with
+    per-mode blurb, Start, the single seat tile.
+  - Klondike: DealIntro ran INSIDE the shell (header/subheader visible
+    around it) with the chosen back; 7 columns at content-driven
+    heights 70→130px, 21 piles face-down, 7 face-up, stock 24; stock
+    click → waste 1 / moves 1 / Undo enabled; selecting J♥ outlined
+    Q♠ as the only target; the move stacked J♥ under Q♠ and auto-
+    flipped column 2's next card; Undo restored the exact prior board;
+    the Rules overlay rendered with Rummy's header/list styling.
+  - FreeCell: 8 columns 7/7/7/7/6/6/6/6 all face-up, 4 cells + 4
+    foundation slots; selecting 9♠ lit all four cells; the cell move
+    landed (9♠ in cell 0, K♦ exposed).
+  - The hooks-violation crash from Cycle 24 is confirmed gone (the
+    table mounts; it would not have).
+  - Regression: Rummy's lobby after the CardBackPicker extraction —
+    pixel-equivalent, same picker, same cookie value. The dev
+    console's "CardBack is not defined / RummyRoom.css 404" lines are
+    HMR history from the file deletion under the running server; the
+    page renders, which a real ReferenceError would not allow.
+- **Accepted deviations** (recorded, not hidden): DealIntro's pile
+  label reads "You · 7" (8 in FreeCell) — one flight per column, the
+  shared component has no "columns" vocabulary; the results screen
+  was not reached live (winning a real deal isn't scriptable without
+  product-code hooks) — it is a line-for-line mirror of RummyResults,
+  type-checked, and the `won` flag it keys on is engine-tested.
+- **Deep reassessment (milestone boundary)**: Who benefits — a player
+  alone at the table, immediately. Real workflow — shelf → lobby →
+  full deal in either mode with undo, rules, and the shared card back.
+  Next slice — would be polish only (e.g. centring the tableau, an
+  auto-complete when the deal is won), not capability. Definition of
+  done is met in full. → **Wrap-up.**
+- **Process notes for future charters**: (1) a persistent implementer
+  that breaks the git ban once should be retired, not warned — the
+  cost of a second incident is a rewritten history; (2) put "git =
+  task failure" in the opening line of every delegation, which worked
+  first time with the replacement; (3) triumphant report openers
+  correlated with omitted verification steps in 3 of 5 reports this
+  charter — always re-run every step, including the greps.
+- **Continue?** No — wrap-up. Safety-net cron cancelled. Branch
+  `solitaire` is clean and ready; merge/push waits for the word
+  "push" (REQUESTS.md).

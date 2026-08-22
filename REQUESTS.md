@@ -66,7 +66,7 @@
 - [x] 2026-08-15, Uno charter — commit the charter: done, pushed
       (verified: full Uno commit sequence on `main`, HEAD == origin/main).
 
-- [ ] 2026-08-21, Solitaire charter — non-blocking — the work lands on
-      branch `solitaire` (never on `main`). When you're happy with the
-      live check, say "push" and it gets merged, pushed, and the branch
-      pruned. Nothing here needs an answer to keep the loop moving.
+- [ ] 2026-08-21, Solitaire charter — non-blocking — DONE on branch
+      `solitaire` (4 commits: engine, screens, wiring, docs), verified
+      live in both modes. Say "push" to merge into `main`, push, and
+      prune the branch. Nothing else is waiting on you.
