@@ -2,9 +2,7 @@ import { useState } from 'react'
 import { RUMMY_MAX_SEATS, RUMMY_MIN_SEATS } from '../card-games/rummy/state'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
-import { CardBack } from '../components/PlayingCard'
-import { CARD_BACKS } from '../components/cardBacks'
-import './RummyRoom.css'
+import { CardBackPicker } from '../components/CardBackPicker'
 
 export interface RummyRoomProps {
   code: string
@@ -85,31 +83,11 @@ export function RummyRoom({
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
 
-          <div style={{ marginTop: 26 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>
-              Card back
-              {!isHost && <span style={{ fontWeight: 500, color: 'var(--muted-text)' }}> · {hostName} picks</span>}
-            </div>
-            <div className="rummy-card-back-picker">
-              <CardBack size="stock" design={cardBack} />
-              {isHost ? (
-                <select
-                  className="input rummy-card-back-select"
-                  aria-label="Card back"
-                  value={cardBack}
-                  onChange={(e) => onSelectCardBack(e.target.value)}
-                >
-                  {CARD_BACKS.map((def) => (
-                    <option key={def.id} value={def.id}>{def.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <span style={{ fontSize: 17, fontWeight: 600 }}>
-                  {CARD_BACKS.find((d) => d.id === cardBack)?.name ?? 'Classic'}
-                </span>
-              )}
-            </div>
-          </div>
+          <CardBackPicker
+            cardBack={cardBack}
+            onSelect={isHost ? onSelectCardBack : undefined}
+            hostName={!isHost ? hostName : undefined}
+          />
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

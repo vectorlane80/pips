@@ -95,6 +95,11 @@
   box-shadow: 0 4px 0 var(--grey-border);
 }
 
+.playing-card--discard.playing-card--selected {
+  border-color: var(--yellow);
+  box-shadow: 0 4px 0 var(--_selected-shadow);
+}
+
 /* ===================================================================
    Content — corner (hand top-left + discard top-left)
    =================================================================== */
@@ -247,6 +252,19 @@
   border-width: 3px;
   border-color: var(--ink);
   box-shadow: 0 5px 0 var(--ink);
+}
+
+/* ===================================================================
+   CardBack — pile (50 × 70) — stacked tableau columns
+   =================================================================== */
+
+.card-back--pile {
+  --cb: 0.37;
+  width: 50px;
+  height: 70px;
+  border-radius: 10px;
+  border-width: 3px;
+  border-color: var(--ink);
 }
 
 /* Turn-highlight: border turns yellow */

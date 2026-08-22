@@ -10,8 +10,13 @@ Charter: Solitaire — see `CHARTER.md`.
       tsc / build green. Oscar review (lead): 1 minor defect with a
       live repro (validator threw on non-integer indexes) + 4 slop
       items, all fixed — see DEVLOG Cycle 23.
-- [ ] Spec 48 — screens: SolitaireRoom (1-player, card back, mode),
-      SolitaireTable (+css), SolitaireRulesOverlay, win banner.
+- [x] Spec 48 — screens: SolitaireRoom (1-player, card back, mode),
+      SolitaireTable (+css), SolitaireRulesOverlay, SolitaireResults,
+      plus CardBackPicker extracted from RummyRoom (shared by both
+      lobbies) and a 50×70 `pile` CardBack size. 1136 tests / tsc /
+      build green. Oscar review (lead): 2 blocking + 6 major + nits,
+      all fixed over two implementer passes — see DEVLOG Cycle 24.
+      First implementer retired (committed despite the git ban).
 - [ ] Spec 49 — wiring: shelf tile, `/pips/solitaire` route, App state,
       DealIntro, sounds, undo.
 - [ ] Spec 50 — polish from live play / review (only if needed).

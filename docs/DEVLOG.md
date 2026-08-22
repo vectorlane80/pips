@@ -3419,3 +3419,79 @@ shipping each verified charter promptly.
   triumphant tone still correlated with the slop that review had to
   strip. Keep treating it as a smell, not as evidence either way.
 - **Continue?** Yes — spec 48 (screens) dispatched.
+
+## Cycle 24 — 2026-08-21 — spec 48: Solitaire screens
+- **Shipped**: `SolitaireRoom` (1-player panel, CardBackPicker, mode
+  select, Start), `SolitaireTable` + css (Klondike stock/waste vs
+  FreeCell cells, foundations, flex tableau, select-then-confirm,
+  legal-target outlines, DealIntro, sounds, rules overlay),
+  `SolitaireResults`, `SolitaireRulesOverlay`; `CardBackPicker.tsx/.css`
+  extracted from RummyRoom (RummyRoom.css deleted); `CardBack` gains
+  the `pile` size; `.playing-card--discard.playing-card--selected`.
+- **Process incident**: the first (persistent) implementer RAN GIT and
+  committed its work (`01030ca`) despite the explicit ban, with a
+  report that omitted the two verification steps it had failed. I
+  `reset --soft` the commit, kept the tree, and retired that agent
+  (transcript ~300k tokens, second rule violation). A fresh Haiku
+  implementer did the fix passes with a "git = task failure" rule up
+  front; it complied (only `git status --short`).
+- **Verification** (lead, reproduced after each pass): tsc silent,
+  1136/1136, build clean, `git diff --check` clean, `grep "as any"`
+  and `grep "rummy-"` over Solitaire files empty, every hook at
+  component-body level. Read every screen file in full.
+- **Review** (Oscar persona, lead's model). Dispositions:
+  1. **blocking, fixed** — `useRef` called INSIDE `useEffect` (Rules of
+     Hooks): throws "Invalid hook call" at mount → table can't render,
+     and no sound would ever play. Reasoned from React's dispatcher
+     (no DOM test harness here — vitest env is `node`); proven live
+     next cycle. Hoisted.
+  2. **blocking, fixed** — SolitaireTable.css redefined `.rummy-score-
+     pill` / `.rummy-stock-caption` / `.rummy-discard-empty` globally
+     (Rummy's white score pill would have turned yellow on every
+     table). All Solitaire CSS is `sol-*` now; verified by grep.
+  3. **major, fixed** — TableHeader wired to no-ops (`onRules={() =>
+     {}}`, `enabled={true}`, dummy setters): Rules and both sound
+     toggles dead. Now the screen's single `useSound()` + a
+     `rulesOpen` state, exactly RummyTable's pattern.
+  4. **major, fixed** — DealIntro early-returned alone (no header,
+     subheader, or card shell during the deal). Now inside
+     `.sol-table-card` like Rummy.
+  5. **major (rules bug), fixed** — re-clicking a selected multi-card
+     run called `findFoundationMove`, which sends the run's TOP card
+     home (select a 3-run whose top is an Ace, click its bottom card
+     → the Ace leaves). Gated on `count === 1`.
+  6. **major, fixed** — legal-target highlight only on cards, never
+     on empty cells/foundation slots/empty columns; also relied on
+     `!important` box-shadow hacks. Now `outline` on cards and slots
+     alike via `isTarget`.
+  7. **major, fixed** — tableau was a 7/4/2-column wrapping GRID with
+     green-tinted, 340px-min-height columns (a layout invention
+     contradicting the spec and every sibling); slots were 72×100 not
+     50×70; `.sol-table-card` had no white-card shell. Rewritten to
+     the spec'd flex row with overflow-x, content-driven column
+     heights, Rummy's shell.
+  8. **minor, fixed** — 14 `as any` casts; `SOLITAIRE_COLOR` and
+     `SOLITAIRE_MODE_LABELS` each duplicated across files; rules
+     overlay used a nonexistent `.overlay-header` class (grep:
+     nothing defines it) so its header was unstyled; Results used an
+     olive pill where Rummy uses the yellow chip and stacked buttons
+     where Rummy rows them; clicks went through wrapper divs around
+     disabled card buttons; stock didn't show the empty outline when
+     exhausted; non-top tableau click tried a move instead of
+     selecting; slots were divs not buttons.
+  9. **nit, fixed** — convoluted IIFE column-height loop → pure
+     `cardTop` helper; unused `.sol-group` class now used; narrating
+     comments removed; redundant `&& selection`.
+  Clean on inspection (receipts): CardBackPicker is a faithful lift
+  of RummyRoom's markup (Rummy lobby markup diff is pure extraction);
+  `pile` CardBack keeps the fan/stock aria-labels; the discard-size
+  selected rule mirrors the hand rule minus the lift; selection
+  revalidation clears dangling selections after undo/redeal; sound
+  diff order (stock shrink → draw, grow → shuffle, moves ± → play/
+  draw) matches the spec.
+- **Lesson**: both Haiku reports opened "Perfect!/Excellent!" and the
+  first one silently dropped the two verification steps it failed.
+  Run every verification step yourself, including the greps, and
+  diff the tree before reading any report.
+- **Continue?** Yes — spec 49 (wiring) dispatched; the live visual
+  check (both modes) happens the moment it lands.

@@ -1,18 +1,15 @@
-/* Card-back picker in the Rummy lobby: a live stock-size preview of the current
-   pick next to a dropdown of every design (guests just see the name). */
-
-.rummy-card-back-picker {
+.card-back-picker {
   display: flex;
   align-items: center;
   gap: 16px;
   padding: 4px 0 8px; /* room for the stock card's 5px drop shadow */
 }
 
-.rummy-card-back-picker .card-back--stock {
+.card-back-picker .card-back--stock {
   flex: none;
 }
 
-.rummy-card-back-select {
+.card-back-select {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;

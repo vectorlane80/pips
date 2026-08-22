@@ -147,7 +147,7 @@ export function PlayingCard({
 
 // ---- CardBack ----
 
-export type CardBackSize = 'fan' | 'stock'
+export type CardBackSize = 'fan' | 'stock' | 'pile'
 
 export interface CardBackProps {
   size: CardBackSize
