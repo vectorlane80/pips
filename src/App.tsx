@@ -3318,14 +3318,14 @@ export default function App() {
         cur = next
       }
       state = cur
-      await wait(BASE_MS * pace * 0.6)
+      await wait(BASE_MS * pace)
       if (stale(key)) return
       const rolled = hostApply({ type: 'yahtzeeRoll' }, seatId)
       if (!rolled) return
       state = rolled
     }
     if (stale(key)) return
-    await wait(BASE_MS * pace * 0.5)
+    await wait(BASE_MS * pace * 0.6)
     if (stale(key)) return
     const vals = state.yahtzee.dice.map((d) => d.val)
     const category = decideYahtzeeCategory(vals, state.yahtzee.cards[seatId] ?? {}, state.botDifficulty)
