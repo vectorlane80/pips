@@ -15,6 +15,17 @@ export interface PhaseGroup {
 // naturals and the rest after. Deterministic and stable: the same card set
 // always produces the same order, unlike the broken NaN-comparator sort it
 // replaces.
+//
+// `cards` is not guaranteed to be a complete, self-contained valid run: a
+// caller may pass only a subset (e.g. a group's own zone plus same-player
+// hits, excluding another player's cross-hits that also target the same
+// group and fill some of its gaps — see Phase10Table's GroupCluster
+// callers). A gap in THIS subset may therefore have no natural or wild
+// available to fill it even though the true full accumulated group (per
+// fullGroupCards) is valid. Silently skip an unfillable gap rather than
+// indexing wilds[] out of bounds and returning `undefined` in the array —
+// that undefined previously reached callers' `.map(card => card.id)` and
+// crashed the whole screen.
 export function orderRunForDisplay(cards: Card[]): Card[] {
   const naturals = cards.filter((c) => c.meta?.kind === 'number').sort((a, b) => Number(a.rank) - Number(b.rank))
   const wilds = cards.filter((c) => c.meta?.kind !== 'number')
@@ -26,7 +37,11 @@ export function orderRunForDisplay(cards: Card[]): Card[] {
   let wildIdx = 0
   for (let v = minNum; v <= maxNum; v++) {
     const natural = byValue.get(v)
-    filled.push(natural ?? wilds[wildIdx++])
+    if (natural) {
+      filled.push(natural)
+    } else if (wildIdx < wilds.length) {
+      filled.push(wilds[wildIdx++])
+    }
   }
   const extra = wilds.slice(wildIdx)
   const before = Math.floor(extra.length / 2)

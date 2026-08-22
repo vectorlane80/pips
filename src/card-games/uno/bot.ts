@@ -30,10 +30,26 @@ function pickBest(playable: UnoCard[]): string {
 export const unoBotStrategy: BotStrategy<UnoPublicState, UnoPrivateState, UnoAction> = (
   publicState,
   privateState,
-  _playerId,
+  playerId,
 ) => {
   const hand = privateState.hand.cards
   const top = topCard(publicState.discardPile)!
+
+  if (publicState.pendingSevenSwap !== null) {
+    // The bot just played a 7, so it owes a swap-target choice. Find the opponent with the fewest cards,
+    // tie-broken by seat order.
+    let targetPlayerId = ''
+    let minCards = Infinity
+    for (const seatPlayerId of publicState.seatOrder) {
+      if (seatPlayerId === playerId) continue
+      const seatCardCount = publicState.handCounts[seatPlayerId] ?? 0
+      if (seatCardCount < minCards) {
+        minCards = seatCardCount
+        targetPlayerId = seatPlayerId
+      }
+    }
+    return { type: 'CHOOSE_SWAP_TARGET', targetPlayerId }
+  }
 
   if (publicState.pendingWild !== null) {
     // The bot just played a wild/wild4, so it owes a color choice. An empty hand is
@@ -48,6 +64,17 @@ export const unoBotStrategy: BotStrategy<UnoPublicState, UnoPrivateState, UnoAct
       if (counts[color] > counts[best]) best = color
     }
     return { type: 'CHOOSE_COLOR', color: best }
+  }
+
+  // Check for pending stack (after pendingWild, since a wild4 stack still routes through pendingWild for color choice)
+  if (publicState.pendingStack !== null) {
+    const stackMatching = hand.filter((card) => card.kind === publicState.pendingStack!.kind)
+    if (stackMatching.length > 0) {
+      // Play the first matching card (deterministic)
+      return { type: 'PLAY_CARD', cardId: stackMatching[0].id }
+    }
+    // No matching card: draw the pile
+    return { type: 'DRAW_CARD' }
   }
 
   const playable = hand.filter((card) => isUnoPlayable(card, top, publicState.activeColor))
