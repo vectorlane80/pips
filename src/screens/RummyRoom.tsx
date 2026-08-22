@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { RUMMY_MAX_SEATS, RUMMY_MIN_SEATS } from '../card-games/rummy/state'
 import { RummyRulesOverlay } from './RummyRulesOverlay'
 import { Wordmark } from '../components/Wordmark'
+import { CardBack } from '../components/PlayingCard'
+import { CARD_BACKS } from '../components/cardBacks'
+import './RummyRoom.css'
 
 export interface RummyRoomProps {
   code: string
@@ -9,6 +12,8 @@ export interface RummyRoomProps {
   isHost: boolean
   seats: { name: string; isBot: boolean; isHost: boolean }[]  // host first, join order
   notice?: string | null
+  cardBack: string                          // host's current pick (guests see it read-only)
+  onSelectCardBack: (id: string) => void    // host-only
   onAddHouseBot: () => void       // host-only
   onStartGame: () => void         // host-only
   onLeave: () => void
@@ -22,6 +27,8 @@ export function RummyRoom({
   isHost,
   seats,
   notice,
+  cardBack,
+  onSelectCardBack,
   onAddHouseBot,
   onStartGame,
   onLeave,
@@ -77,6 +84,32 @@ export function RummyRoom({
           <button type="button" className="btn" style={{ width: '100%', marginTop: 14 }} onClick={copyLink}>
             {copied ? 'Copied!' : 'Copy invite link'}
           </button>
+
+          <div style={{ marginTop: 26 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>
+              Card back
+              {!isHost && <span style={{ fontWeight: 500, color: 'var(--muted-text)' }}> · {hostName} picks</span>}
+            </div>
+            <div className="rummy-card-back-picker">
+              {CARD_BACKS.map((def) => {
+                const selected = def.id === cardBack
+                return (
+                  <div
+                    key={def.id}
+                    className={`rummy-card-back-option${selected ? ' rummy-card-back-option--selected' : ''}`}
+                    title={def.name}
+                  >
+                    <CardBack
+                      size="stock"
+                      design={def.id}
+                      onClick={isHost ? () => onSelectCardBack(def.id) : undefined}
+                    />
+                    <span className="rummy-card-back-name">{def.name}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
 
           {isHost ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>

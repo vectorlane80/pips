@@ -44,6 +44,8 @@ export interface RummyPublicState {
   matchWinnerId: string | null
   handCounts: Record<string, number>      // number of cards in each player's hand — let clients show
                                             // opponent hand size without leaking card identity
+  cardBack: string                         // host-chosen card-back design id (see components/cardBacks.ts);
+                                            // cosmetic only, but every seat must render the same back
 }
 
 export interface RummyPrivateState {
@@ -118,7 +120,7 @@ function dealRound(
   return { hands, stock, discardPile }
 }
 
-export function createRummyGame(playerIds: string[], seed: number): RummySession {
+export function createRummyGame(playerIds: string[], seed: number, cardBack = 'classic'): RummySession {
   const rng = createRng(seed)
   const { hands, stock, discardPile } = dealRound(playerIds, rng)
   const turn = createTurnState<RummyPhase>(playerIds, 'draw')
@@ -149,6 +151,7 @@ export function createRummyGame(playerIds: string[], seed: number): RummySession
     roundWinnerId: null,
     matchWinnerId: null,
     handCounts,
+    cardBack,
   }
 
   return { session: createHostSession(publicState, privateStates), stock, rng }
