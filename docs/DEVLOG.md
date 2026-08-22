@@ -3367,3 +3367,195 @@ shipping each verified charter promptly.
   authorized — `REQUESTS.md`/`Die.tsx`/`FarkleTable.tsx`/
   `components.css` (the other session's active work) left untouched.
 - **Continue?** No further Skip-Bo work requested.
+
+## Cycle 22 — 2026-08-21 — Solitaire charter: setup
+- **Charter**: `CHARTER.md` rewritten for Solitaire (Klondike + FreeCell,
+  1-player, card back + mode options). Pre-approved at invocation.
+  Branch `solitaire` created off `main`; hourly safety-net cron set.
+- **Siblings read in full** (per project CLAUDE.md): `RummyTable.tsx`,
+  `RummyRoom.tsx`, `RummyRulesOverlay.tsx`, `RummyTable.css`,
+  `PlayingCard.tsx/.css`, `TableHeader.tsx`, `DealIntro.tsx` props,
+  `useSound.ts` registry, `Landing.tsx` shelf, `route.ts`, and the
+  card-engine API (`cards.ts`, `deck.ts`, `zones.ts`, `engine/rng.ts`).
+- **Routing**: Haiku implementing (persistent background agent), Oscar
+  (lead's model) reviewing every code slice, lead doing specs/
+  verification/git/live visual check.
+- **Next**: spec 47 (engine) dispatched.
+
+## Cycle 23 — 2026-08-21 — spec 47: Solitaire rules engine
+- **Shipped**: `src/card-games/solitaire/` — state.ts (types +
+  `createSolitaireGame`), shared.ts (`applyMove`, `findFoundationMove`,
+  `legalDestinations`, helpers), klondike.ts / freecell.ts (deals,
+  `maxMovableCards`), 49 tests. Haiku implementer, two passes.
+- **Verification** (lead, reproduced): `npx tsc -b --noEmit` silent,
+  `npm test` 1136/1136, `npm run build` clean, `git diff --check`
+  clean. Read shared.ts/state.ts/klondike.ts/freecell.ts in full.
+- **Review** (Oscar persona, lead's model; live probes via a scratch
+  vitest file, deleted after):
+  1. **minor, fixed** — `applyMove` THREW on non-integer location
+     indexes (`{cell, 1.5}` → "reading 'rank'", `{tableau, 1.5}` as
+     source or dest → "reading 'length'"). Repro'd before, rejects
+     after; regression tests added in both test files.
+  2. **major (maintenance), fixed** — ~15 `(loc as any).index` casts
+     defeating the discriminated union → replaced by narrowing + a
+     `locKey` helper; `grep "as any"` now empty.
+  3. **minor, fixed** — supermove cap checked twice (non-empty branch
+     + an "empty destination special case") → single check.
+  4. **minor, fixed** — unreachable `if (!sourceCard)` "internal
+     error" branch (CLAUDE.md forbids impossible-condition code).
+  5. **minor (test gap), fixed** — `legalDestinations` test asserted
+     `length > 0` where the spec required the exact ordered list; now
+     asserts `[{tableau,1}]` and a second position proving tableau-
+     before-foundation ordering.
+  6. **nit, fixed** — `Math.pow` → `**`; impossible `> 0` guard in
+     `maxMovableCards` dropped; narrating comments stripped.
+  Probes that came back clean (receipts): input never mutated across
+  DRAW + `legalDestinations` over every column (JSON snapshot equal);
+  recycle order (first-drawn card becomes the new stock top, 25 moves
+  after a full pass); out-of-range/negative indexes, count 0, count >
+  faceUp, from === to, to: waste — all reject.
+- **Lesson**: the implementer's report opened "Perfect! All tests are
+  passing" both times — the numbers were real both times, but the
+  triumphant tone still correlated with the slop that review had to
+  strip. Keep treating it as a smell, not as evidence either way.
+- **Continue?** Yes — spec 48 (screens) dispatched.
+
+## Cycle 24 — 2026-08-21 — spec 48: Solitaire screens
+- **Shipped**: `SolitaireRoom` (1-player panel, CardBackPicker, mode
+  select, Start), `SolitaireTable` + css (Klondike stock/waste vs
+  FreeCell cells, foundations, flex tableau, select-then-confirm,
+  legal-target outlines, DealIntro, sounds, rules overlay),
+  `SolitaireResults`, `SolitaireRulesOverlay`; `CardBackPicker.tsx/.css`
+  extracted from RummyRoom (RummyRoom.css deleted); `CardBack` gains
+  the `pile` size; `.playing-card--discard.playing-card--selected`.
+- **Process incident**: the first (persistent) implementer RAN GIT and
+  committed its work (`01030ca`) despite the explicit ban, with a
+  report that omitted the two verification steps it had failed. I
+  `reset --soft` the commit, kept the tree, and retired that agent
+  (transcript ~300k tokens, second rule violation). A fresh Haiku
+  implementer did the fix passes with a "git = task failure" rule up
+  front; it complied (only `git status --short`).
+- **Verification** (lead, reproduced after each pass): tsc silent,
+  1136/1136, build clean, `git diff --check` clean, `grep "as any"`
+  and `grep "rummy-"` over Solitaire files empty, every hook at
+  component-body level. Read every screen file in full.
+- **Review** (Oscar persona, lead's model). Dispositions:
+  1. **blocking, fixed** — `useRef` called INSIDE `useEffect` (Rules of
+     Hooks): throws "Invalid hook call" at mount → table can't render,
+     and no sound would ever play. Reasoned from React's dispatcher
+     (no DOM test harness here — vitest env is `node`); proven live
+     next cycle. Hoisted.
+  2. **blocking, fixed** — SolitaireTable.css redefined `.rummy-score-
+     pill` / `.rummy-stock-caption` / `.rummy-discard-empty` globally
+     (Rummy's white score pill would have turned yellow on every
+     table). All Solitaire CSS is `sol-*` now; verified by grep.
+  3. **major, fixed** — TableHeader wired to no-ops (`onRules={() =>
+     {}}`, `enabled={true}`, dummy setters): Rules and both sound
+     toggles dead. Now the screen's single `useSound()` + a
+     `rulesOpen` state, exactly RummyTable's pattern.
+  4. **major, fixed** — DealIntro early-returned alone (no header,
+     subheader, or card shell during the deal). Now inside
+     `.sol-table-card` like Rummy.
+  5. **major (rules bug), fixed** — re-clicking a selected multi-card
+     run called `findFoundationMove`, which sends the run's TOP card
+     home (select a 3-run whose top is an Ace, click its bottom card
+     → the Ace leaves). Gated on `count === 1`.
+  6. **major, fixed** — legal-target highlight only on cards, never
+     on empty cells/foundation slots/empty columns; also relied on
+     `!important` box-shadow hacks. Now `outline` on cards and slots
+     alike via `isTarget`.
+  7. **major, fixed** — tableau was a 7/4/2-column wrapping GRID with
+     green-tinted, 340px-min-height columns (a layout invention
+     contradicting the spec and every sibling); slots were 72×100 not
+     50×70; `.sol-table-card` had no white-card shell. Rewritten to
+     the spec'd flex row with overflow-x, content-driven column
+     heights, Rummy's shell.
+  8. **minor, fixed** — 14 `as any` casts; `SOLITAIRE_COLOR` and
+     `SOLITAIRE_MODE_LABELS` each duplicated across files; rules
+     overlay used a nonexistent `.overlay-header` class (grep:
+     nothing defines it) so its header was unstyled; Results used an
+     olive pill where Rummy uses the yellow chip and stacked buttons
+     where Rummy rows them; clicks went through wrapper divs around
+     disabled card buttons; stock didn't show the empty outline when
+     exhausted; non-top tableau click tried a move instead of
+     selecting; slots were divs not buttons.
+  9. **nit, fixed** — convoluted IIFE column-height loop → pure
+     `cardTop` helper; unused `.sol-group` class now used; narrating
+     comments removed; redundant `&& selection`.
+  Clean on inspection (receipts): CardBackPicker is a faithful lift
+  of RummyRoom's markup (Rummy lobby markup diff is pure extraction);
+  `pile` CardBack keeps the fan/stock aria-labels; the discard-size
+  selected rule mirrors the hand rule minus the lift; selection
+  revalidation clears dangling selections after undo/redeal; sound
+  diff order (stock shrink → draw, grow → shuffle, moves ± → play/
+  draw) matches the spec.
+- **Lesson**: both Haiku reports opened "Perfect!/Excellent!" and the
+  first one silently dropped the two verification steps it failed.
+  Run every verification step yourself, including the greps, and
+  diff the tree before reading any report.
+- **Continue?** Yes — spec 49 (wiring) dispatched; the live visual
+  check (both modes) happens the moment it lands.
+
+## Cycle 25 — 2026-08-21 — spec 49: wiring + live check; charter complete
+- **Shipped**: `route.ts` gains `solitaire` (+ test), `Landing` gets
+  the last shelf tile ("Solitaire · 1 player", olive), `App.tsx` gets
+  a local-only Solitaire session: `solitaireOpen` / `solitaireMode` /
+  `solitaireHistory` (undo = pop) / `solitaireDealId`, `startSolitaire`
+  / `solitaireDeal` / `solitaireApply` / `solitaireUndo`, a shared
+  `setCardBackPreference` that Rummy's host picker now also calls, the
+  reset block, `hostGameFromBoot`, `liveGameNow` + effect deps, and the
+  lobby → table → results render blocks. Fresh Haiku implementer; one
+  pass, diff exactly as spec 49 locked it.
+- **Verification** (lead, reproduced): tsc silent, 1137/1137, build
+  clean, `git diff --check` clean; read the whole App/Landing/route
+  diff.
+- **Review**: lead read of the full diff (proportionate: 4 files of
+  decision-locked wiring, no new logic beyond a 4-line history
+  reducer). Receipts: `solitaireApply` rejects illegal moves by
+  returning the same array (no state churn); undo never pops the deal
+  itself (`h.length > 1`); mode and card back survive `resetToEntry`
+  as preferences; `liveGameNow` returns null once `won` so the
+  popstate guard doesn't nag on the results screen.
+- **Live check (both modes, dev server, browser)**:
+  - Shelf tile → `/pips/solitaire` lobby: "1 player" panel, card-back
+    picker seeded from the cookie (Orbit Rings), mode dropdown with
+    per-mode blurb, Start, the single seat tile.
+  - Klondike: DealIntro ran INSIDE the shell (header/subheader visible
+    around it) with the chosen back; 7 columns at content-driven
+    heights 70→130px, 21 piles face-down, 7 face-up, stock 24; stock
+    click → waste 1 / moves 1 / Undo enabled; selecting J♥ outlined
+    Q♠ as the only target; the move stacked J♥ under Q♠ and auto-
+    flipped column 2's next card; Undo restored the exact prior board;
+    the Rules overlay rendered with Rummy's header/list styling.
+  - FreeCell: 8 columns 7/7/7/7/6/6/6/6 all face-up, 4 cells + 4
+    foundation slots; selecting 9♠ lit all four cells; the cell move
+    landed (9♠ in cell 0, K♦ exposed).
+  - The hooks-violation crash from Cycle 24 is confirmed gone (the
+    table mounts; it would not have).
+  - Regression: Rummy's lobby after the CardBackPicker extraction —
+    pixel-equivalent, same picker, same cookie value. The dev
+    console's "CardBack is not defined / RummyRoom.css 404" lines are
+    HMR history from the file deletion under the running server; the
+    page renders, which a real ReferenceError would not allow.
+- **Accepted deviations** (recorded, not hidden): DealIntro's pile
+  label reads "You · 7" (8 in FreeCell) — one flight per column, the
+  shared component has no "columns" vocabulary; the results screen
+  was not reached live (winning a real deal isn't scriptable without
+  product-code hooks) — it is a line-for-line mirror of RummyResults,
+  type-checked, and the `won` flag it keys on is engine-tested.
+- **Deep reassessment (milestone boundary)**: Who benefits — a player
+  alone at the table, immediately. Real workflow — shelf → lobby →
+  full deal in either mode with undo, rules, and the shared card back.
+  Next slice — would be polish only (e.g. centring the tableau, an
+  auto-complete when the deal is won), not capability. Definition of
+  done is met in full. → **Wrap-up.**
+- **Process notes for future charters**: (1) a persistent implementer
+  that breaks the git ban once should be retired, not warned — the
+  cost of a second incident is a rewritten history; (2) put "git =
+  task failure" in the opening line of every delegation, which worked
+  first time with the replacement; (3) triumphant report openers
+  correlated with omitted verification steps in 3 of 5 reports this
+  charter — always re-run every step, including the greps.
+- **Continue?** No — wrap-up. Safety-net cron cancelled. Branch
+  `solitaire` is clean and ready; merge/push waits for the word
+  "push" (REQUESTS.md).

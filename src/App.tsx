@@ -113,6 +113,13 @@ import { SkipBoTable } from './screens/SkipBoTable'
 import { SkipBoResults } from './screens/SkipBoResults'
 import { SkipBoRoom } from './screens/SkipBoRoom'
 
+// ---- Solitaire (single-player local session) ----
+import { createSolitaireGame, type SolitaireState, type SolitaireMode, type SolitaireMove } from './card-games/solitaire/state'
+import { applyMove as applySolitaireMove } from './card-games/solitaire/shared'
+import { SolitaireRoom } from './screens/SolitaireRoom'
+import { SolitaireTable } from './screens/SolitaireTable'
+import { SolitaireResults } from './screens/SolitaireResults'
+
 type RummyView =
   | { kind: 'lobby'; roster: { name: string; isBot: boolean; isHost: boolean }[]; cardBack: string }
   | { kind: 'game'; revision: number; publicState: RummyPublicState; hand: Card[]; names: Record<string, string> }
@@ -299,6 +306,12 @@ export default function App() {
   const [skipBoNotice, setSkipBoNotice] = useState<string | null>(null)
   const [skipBoStarted, setSkipBoStarted] = useState(false)
   const [skipBoSeats, setSkipBoSeats] = useState<{ playerId: string; name: string; isBot: boolean }[]>([])
+
+  // ---- Solitaire ----
+  const [solitaireOpen, setSolitaireOpen] = useState(false)
+  const [solitaireMode, setSolitaireMode] = useState<SolitaireMode>('klondike')
+  const [solitaireHistory, setSolitaireHistory] = useState<SolitaireState[]>([])
+  const [solitaireDealId, setSolitaireDealId] = useState(0)
 
   const roomRef = useRef<RoomState | null>(null)
   const hostRef = useRef<HostHandle<RoomState> | null>(null)
@@ -512,13 +525,14 @@ export default function App() {
     if (chessRole && chessView && chessView.publicState.stage !== 'over') return 'chess'
     if (unoRole && unoStarted && unoView?.kind === 'game' && unoView.publicState.stage !== 'over') return 'uno'
     if (skipBoRole && skipBoStarted && skipBoView?.kind === 'game' && !skipBoView.publicState.roundOver) return 'skipbo'
+    if (solitaireOpen && solitaireHistory.length > 0 && !solitaireHistory[solitaireHistory.length - 1].won) return 'solitaire'
     return null
   }
 
   useEffect(() => {
     liveGameRef.current = liveGameNow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView])
+  }, [room, rummyRole, rummyStarted, rummyView, phase10Role, phase10Started, phase10View, battleshipRole, battleshipView, dominoesRole, dominoesView, wahooRole, wahooStarted, wahooView, checkersRole, checkersStarted, checkersView, mtRole, mtStarted, mtView, chessRole, chessView, unoRole, unoStarted, unoView, skipBoRole, skipBoStarted, skipBoView, solitaireOpen, solitaireHistory])
 
   // Back/forward guard: confirm before leaving a live game mid-match.
   useEffect(() => {
@@ -550,6 +564,7 @@ export default function App() {
       case 'chess': startChessHost(); return
       case 'uno': startUnoHost(); return
       case 'skipbo': startSkipBoHost(); return
+      case 'solitaire': startSolitaire(); return
     }
   }
 
@@ -854,6 +869,9 @@ export default function App() {
     skipBoBotCounterRef.current = 0
     skipBoNamesRef.current = {}
     skipBoBotsHeldUntilRef.current = 0
+    // Solitaire
+    setSolitaireOpen(false)
+    setSolitaireHistory([])
     // UI Leave buttons land on the shelf; from popstate the browser has
     // already moved, so history is left alone.
     if (!opts?.fromPopstate) history.replaceState({}, '', '/pips/')
@@ -1124,16 +1142,50 @@ export default function App() {
     rummyBroadcast()
   }
 
-  function rummySetCardBack(id: string) {
-    if (rummyRole !== 'host' || rummyStartedRef.current) return
-    // Ref-first: rummyBroadcast() runs synchronously and must send the new pick.
+  function setCardBackPreference(id: string) {
     rummyCardBackRef.current = id
     setRummyCardBack(id)
     writeCardBackCookie(id)
+  }
+
+  function rummySetCardBack(id: string) {
+    if (rummyRole !== 'host' || rummyStartedRef.current) return
+    // Ref-first: rummyBroadcast() runs synchronously and must send the new pick.
+    setCardBackPreference(id)
     rummyBroadcast()
   }
 
   // ---- End Rummy helpers ----
+
+  // ---- Solitaire helpers ----
+
+  function startSolitaire() {
+    writeNameCookie(name)
+    pushGameUrl('solitaire')
+    setError(null)
+    setSolitaireHistory([])
+    setSolitaireOpen(true)
+  }
+
+  function solitaireDeal() {
+    const seed = Math.floor(Math.random() * 2147483647)
+    setSolitaireHistory([createSolitaireGame(solitaireMode, seed)])
+    setSolitaireDealId((n) => n + 1)
+  }
+
+  function solitaireApply(move: SolitaireMove) {
+    setSolitaireHistory((h) => {
+      const current = h[h.length - 1]
+      const outcome = applySolitaireMove(current, move)
+      return outcome.ok ? [...h, outcome.state] : h
+    })
+  }
+
+  function solitaireUndo() {
+    setSolitaireHistory((h) => (h.length > 1 ? h.slice(0, -1) : h))
+  }
+
+  // ---- End Solitaire helpers ----
 
   // ---- Phase 10 helpers ----
 
@@ -3670,8 +3722,8 @@ export default function App() {
   // ---- Render ----
 
   // Landing: dice games, Rummy, Phase 10, Battleship, Dominoes, Wahoo,
-  // Checkers, Mexican Train, Chess, Uno, and Skip-Bo are all not yet in a session
-  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole) {
+  // Checkers, Mexican Train, Chess, Uno, Skip-Bo, and Solitaire are all not yet in a session
+  if (!room && !rummyRole && !phase10Role && !battleshipRole && !dominoesRole && !wahooRole && !checkersRole && !mtRole && !chessRole && !unoRole && !skipBoRole && !solitaireOpen) {
     return (
       <Landing
         name={name}
@@ -3703,6 +3755,7 @@ export default function App() {
         onPickChess={startChessHost}
         onPickUno={startUnoHost}
         onPickSkipBo={startSkipBoHost}
+        onPickSolitaire={startSolitaire}
         error={error}
       />
     )
@@ -4517,6 +4570,47 @@ export default function App() {
         onPlayDiscard={(pileIndex, buildPileIndex) => skipBoDispatch({ type: 'PLAY_DISCARD', pileIndex, buildPileIndex })}
         onDiscard={(cardId, pileIndex) => skipBoDispatch({ type: 'DISCARD', cardId, pileIndex })}
         onPass={() => skipBoDispatch({ type: 'PASS' })}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+
+  // ---- Solitaire session active ----
+  if (solitaireOpen && solitaireHistory.length === 0) {
+    return (
+      <SolitaireRoom
+        localName={name}
+        cardBack={rummyCardBack}
+        onSelectCardBack={setCardBackPreference}
+        mode={solitaireMode}
+        onSelectMode={setSolitaireMode}
+        onStart={solitaireDeal}
+        onLeave={resetToEntry}
+      />
+    )
+  }
+  if (solitaireOpen) {
+    const current = solitaireHistory[solitaireHistory.length - 1]
+    if (current.won) {
+      return (
+        <SolitaireResults
+          mode={current.mode}
+          moves={current.moves}
+          onDealAgain={solitaireDeal}
+          onBackToShelf={resetToEntry}
+        />
+      )
+    }
+    return (
+      <SolitaireTable
+        localName={name}
+        state={current}
+        cardBack={rummyCardBack}
+        dealId={solitaireDealId}
+        canUndo={solitaireHistory.length > 1}
+        onMove={solitaireApply}
+        onUndo={solitaireUndo}
+        onDealAgain={solitaireDeal}
         onLeave={resetToEntry}
       />
     )

@@ -47,6 +47,10 @@ describe('gameFromPath', () => {
     expect(gameFromPath('/pips/chess')).toBe('chess')
   })
 
+  it('accepts /pips/solitaire', () => {
+    expect(gameFromPath('/pips/solitaire')).toBe('solitaire')
+  })
+
   it('accepts /<segment> without the /pips base', () => {
     expect(gameFromPath('/wahoo')).toBe('wahoo')
   })
